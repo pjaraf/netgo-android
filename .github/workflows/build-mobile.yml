@@ -37,6 +37,12 @@ jobs:
       - name: Install native libVLC player plugin (full codec support)
         run: node scripts/patch-vlc-plugin.js
 
+      - name: Generate app icons and TV banner (all densities)
+        run: node scripts/generate-icons.js
+
+      - name: Add Android TV home-screen launcher support
+        run: node scripts/patch-tv-launcher.js
+
       - name: Allow cleartext (http://) traffic for IPTV providers
         run: node scripts/patch-cleartext.js
 
