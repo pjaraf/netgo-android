@@ -1,0 +1,1 @@
+window.NETGO_APP_VERSION = 0;
