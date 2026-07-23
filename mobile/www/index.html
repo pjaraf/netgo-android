@@ -343,6 +343,13 @@
   .channel-info .name{ font-size:12.5px; font-weight:600; margin-bottom:2px; }
   .channel-info .program{ font-size:10.5px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .poster-art img, .channel-thumb img{ width:100%; height:100%; object-fit:contain; background:#0B1B26; position:absolute; inset:0; }
+  .poster-cover-img{
+    width:100%; height:100%; object-fit:contain; background:#0B1B26;
+    position:absolute; inset:0;
+  }
+  .channel-cover-img{
+    width:100%; height:100%; object-fit:contain; background:#0B1B26;
+  }
 
   /* ---------- Connected hero state ---------- */
   .dot-on{ width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 0 2px rgba(61,220,132,.25); }
@@ -599,7 +606,7 @@
 
   function posterCard(m){
     const art = m.img
-      ? `<img src="${m.img}" loading="lazy" onerror="this.style.display='none'">`
+      ? `<img class="poster-cover-img" src="${m.img}" loading="lazy" onerror="this.style.display='none'">`
       : `<div class="poster-art">${m.icon||'🎬'}</div>`;
     return `<div class="poster-card" data-kind="${m.kind||''}" data-url="${m.url||''}" data-sid="${m.series_id||''}" data-title="${m.t}">
       ${art}
@@ -611,7 +618,7 @@
   }
   function channelCard(c){
     const art = c.img
-      ? `<img src="${c.img}" loading="lazy" onerror="this.style.display='none'">`
+      ? `<img class="channel-cover-img" src="${c.img}" loading="lazy" onerror="this.style.display='none'">`
       : c.icon||'📡';
     return `<div class="channel-card" data-kind="live" data-url="${c.url||''}" data-title="${c.t}">
       <div class="channel-thumb" style="background:${c.grad||'linear-gradient(155deg,#123,#456)'}">
