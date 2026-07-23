@@ -46,6 +46,9 @@ jobs:
       - name: Keep MainActivity alive across screen rotation (fullscreen video)
         run: node scripts/patch-orientation.js
 
+      - name: Register Google Cast (Chromecast / Android TV casting)
+        run: node scripts/patch-cast.js
+
       - name: Allow cleartext (http://) traffic for IPTV providers
         run: node scripts/patch-cleartext.js
 
