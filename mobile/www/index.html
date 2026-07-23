@@ -233,24 +233,29 @@
 
   /* ---------- Category rail ---------- */
   .cats{
-    display:flex; gap:12px; padding: 0 22px 26px;
-    overflow-x:auto;
+    position:fixed; left:0; right:0; bottom:0; z-index:40;
+    display:flex; justify-content:space-around; align-items:center;
+    gap:2px; padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: rgba(11,27,38,0.94);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
   }
-  .cats::-webkit-scrollbar{ display:none; }
   .cat{
-    flex:0 0 auto;
-    display:flex; flex-direction:column; align-items:center; gap:8px;
-    width:96px; padding:16px 8px;
-    border-radius: 12px; border:1px solid var(--line);
-    background: var(--card);
+    flex:1; min-width:0;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:7px 2px; border-radius:11px; border:1px solid transparent;
+    background: transparent;
     cursor:pointer;
-    transition: background .2s, border-color .2s, transform .15s;
+    transition: background .2s, border-color .2s;
   }
-  .cat:hover{ background: var(--card-hover); transform:translateY(-2px); }
+  .cat:hover{ background: var(--card-hover); }
   .cat.active{ border-color: var(--amber); background: var(--amber-dim); }
-  .cat .icon{ font-size:20px; }
-  .cat span{ font-size:12px; font-weight:500; color:var(--text-dim); }
+  .cat .icon{ font-size:19px; }
+  .cat span{ font-size:10.5px; font-weight:500; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .cat.active span{ color:var(--text); }
+
+  /* Leave room at the bottom of the page so content isn't hidden behind the fixed nav bar */
+  #rowsContainer, .vivo-view{ padding-bottom: 88px; }
 
   /* ---------- Section rows ---------- */
   section.row{ padding: 0 22px 30px; }
@@ -448,7 +453,7 @@
   <div class="cat" data-cat="series"><div class="icon">📺</div><span>Series</span></div>
   <div class="cat active" data-cat="peliculas"><div class="icon">🎬</div><span>Películas</span></div>
   <div class="cat" data-cat="anime"><div class="icon">🎌</div><span>Anime</span></div>
-  <div class="cat" data-cat="especial"><div class="icon">⭐</div><span>Especial</span></div>
+  <div class="cat" data-cat="kids"><div class="icon">🧒</div><span>Kids</span></div>
 </div>
 
 
@@ -547,10 +552,10 @@
         { t:"Nube Carmesí", meta:"T1 · Ep 4", badge:"HD", r:"8.3", icon:"☁️", grad:"linear-gradient(155deg,#3A1420,#E23E7A)" },
       ]},
     ], type:'poster' },
-    especial: { rows: [
-      { title:"Eventos en vivo", items:[
-        { t:"Final de Copa", meta:"Hoy · 20:00", badge:"4K", r:"—", icon:"🏆", grad:"linear-gradient(155deg,#2A1B08,#C97B2E)" },
-        { t:"Concierto Aniversario", meta:"Vie · 21:30", badge:"HD", r:"—", icon:"🎤", grad:"linear-gradient(155deg,#3A1420,#E23E7A)" },
+    kids: { rows: [
+      { title:"Para los peques", items:[
+        { t:"Aventuras del Bosque", meta:"T1 · 12 eps", badge:"HD", r:"8.2", icon:"🦊", grad:"linear-gradient(155deg,#123A2A,#2FA36B)" },
+        { t:"El Tren Mágico", meta:"T2 · 20 eps", badge:"HD", r:"8.0", icon:"🚂", grad:"linear-gradient(155deg,#1A2B4A,#4E7FD9)" },
       ]},
     ], type:'poster' },
     vivo: { rows: [
@@ -877,9 +882,16 @@
 
   // queue: [{url, title}, ...]  — a movie/channel is a queue of 1; a series is
   // every episode in order, so the native player can auto-advance through it.
-  function playQueue(queue, startIndex, fallbackTitle, kind){
+  // Uses the fullscreen native player (reliable, no transparency tricks needed).
+  function playQueue(queue, startIndex, fallbackTitle){
     if(!queue || !queue.length) return;
-    playInline(queue, startIndex || 0, kind);
+    if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
+      window.Capacitor.Plugins.VlcPlayer.play({ queue, startIndex: startIndex || 0 })
+        .catch(err => console.error('VlcPlayer error:', err));
+      return;
+    }
+    const item = queue[startIndex || 0];
+    playStreamWeb(item.url, item.title || fallbackTitle);
   }
   function closePlayer(){
     playerOverlay.classList.remove('open');
@@ -895,13 +907,12 @@
     const kind = card.dataset.kind;
     const title = card.dataset.title;
     if(kind === 'series'){
-      hpTitle.textContent = 'Buscando episodios…';
       try{
         const queue = await resolveSeriesQueue(card.dataset.sid, title);
-        if(queue.length) playQueue(queue, 0, title, 'poster');
+        if(queue.length) playQueue(queue, 0, title);
       }catch(err){ console.error(err); }
     } else if(card.dataset.url){
-      playQueue([{ url: card.dataset.url, title }], 0, title, card.classList.contains('channel-card') ? 'channel' : 'poster');
+      playQueue([{ url: card.dataset.url, title }], 0, title);
     }
   });
 
@@ -1021,18 +1032,24 @@
           kind:'series', series_id:s.series_id
         }))
       })));
-    const especialRows = categoriesByKeyword(vod, vodCategories, /especial|evento|documental|ppv/i)
+    const kidsVodRows = categoriesByKeyword(vod, vodCategories, /kids|infantil|ni[ñn]os|cartoon|toon|disney/i)
       .map(row => ({ title: row.title, items: row.items.map(x => ({
         t:x.name, meta:'', badge:'HD', r:x.rating||'—', img:x.stream_icon||'',
         kind:'vod', url:`${base}/movie/${conn.username}/${conn.password}/${x.stream_id}.${x.container_extension||'mp4'}`
       })) }));
+    const kidsSeriesRows = categoriesByKeyword(series, seriesCategories, /kids|infantil|ni[ñn]os|cartoon|toon|disney/i)
+      .map(row => ({ title: row.title, items: row.items.map(s => ({
+        t:s.name, meta: s.releaseDate || '', badge:'HD', r:s.rating||'—', img:s.cover||'',
+        kind:'series', series_id:s.series_id
+      })) }));
+    const kidsRows = kidsVodRows.concat(kidsSeriesRows);
 
     liveData = {
       vivo: { rows: liveRows, type:'channel' },
       peliculas: { rows: vodRows, type:'poster' },
       series: { rows: seriesRows, type:'poster' },
       anime: { rows: animeRows, type:'poster' },
-      especial: { rows: especialRows, type:'poster' },
+      kids: { rows: kidsRows, type:'poster' },
     };
 
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
