@@ -1037,12 +1037,23 @@
     return queue;
   }
 
+  // Categories matching this pattern (one-off pay-per-view "events" — not
+  // regular linear channels) are hidden automatically from Vivo, since they
+  // clutter the channel list and aren't meant for everyday browsing.
+  const EXCLUDED_CATEGORY_REGEX = /evento|eventos|ppv|pay.?per.?view|fox one|ufc.*box.*wwe/i;
+  function excludeCategories(categories){
+    return (categories || []).filter(c => !EXCLUDED_CATEGORY_REGEX.test(c.category_name));
+  }
+
   async function connectXtream(conn){
-    const [liveCategories, vodCategories, seriesCategories] = await Promise.all([
+    const [liveCategoriesRaw, vodCategoriesRaw, seriesCategoriesRaw] = await Promise.all([
       xtreamFetch(conn, 'get_live_categories'),
       xtreamFetch(conn, 'get_vod_categories'),
       xtreamFetch(conn, 'get_series_categories'),
     ]);
+    const liveCategories = excludeCategories(liveCategoriesRaw);
+    const vodCategories = excludeCategories(vodCategoriesRaw);
+    const seriesCategories = excludeCategories(seriesCategoriesRaw);
     const [live, vod, series] = await Promise.all([
       xtreamFetch(conn, 'get_live_streams'),
       xtreamFetch(conn, 'get_vod_streams'),
