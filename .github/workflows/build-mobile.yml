@@ -7,6 +7,9 @@ on:
       - '.github/workflows/build-mobile.yml'
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,6 +34,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Stamp app version (for the in-app update checker)
+        run: node scripts/patch-version.js
+        env:
+          APP_VERSION: ${{ github.run_number }}
+
       - name: Add Android platform
         run: npx cap add android
 
@@ -49,6 +57,9 @@ jobs:
       - name: Register Google Cast (Chromecast / Android TV casting)
         run: node scripts/patch-cast.js
 
+      - name: Add camera permission (for QR code scanning)
+        run: node scripts/patch-camera.js
+
       - name: Allow cleartext (http://) traffic for IPTV providers
         run: node scripts/patch-cleartext.js
 
@@ -62,8 +73,27 @@ jobs:
         working-directory: mobile/android
         run: ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload APK (build artifact)
         uses: actions/upload-artifact@v4
         with:
           name: netgo-mobile-debug-apk
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish APK as a GitHub Release (stable public download link)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: NetGo build ${{ github.run_number }}
+          files: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          make_latest: true
+
+      - name: Publish version.json (so the app can detect this update)
+        working-directory: .
+        run: |
+          mkdir -p docs
+          printf '{\n  "version": %s\n}\n' "${{ github.run_number }}" > docs/version.json
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/version.json
+          git commit -m "Update version.json to build ${{ github.run_number }} [skip ci]" || echo "No changes to commit"
+          git push
