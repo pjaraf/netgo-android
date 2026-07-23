@@ -11,7 +11,7 @@ const packagePath = appId.split('.').join(path.sep);
 
 const javaDir = path.join(androidAppDir, 'src', 'main', 'java', packagePath);
 fs.mkdirSync(javaDir, { recursive: true });
-['VlcPlayerPlugin.java', 'VlcPlayerActivity.java', 'MainActivity.java'].forEach(file => {
+['VlcPlayerPlugin.java', 'VlcPlayerActivity.java', 'InlineVlcPlayerPlugin.java', 'MainActivity.java'].forEach(file => {
   fs.copyFileSync(path.join(nativeDir, file), path.join(javaDir, file));
 });
 
