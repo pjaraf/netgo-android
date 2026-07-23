@@ -38,8 +38,9 @@ import java.util.Locale;
 
 /**
  * Renders native video ON TOP of the WebView. Supports: play/pause, seek,
- * a fullscreen toggle (rotates to landscape, hides system bars), and
- * swipe-left/right to move to the next/previous item in the queue.
+ * a fullscreen toggle (rotates to landscape, hides system bars), swipe
+ * left/right to move between items in the queue, and auto-hiding controls
+ * (tap the video to show/hide them) so they don't permanently cover the image.
  */
 @CapacitorPlugin(name = "InlineVlcPlayer")
 public class InlineVlcPlayerPlugin extends Plugin {
@@ -50,6 +51,8 @@ public class InlineVlcPlayerPlugin extends Plugin {
     private FrameLayout container;
     private GestureDetector gestureDetector;
 
+    private LinearLayout topBar;
+    private LinearLayout bottomBar;
     private TextView titleView;
     private ImageButton playPauseBtn;
     private TextView fullscreenBtn;
@@ -66,6 +69,11 @@ public class InlineVlcPlayerPlugin extends Plugin {
 
     private boolean isFullscreen = false;
     private FrameLayout.LayoutParams savedLp;
+
+    private boolean controlsVisible = true;
+    private Runnable hideControlsRunnable;
+
+    private float touchDownX, touchDownY;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable progressTicker;
@@ -152,6 +160,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             if (isFullscreen) exitFullscreen(getActivity());
             stopTicker();
+            cancelAutoHide();
             if (mediaPlayer != null) {
                 mediaPlayer.stop();
                 mediaPlayer.detachViews();
@@ -185,18 +194,29 @@ public class InlineVlcPlayerPlugin extends Plugin {
 
         gestureDetector = new GestureDetector(activity, new GestureDetector.SimpleOnGestureListener() {
             @Override
-            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-                if (e1 == null || e2 == null) return false;
-                float deltaX = e2.getX() - e1.getX();
-                float deltaY = e2.getY() - e1.getY();
-                if (Math.abs(deltaX) > Math.abs(deltaY) * 1.5f && Math.abs(deltaX) > 80) {
-                    if (deltaX < 0) goToNext(); else goToPrevious();
-                    return true;
-                }
-                return false;
+            public boolean onSingleTapConfirmed(MotionEvent e) {
+                toggleControlsVisibility();
+                return true;
             }
         });
-        videoLayout.setOnTouchListener((v, event) -> gestureDetector.onTouchEvent(event));
+
+        videoLayout.setOnTouchListener((v, event) -> {
+            gestureDetector.onTouchEvent(event);
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    touchDownX = event.getX();
+                    touchDownY = event.getY();
+                    break;
+                case MotionEvent.ACTION_UP:
+                    float dx = event.getX() - touchDownX;
+                    float dy = event.getY() - touchDownY;
+                    if (Math.abs(dx) > dp(activity, 50) && Math.abs(dx) > Math.abs(dy)) {
+                        if (dx < 0) goToNext(); else goToPrevious();
+                    }
+                    break;
+            }
+            return true;
+        });
 
         buildControls(activity, container);
 
@@ -227,7 +247,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
     private void buildControls(Activity activity, FrameLayout parent) {
         int pad = dp(activity, 10);
 
-        LinearLayout topBar = new LinearLayout(activity);
+        topBar = new LinearLayout(activity);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setBackgroundColor(0x99000000);
@@ -246,7 +266,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         fullscreenBtn.setTextSize(20);
         fullscreenBtn.setGravity(Gravity.CENTER);
         fullscreenBtn.setPadding(pad, 0, pad, 0);
-        fullscreenBtn.setOnClickListener(v -> toggleFullscreen(activity));
+        fullscreenBtn.setOnClickListener(v -> { toggleFullscreen(activity); scheduleAutoHide(); });
         topBar.addView(fullscreenBtn, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 36)));
 
         ImageButton closeBtn = new ImageButton(activity);
@@ -264,7 +284,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         topLp.gravity = Gravity.TOP;
         parent.addView(topBar, topLp);
 
-        LinearLayout bottomBar = new LinearLayout(activity);
+        bottomBar = new LinearLayout(activity);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
         bottomBar.setBackgroundColor(0x99000000);
         bottomBar.setPadding(pad, pad, pad, pad);
@@ -276,7 +296,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         ImageButton seekBackBtn = new ImageButton(activity);
         seekBackBtn.setImageResource(android.R.drawable.ic_media_rew);
         seekBackBtn.setBackgroundColor(Color.TRANSPARENT);
-        seekBackBtn.setOnClickListener(v -> doSeekBy(-10));
+        seekBackBtn.setOnClickListener(v -> { doSeekBy(-10); scheduleAutoHide(); });
 
         playPauseBtn = new ImageButton(activity);
         playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
@@ -284,12 +304,12 @@ public class InlineVlcPlayerPlugin extends Plugin {
         circle.setShape(GradientDrawable.OVAL);
         circle.setColor(0xFFFF8A3D);
         playPauseBtn.setBackground(circle);
-        playPauseBtn.setOnClickListener(v -> togglePlayPause());
+        playPauseBtn.setOnClickListener(v -> { togglePlayPause(); scheduleAutoHide(); });
 
         ImageButton seekFwdBtn = new ImageButton(activity);
         seekFwdBtn.setImageResource(android.R.drawable.ic_media_ff);
         seekFwdBtn.setBackgroundColor(Color.TRANSPARENT);
-        seekFwdBtn.setOnClickListener(v -> doSeekBy(10));
+        seekFwdBtn.setOnClickListener(v -> { doSeekBy(10); scheduleAutoHide(); });
 
         LinearLayout.LayoutParams sideBtnLp = new LinearLayout.LayoutParams(dp(activity, 44), dp(activity, 44));
         sideBtnLp.setMargins(dp(activity, 16), 0, dp(activity, 16), 0);
@@ -316,13 +336,14 @@ public class InlineVlcPlayerPlugin extends Plugin {
         seekBar.getThumb().setColorFilter(0xFFFF8A3D, PorterDuff.Mode.SRC_IN);
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {}
-            @Override public void onStartTrackingTouch(SeekBar sb) { userSeeking = true; }
+            @Override public void onStartTrackingTouch(SeekBar sb) { userSeeking = true; cancelAutoHide(); }
             @Override public void onStopTrackingTouch(SeekBar sb) {
                 userSeeking = false;
                 if (mediaPlayer != null) {
                     long duration = mediaPlayer.getLength();
                     if (duration > 0) mediaPlayer.setTime((long) (duration * (sb.getProgress() / 1000.0)));
                 }
+                scheduleAutoHide();
             }
         });
 
@@ -340,9 +361,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
         bottomBar.addView(progressRow);
 
         liveBadgeView = new TextView(activity);
-        liveBadgeView.setText("● EN VIVO — desliza para cambiar de canal");
+        liveBadgeView.setText("● EN VIVO — desliza para cambiar de canal · toca el video para ocultar los controles");
         liveBadgeView.setTextColor(0xFFFF6B6B);
-        liveBadgeView.setTextSize(11);
+        liveBadgeView.setTextSize(10);
         liveBadgeView.setGravity(Gravity.CENTER);
         liveBadgeView.setPadding(0, dp(activity, 6), 0, 0);
         liveBadgeView.setVisibility(View.GONE);
@@ -352,6 +373,39 @@ public class InlineVlcPlayerPlugin extends Plugin {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         bottomLp.gravity = Gravity.BOTTOM;
         parent.addView(bottomBar, bottomLp);
+    }
+
+    // ---------- Auto-hide controls ----------
+    private void showControls() {
+        controlsVisible = true;
+        if (topBar != null) topBar.setVisibility(View.VISIBLE);
+        if (bottomBar != null) bottomBar.setVisibility(View.VISIBLE);
+        scheduleAutoHide();
+    }
+
+    private void hideControls() {
+        controlsVisible = false;
+        if (topBar != null) topBar.setVisibility(View.GONE);
+        if (bottomBar != null) bottomBar.setVisibility(View.GONE);
+    }
+
+    private void toggleControlsVisibility() {
+        if (controlsVisible) {
+            cancelAutoHide();
+            hideControls();
+        } else {
+            showControls();
+        }
+    }
+
+    private void scheduleAutoHide() {
+        cancelAutoHide();
+        hideControlsRunnable = this::hideControls;
+        handler.postDelayed(hideControlsRunnable, 3500);
+    }
+
+    private void cancelAutoHide() {
+        if (hideControlsRunnable != null) handler.removeCallbacks(hideControlsRunnable);
     }
 
     private void toggleFullscreen(Activity activity) {
@@ -425,6 +479,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         if (currentIndex + 1 < urls.size()) {
             currentIndex++;
             loadCurrent();
+            showControls();
         }
     }
 
@@ -432,6 +487,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         if (currentIndex - 1 >= 0) {
             currentIndex--;
             loadCurrent();
+            showControls();
         }
     }
 
@@ -507,6 +563,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
             }
         };
         handler.post(progressTicker);
+        showControls();
     }
 
     private String fmt(long ms) {
