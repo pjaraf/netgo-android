@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <style>
   :root{
     --bg: #0B1B26;
@@ -470,6 +472,41 @@
   .sheet-pos{ position:relative; }
   .status-line{ margin-top:14px; font-size:11.5px; color:var(--green); display:none; }
   .status-line.show{ display:block; }
+
+  /* ---------- QR login ---------- */
+  .qr-actions{ display:flex; gap:10px; margin-top:4px; margin-bottom:6px; }
+  .qr-btn-wide{ flex:1; }
+  .qr-btn{
+    flex:1; background:var(--card); border:1px solid var(--line); color:var(--text);
+    font-family:'Inter'; font-weight:600; font-size:12.5px; padding:11px 8px; border-radius:9px;
+    cursor:pointer;
+  }
+  .qr-overlay{
+    position:fixed; inset:0; z-index:90; background:rgba(5,12,17,0.92); backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center; flex-direction:column; padding:24px;
+  }
+  .qr-card{
+    background:#fff; border-radius:18px; padding:26px; display:flex; flex-direction:column;
+    align-items:center; gap:16px; max-width:300px;
+  }
+  .qr-card #qrCodeCanvas{ display:flex; align-items:center; justify-content:center; }
+  .qr-hint{ color:#334; font-size:12.5px; text-align:center; line-height:1.5; }
+  .qr-close-btn{
+    background:var(--amber); border:none; color:#1A0E00; font-weight:600; font-size:13px;
+    padding:11px 22px; border-radius:9px; cursor:pointer;
+  }
+  .qr-scan-overlay{ background:#000; padding:0; }
+  .qr-scan-overlay video{
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+  }
+  .qr-scan-frame{
+    width:220px; height:220px; border:3px solid var(--amber); border-radius:16px;
+    position:relative; z-index:1; box-shadow:0 0 0 2000px rgba(0,0,0,0.55);
+  }
+  .qr-scan-hint{
+    position:relative; z-index:1; color:#fff; font-size:13px; margin-top:18px; text-align:center;
+  }
+  .qr-scan-overlay .qr-close-btn{ position:relative; z-index:1; margin-top:22px; }
 </style>
 </head>
 <body>
@@ -602,6 +639,13 @@
       <div class="field"><label>URL del servidor</label><input id="xServer" type="text" placeholder="http://proveedor.ejemplo.com:8080"></div>
       <div class="field"><label>Usuario</label><input id="xUser" type="text" placeholder="usuario"></div>
       <div class="field"><label>Contraseña</label><input id="xPass" type="password" placeholder="••••••••"></div>
+      <div class="qr-actions">
+        <button type="button" class="qr-btn" id="btnScanQr">📷 Escanear QR</button>
+        <button type="button" class="qr-btn" id="btnShowQr">🔗 Ver mi QR</button>
+      </div>
+      <div class="qr-actions">
+        <button type="button" class="qr-btn qr-btn-wide" id="btnPairInternet">🌐 Emparejar por internet (cualquier red)</button>
+      </div>
     </div>
     <div id="fieldsM3u" style="display:none">
       <div class="field"><label>URL de la lista M3U</label><input id="m3uUrl" type="text" placeholder="https://proveedor.ejemplo.com/lista.m3u8"></div>
@@ -613,6 +657,34 @@
 
     <button class="save-btn" id="saveConn">Guardar y conectar</button>
     <div class="status-line mono" id="statusLine">Conectando…</div>
+  </div>
+</div>
+
+<!-- Show QR overlay -->
+<div class="qr-overlay" id="qrShowOverlay" style="display:none">
+  <div class="qr-card">
+    <div id="qrCodeCanvas"></div>
+    <p class="qr-hint">Escanea este código con otro teléfono para copiar la URL, usuario y clave de conexión.</p>
+    <button class="qr-close-btn" id="qrShowClose">Cerrar</button>
+  </div>
+</div>
+
+<!-- Scan QR overlay -->
+<div class="qr-overlay qr-scan-overlay" id="qrScanOverlay" style="display:none">
+  <video id="qrScanVideo" playsinline autoplay muted></video>
+  <canvas id="qrScanCanvas" style="display:none"></canvas>
+  <div class="qr-scan-frame"></div>
+  <p class="qr-scan-hint">Apunta la cámara al código QR</p>
+  <button class="qr-close-btn" id="qrScanClose">Cancelar</button>
+</div>
+
+<!-- Internet pairing overlay -->
+<div class="qr-overlay" id="pairOverlay" style="display:none">
+  <div class="qr-card">
+    <div id="pairCodeCanvas"></div>
+    <p class="qr-hint">Escanea este código con la cámara de <b>cualquier</b> teléfono, en <b>cualquier</b> red (datos móviles incluido). Se abrirá una página para escribir tu URL, usuario y clave — apenas la envíes, esta pantalla se conecta sola.</p>
+    <p class="qr-hint" id="pairStatus" style="color:var(--amber)">Esperando…</p>
+    <button class="qr-close-btn" id="pairClose">Cancelar</button>
   </div>
 </div>
 
@@ -1380,6 +1452,156 @@
     } else {
       showStatus('Este tipo de conexión aún no está implementado en esta versión.', true);
     }
+  };
+
+  // ============================================================
+  //  QR login — generate a QR with your URL/user/password, or scan one
+  //  to fill the form. Everything is local: the QR just encodes plain
+  //  text, no network/pairing involved.
+  // ============================================================
+  document.getElementById('btnShowQr').onclick = () => {
+    const server = document.getElementById('xServer').value.trim();
+    const user = document.getElementById('xUser').value.trim();
+    const pass = document.getElementById('xPass').value.trim();
+    if(!server || !user || !pass){
+      showStatus('Completa URL, usuario y contraseña antes de generar el QR.', true);
+      return;
+    }
+    const text = `URL: ${server}\nUsuario: ${user}\nClave: ${pass}`;
+    const holder = document.getElementById('qrCodeCanvas');
+    holder.innerHTML = '';
+    if(window.QRCode){
+      new QRCode(holder, { text, width:220, height:220, colorDark:'#0B1B26', colorLight:'#ffffff' });
+    } else {
+      holder.textContent = 'No se pudo generar el QR.';
+    }
+    document.getElementById('qrShowOverlay').style.display = 'flex';
+  };
+  document.getElementById('qrShowClose').onclick = () => {
+    document.getElementById('qrShowOverlay').style.display = 'none';
+  };
+
+  let qrScanStream = null;
+  let qrScanRAF = null;
+
+  document.getElementById('btnScanQr').onclick = async () => {
+    document.getElementById('qrScanOverlay').style.display = 'flex';
+    try{
+      qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const video = document.getElementById('qrScanVideo');
+      video.srcObject = qrScanStream;
+      await video.play();
+      startQrScanLoop();
+    }catch(err){
+      closeQrScan();
+      showStatus('No se pudo acceder a la cámara: ' + err.message, true);
+    }
+  };
+
+  function startQrScanLoop(){
+    const video = document.getElementById('qrScanVideo');
+    const canvas = document.getElementById('qrScanCanvas');
+    const ctx = canvas.getContext('2d');
+    function tick(){
+      if(video.readyState === video.HAVE_ENOUGH_DATA && window.jsQR){
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        if(code && code.data){
+          handleScannedQr(code.data);
+          return;
+        }
+      }
+      qrScanRAF = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  function handleScannedQr(text){
+    const urlMatch = text.match(/URL:\s*(.+)/i);
+    const userMatch = text.match(/Usuario:\s*(.+)/i);
+    const passMatch = text.match(/Clave:\s*(.+)/i);
+    if(urlMatch) document.getElementById('xServer').value = urlMatch[1].trim();
+    if(userMatch) document.getElementById('xUser').value = userMatch[1].trim();
+    if(passMatch) document.getElementById('xPass').value = passMatch[1].trim();
+    closeQrScan();
+    if(urlMatch && userMatch && passMatch){
+      showStatus('✓ Datos leídos del QR. Toca "Guardar y conectar".', false);
+    } else {
+      showStatus('El código QR no tiene el formato esperado (URL / Usuario / Clave).', true);
+    }
+  }
+
+  function closeQrScan(){
+    document.getElementById('qrScanOverlay').style.display = 'none';
+    if(qrScanRAF){ cancelAnimationFrame(qrScanRAF); qrScanRAF = null; }
+    if(qrScanStream){ qrScanStream.getTracks().forEach(t => t.stop()); qrScanStream = null; }
+  }
+  document.getElementById('qrScanClose').onclick = closeQrScan;
+
+  // ============================================================
+  //  Internet pairing — scan from ANY network (not just local WiFi).
+  //  A random code is shown as a QR pointing to a small web page
+  //  (hosted on GitHub Pages) where you type URL/user/password; that
+  //  page writes the data to a free Firebase Realtime Database, which
+  //  this app polls until the data shows up.
+  // ============================================================
+  const PAIR_SITE = 'https://pjaraf.github.io/netgo-android/pair.html';
+  const FIREBASE_BASE = 'https://netgo-pairing-default-rtdb.firebaseio.com';
+  let pairPollTimer = null;
+  let pairCode = null;
+
+  function randomPairCode(){
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let out = '';
+    for(let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    return out;
+  }
+
+  document.getElementById('btnPairInternet').onclick = () => {
+    pairCode = randomPairCode();
+    const pairUrl = `${PAIR_SITE}?code=${pairCode}`;
+    const holder = document.getElementById('pairCodeCanvas');
+    holder.innerHTML = '';
+    if(window.QRCode){
+      new QRCode(holder, { text: pairUrl, width:220, height:220, colorDark:'#0B1B26', colorLight:'#ffffff' });
+    }
+    document.getElementById('pairStatus').textContent = 'Esperando que escanees y envíes los datos…';
+    document.getElementById('pairOverlay').style.display = 'flex';
+    startPairPolling();
+  };
+
+  function startPairPolling(){
+    stopPairPolling();
+    pairPollTimer = setInterval(async () => {
+      try{
+        const res = await fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`);
+        if(!res.ok) return;
+        const data = await res.json();
+        if(data && data.server && data.username && data.password){
+          document.getElementById('xServer').value = data.server;
+          document.getElementById('xUser').value = data.username;
+          document.getElementById('xPass').value = data.password;
+          // Clean up the temporary pairing entry right away.
+          fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`, { method:'DELETE' }).catch(()=>{});
+          stopPairPolling();
+          document.getElementById('pairOverlay').style.display = 'none';
+          showStatus('✓ Datos recibidos por internet. Conectando…', false);
+          const conn = { type:'xtream', server:data.server, username:data.username, password:data.password };
+          saveConn(conn);
+          tryConnect(conn);
+        }
+      }catch(err){ /* keep polling silently */ }
+    }, 2500);
+  }
+  function stopPairPolling(){
+    if(pairPollTimer){ clearInterval(pairPollTimer); pairPollTimer = null; }
+  }
+  document.getElementById('pairClose').onclick = () => {
+    stopPairPolling();
+    document.getElementById('pairOverlay').style.display = 'none';
   };
 </script>
 
