@@ -547,6 +547,7 @@
   <p class="start-sub">Escanea este código con la cámara de tu teléfono (cualquier red, datos móviles incluido) para conectar tu proveedor y entrar.</p>
   <div id="startQrCanvas" class="start-qr"></div>
   <p class="start-status" id="startStatus">Generando código…</p>
+  <button class="start-manual-btn" id="startManualBtn">Ingresar manualmente</button>
 </div>
 
 <header>
@@ -1685,6 +1686,11 @@
   function stopStartScreenPolling(){
     if(startPollTimer){ clearInterval(startPollTimer); startPollTimer = null; }
   }
+  document.getElementById('startManualBtn').onclick = () => {
+    stopStartScreenPolling();
+    document.getElementById('startScreen').style.display = 'none';
+    overlay.classList.add('open');
+  };
 </script>
 
 </body>
