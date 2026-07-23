@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="version.js"></script>
 <style>
   :root{
     --bg: #0B1B26;
@@ -147,6 +148,19 @@
     backdrop-filter: blur(6px);
   }
   .dot-off{ width:6px; height:6px; border-radius:50%; background:#6B7C88; }
+
+  /* ---------- Update available banner ---------- */
+  .update-banner{
+    display:flex; align-items:center; gap:10px;
+    background: linear-gradient(90deg, #FF8A3D, #FFB870);
+    color:#1A0E00; padding:10px 18px; font-size:12.5px; font-weight:600;
+  }
+  .update-banner span#updateBannerText{ flex:1; }
+  .update-banner button{
+    background:#1A0E00; color:#fff; border:none; font-size:11.5px; font-weight:700;
+    padding:7px 14px; border-radius:7px; cursor:pointer;
+  }
+  .update-banner-close{ cursor:pointer; opacity:.7; padding:2px 4px; }
 
   /* ---------- Search bar ---------- */
   .searchbar-wrap{ padding: 0 22px 16px; }
@@ -574,6 +588,12 @@
     </div>
   </div>
 </header>
+
+<div id="updateBanner" class="update-banner" style="display:none">
+  <span id="updateBannerText">Nueva versión disponible</span>
+  <button id="updateBannerBtn">Actualizar</button>
+  <span id="updateBannerClose" class="update-banner-close">✕</span>
+</div>
 
 <div class="searchbar-wrap">
   <div class="searchbar">
@@ -1463,6 +1483,29 @@
 
   renderCategory('peliculas');
 
+  // ---------- Update checker ----------
+  const UPDATE_INFO_URL = 'https://pjaraf.github.io/netgo-android/version.json';
+  const UPDATE_APK_URL = 'https://github.com/pjaraf/netgo-android/releases/latest/download/app-debug.apk';
+
+  async function checkForUpdate(){
+    try{
+      const res = await fetch(UPDATE_INFO_URL, { cache:'no-store' });
+      if(!res.ok) return;
+      const data = await res.json();
+      const current = window.NETGO_APP_VERSION || 0;
+      if(data.version && data.version > current){
+        document.getElementById('updateBannerText').textContent = `Nueva versión disponible (build ${data.version})`;
+        document.getElementById('updateBanner').style.display = 'flex';
+      }
+    }catch(err){ /* offline, or not published yet — ignore silently */ }
+  }
+  document.getElementById('updateBannerBtn').onclick = () => {
+    window.open(UPDATE_APK_URL, '_system');
+  };
+  document.getElementById('updateBannerClose').onclick = () => {
+    document.getElementById('updateBanner').style.display = 'none';
+  };
+
   // Auto-connect on load if credentials were saved previously; otherwise
   // show the startup QR pairing screen.
   window.addEventListener('load', () => {
@@ -1473,6 +1516,7 @@
     } else {
       showStartScreenPairing();
     }
+    checkForUpdate();
   });
 </script>
 
