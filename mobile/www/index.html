@@ -146,6 +146,20 @@
   }
   .dot-off{ width:6px; height:6px; border-radius:50%; background:#6B7C88; }
 
+  /* ---------- Search bar ---------- */
+  .searchbar-wrap{ padding: 0 22px 16px; }
+  .searchbar{
+    display:flex; align-items:center; gap:10px;
+    background: var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:11px 14px;
+  }
+  .searchbar-icon{ font-size:15px; opacity:.7; }
+  .searchbar input{
+    flex:1; background:transparent; border:none; outline:none;
+    color: var(--text); font-size:14px; font-family:'Inter';
+  }
+  .searchbar input::placeholder{ color: var(--text-dim); }
+
   /* ---------- Inline embedded player (native video shows through here) ---------- */
   .hero-player{
     position:absolute; inset:0; z-index:5;
@@ -410,6 +424,13 @@
     </div>
   </div>
 </header>
+
+<div class="searchbar-wrap">
+  <div class="searchbar">
+    <span class="searchbar-icon">🔎</span>
+    <input type="text" id="channelSearch" placeholder="Búsqueda por canal">
+  </div>
+</div>
 
 <div class="hero" id="heroBox">
   <div class="hero-inner" id="heroInner">
@@ -690,6 +711,24 @@
     list.innerHTML = activeRow.items.map(channelRowHtml).join('');
   }
 
+  // ---------- Channel search (searches across every category) ----------
+  const channelSearchInput = document.getElementById('channelSearch');
+  channelSearchInput.addEventListener('input', () => {
+    const q = channelSearchInput.value.trim().toLowerCase();
+    if(currentCat !== 'vivo') return;
+    const list = document.getElementById('vivoList');
+    const sidebar = document.getElementById('vivoSidebar');
+    if(!q){ renderVivoView(); return; }
+    const d = activeData().vivo;
+    if(!d || !d.rows.length) return;
+    sidebar.style.display = 'none';
+    const matches = [];
+    d.rows.forEach(row => row.items.forEach(c => { if(c.t.toLowerCase().includes(q)) matches.push(c); }));
+    list.innerHTML = matches.length
+      ? matches.map(channelRowHtml).join('')
+      : `<div class="vivo-empty">Sin resultados para "${q}"</div>`;
+  });
+
   document.getElementById('vivoTabCat').onclick = () => {
     vivoTab = 'categoria';
     document.getElementById('vivoTabCat').classList.add('active');
@@ -882,16 +921,10 @@
 
   // queue: [{url, title}, ...]  — a movie/channel is a queue of 1; a series is
   // every episode in order, so the native player can auto-advance through it.
-  // Uses the fullscreen native player (reliable, no transparency tricks needed).
-  function playQueue(queue, startIndex, fallbackTitle){
+  // Native overlay player renders on top of the WebView, positioned over the hero box.
+  function playQueue(queue, startIndex, fallbackTitle, kind){
     if(!queue || !queue.length) return;
-    if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
-      window.Capacitor.Plugins.VlcPlayer.play({ queue, startIndex: startIndex || 0 })
-        .catch(err => console.error('VlcPlayer error:', err));
-      return;
-    }
-    const item = queue[startIndex || 0];
-    playStreamWeb(item.url, item.title || fallbackTitle);
+    playInline(queue, startIndex || 0, kind);
   }
   function closePlayer(){
     playerOverlay.classList.remove('open');
@@ -909,10 +942,10 @@
     if(kind === 'series'){
       try{
         const queue = await resolveSeriesQueue(card.dataset.sid, title);
-        if(queue.length) playQueue(queue, 0, title);
+        if(queue.length) playQueue(queue, 0, title, 'poster');
       }catch(err){ console.error(err); }
     } else if(card.dataset.url){
-      playQueue([{ url: card.dataset.url, title }], 0, title);
+      playQueue([{ url: card.dataset.url, title }], 0, title, card.classList.contains('channel-card') ? 'channel' : 'poster');
     }
   });
 
