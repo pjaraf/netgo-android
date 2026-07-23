@@ -158,11 +158,24 @@ public class InlineVlcPlayerPlugin extends Plugin {
         WebView webView = getBridge().getWebView();
         webView.setBackgroundColor(Color.TRANSPARENT);
 
+        // Some Capacitor/OEM setups wrap the WebView in one or more container
+        // views that have their own opaque background, which would block the
+        // video even though the WebView itself is transparent. Clear every
+        // ancestor up to the window's root content view.
+        android.view.View walker = webView;
+        while (walker.getParent() instanceof ViewGroup) {
+            ViewGroup parent = (ViewGroup) walker.getParent();
+            parent.setBackgroundColor(Color.TRANSPARENT);
+            if (parent == root) break;
+            walker = parent;
+        }
+
         videoLayout = new VLCVideoLayout(getActivity());
         container = new FrameLayout(getActivity());
         container.addView(videoLayout, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        // Index 0 = bottom of the stack, so it renders BEHIND the WebView.
         root.addView(container, 0, new FrameLayout.LayoutParams(0, 0));
 
         ArrayList<String> options = new ArrayList<>();
@@ -173,6 +186,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         libVLC = new LibVLC(getActivity(), options);
         mediaPlayer = new MediaPlayer(libVLC);
         mediaPlayer.attachViews(videoLayout, null, false, true);
+
         mediaPlayer.setEventListener(event -> {
             if (event.type == MediaPlayer.Event.EndReached) {
                 getActivity().runOnUiThread(this::advanceOrNotifyEnd);
