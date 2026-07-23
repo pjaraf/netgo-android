@@ -172,8 +172,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         options.add("--network-caching=1500");
         libVLC = new LibVLC(getActivity(), options);
         mediaPlayer = new MediaPlayer(libVLC);
-        mediaPlayer.attachViews(videoLayout, null, false, false);
-
+        mediaPlayer.attachViews(videoLayout, null, false, true);
         mediaPlayer.setEventListener(event -> {
             if (event.type == MediaPlayer.Event.EndReached) {
                 getActivity().runOnUiThread(this::advanceOrNotifyEnd);
