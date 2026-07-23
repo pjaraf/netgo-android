@@ -245,6 +245,63 @@
   .vivo-chan-arrow{ color:var(--text-dim); flex-shrink:0; }
   .vivo-empty{ padding:30px 20px; text-align:center; color:var(--text-dim); font-size:12.5px; }
 
+  /* ---------- Series detail screen ---------- */
+  .series-detail-overlay{
+    position:fixed; inset:0; z-index:60; background:var(--bg); overflow-y:auto;
+  }
+  .sd-backdrop{
+    position:relative; height:34vh; min-height:220px;
+    background-size:cover; background-position:center top;
+    display:flex; align-items:flex-end; justify-content:center;
+    background-color: var(--bg-raise);
+  }
+  .sd-backdrop::after{
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(180deg, rgba(6,14,20,.35) 0%, rgba(11,27,38,.55) 60%, var(--bg) 100%);
+  }
+  .sd-topbar{
+    position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    padding:14px 16px; z-index:2;
+  }
+  .sd-back, .sd-fav{
+    width:38px; height:38px; border-radius:50%; background:rgba(6,14,20,.55);
+    display:flex; align-items:center; justify-content:center; font-size:18px; color:#fff; cursor:pointer;
+  }
+  .sd-fav.active{ color:var(--amber); }
+  .sd-cover-circle{
+    width:112px; height:112px; border-radius:50%; object-fit:cover;
+    border:4px solid var(--bg); margin-bottom:-56px; position:relative; z-index:1;
+    background: var(--card);
+  }
+  .sd-body{ padding:68px 22px 110px; position:relative; z-index:1; }
+  .sd-title{ font-family:'Space Grotesk'; font-size:20px; font-weight:700; margin-bottom:10px; text-align:center; }
+  .sd-tags{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:16px; }
+  .sd-tag{ background:var(--card); border:1px solid var(--line); padding:5px 12px; border-radius:999px; font-size:12px; color:var(--text-dim); }
+  .sd-plot{ font-size:13.5px; line-height:1.6; color:var(--text-dim); margin-bottom:26px; }
+  .sd-seasons-label, .sd-episodes-label{
+    font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); margin-bottom:10px;
+  }
+  .sd-season-tabs{ display:flex; gap:8px; overflow-x:auto; margin-bottom:24px; padding-bottom:4px; }
+  .sd-season-tab{
+    flex:0 0 auto; padding:9px 16px; border-radius:999px; background:var(--card); border:1px solid var(--line);
+    font-size:13px; font-weight:600; color:var(--text-dim); cursor:pointer; white-space:nowrap;
+  }
+  .sd-season-tab.active{ background:#fff; color:#111; border-color:#fff; }
+  .sd-episode-list{ display:flex; flex-direction:column; gap:10px; }
+  .sd-episode-row{
+    display:flex; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:10px; align-items:center; cursor:pointer;
+  }
+  .sd-ep-thumb{ width:96px; height:64px; border-radius:8px; background:var(--bg-raise); flex-shrink:0; object-fit:cover; }
+  .sd-ep-info{ flex:1; min-width:0; }
+  .sd-ep-num{ color:var(--amber); font-size:11px; font-family:'JetBrains Mono'; margin-bottom:2px; }
+  .sd-ep-title{ font-size:13.5px; font-weight:600; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sd-ep-dur{ font-size:11px; color:var(--text-dim); }
+  .sd-ep-play{
+    width:36px; height:36px; border-radius:50%; background:var(--amber); display:flex;
+    align-items:center; justify-content:center; flex-shrink:0; color:#1A0E00; font-size:13px;
+  }
+
   /* ---------- Category rail ---------- */
   .cats{
     position:fixed; left:0; right:0; bottom:0; z-index:40;
@@ -496,6 +553,25 @@
   </div>
 </div>
 <div id="rowsContainer"></div>
+
+<div id="seriesDetailOverlay" class="series-detail-overlay" style="display:none">
+  <div class="sd-backdrop" id="sdBackdrop">
+    <div class="sd-topbar">
+      <span class="sd-back" id="sdBack">←</span>
+      <span class="sd-fav" id="sdFav">♡</span>
+    </div>
+    <img class="sd-cover-circle" id="sdCoverImg" src="" onerror="this.style.visibility='hidden'">
+  </div>
+  <div class="sd-body">
+    <h2 class="sd-title" id="sdTitle">—</h2>
+    <div class="sd-tags" id="sdTags"></div>
+    <p class="sd-plot" id="sdPlot"></p>
+    <div class="sd-seasons-label">Temporadas</div>
+    <div class="sd-season-tabs" id="sdSeasonTabs"></div>
+    <div class="sd-episodes-label" id="sdEpisodesLabel">Episodios</div>
+    <div class="sd-episode-list" id="sdEpisodeList"></div>
+  </div>
+</div>
 
 <!-- Fullscreen video player -->
 <div class="player-overlay" id="playerOverlay">
@@ -953,10 +1029,7 @@
     const kind = card.dataset.kind;
     const title = card.dataset.title;
     if(kind === 'series'){
-      try{
-        const queue = await resolveSeriesQueue(card.dataset.sid, title);
-        if(queue.length) playQueue(queue, 0, title, 'poster');
-      }catch(err){ console.error(err); }
+      openSeriesDetail(card.dataset.sid, title);
     } else if(card.dataset.url){
       if(card.classList.contains('channel-card')){
         // Build the queue from sibling channel cards in the same row so
@@ -1036,6 +1109,119 @@
     });
     return queue;
   }
+
+  // ============================================================
+  //  SERIES DETAIL SCREEN
+  // ============================================================
+  let sdCurrentInfo = null;
+  let sdCurrentSeasonKey = null;
+  const sdFavKey = 'netgo_fav_series';
+
+  function getSeriesFavs(){ try{ return JSON.parse(localStorage.getItem(sdFavKey) || '[]'); }catch(e){ return []; } }
+  function isSeriesFav(id){ return getSeriesFavs().includes(id); }
+  function toggleSeriesFav(id){
+    let list = getSeriesFavs();
+    if(list.includes(id)) list = list.filter(x => x !== id); else list.push(id);
+    localStorage.setItem(sdFavKey, JSON.stringify(list));
+  }
+
+  async function openSeriesDetail(seriesId, fallbackTitle){
+    const overlay = document.getElementById('seriesDetailOverlay');
+    overlay.style.display = 'block';
+    overlay.scrollTop = 0;
+    document.getElementById('sdTitle').textContent = fallbackTitle || 'Cargando…';
+    document.getElementById('sdEpisodeList').innerHTML = '';
+    document.getElementById('sdSeasonTabs').innerHTML = '';
+    document.getElementById('sdTags').innerHTML = '';
+    document.getElementById('sdPlot').textContent = '';
+    document.getElementById('sdBackdrop').style.backgroundImage = '';
+    document.getElementById('sdCoverImg').style.visibility = 'visible';
+    document.getElementById('sdCoverImg').src = '';
+
+    const favBtn = document.getElementById('sdFav');
+    favBtn.classList.toggle('active', isSeriesFav(seriesId));
+    favBtn.textContent = isSeriesFav(seriesId) ? '♥' : '♡';
+    favBtn.onclick = () => {
+      toggleSeriesFav(seriesId);
+      favBtn.classList.toggle('active');
+      favBtn.textContent = favBtn.classList.contains('active') ? '♥' : '♡';
+    };
+
+    try{
+      const info = await xtreamFetch(xtreamState.conn, 'get_series_info', `&series_id=${seriesId}`);
+      sdCurrentInfo = info;
+      const meta = info.info || {};
+      document.getElementById('sdTitle').textContent = meta.name || fallbackTitle || 'Serie';
+
+      const backdrop = (meta.backdrop_path && meta.backdrop_path[0]) || meta.cover || '';
+      if(backdrop) document.getElementById('sdBackdrop').style.backgroundImage = `url('${backdrop}')`;
+      document.getElementById('sdCoverImg').src = meta.cover || backdrop || '';
+
+      const tags = [];
+      if(meta.releaseDate) tags.push(String(meta.releaseDate).slice(0,4));
+      if(meta.rating) tags.push(`★ ${meta.rating}`);
+      if(meta.genre) tags.push(String(meta.genre).split(',')[0].trim());
+      document.getElementById('sdTags').innerHTML = tags.map(t => `<span class="sd-tag">${t}</span>`).join('');
+      document.getElementById('sdPlot').textContent = meta.plot || '';
+
+      const seasons = info.episodes || {};
+      const seasonKeys = Object.keys(seasons).sort((a,b) => Number(a) - Number(b));
+      sdCurrentSeasonKey = seasonKeys[0];
+      document.getElementById('sdSeasonTabs').innerHTML = seasonKeys.map(sk => `
+        <div class="sd-season-tab${sk === sdCurrentSeasonKey ? ' active' : ''}" data-season="${sk}">Temporada ${sk}</div>
+      `).join('');
+      renderSeasonEpisodes();
+    }catch(err){
+      document.getElementById('sdTitle').textContent = 'No se pudo cargar la serie';
+      document.getElementById('sdPlot').textContent = err.message || '';
+    }
+  }
+
+  function renderSeasonEpisodes(){
+    if(!sdCurrentInfo) return;
+    const seasons = sdCurrentInfo.episodes || {};
+    const eps = (seasons[sdCurrentSeasonKey] || []).slice().sort((a,b) => Number(a.episode_num) - Number(b.episode_num));
+    document.getElementById('sdEpisodesLabel').textContent = `Episodios · ${eps.length}`;
+    const cover = (sdCurrentInfo.info && sdCurrentInfo.info.cover) || '';
+    document.getElementById('sdEpisodeList').innerHTML = eps.map((ep, i) => `
+      <div class="sd-episode-row" data-idx="${i}">
+        <img class="sd-ep-thumb" src="${(ep.info && ep.info.movie_image) || cover}" onerror="this.style.visibility='hidden'">
+        <div class="sd-ep-info">
+          <div class="sd-ep-num mono">EP ${ep.episode_num}</div>
+          <div class="sd-ep-title">${ep.title || (sdCurrentInfo.info && sdCurrentInfo.info.name) || ''}</div>
+          <div class="sd-ep-dur">${(ep.info && ep.info.duration) || ''}</div>
+        </div>
+        <div class="sd-ep-play">▶</div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('sdSeasonTabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.sd-season-tab');
+    if(!tab) return;
+    sdCurrentSeasonKey = tab.dataset.season;
+    document.querySelectorAll('.sd-season-tab').forEach(t => t.classList.toggle('active', t === tab));
+    renderSeasonEpisodes();
+  });
+
+  document.getElementById('sdEpisodeList').addEventListener('click', (e) => {
+    const row = e.target.closest('.sd-episode-row');
+    if(!row || !sdCurrentInfo) return;
+    const idx = parseInt(row.dataset.idx, 10);
+    const seasons = sdCurrentInfo.episodes || {};
+    const eps = (seasons[sdCurrentSeasonKey] || []).slice().sort((a,b) => Number(a.episode_num) - Number(b.episode_num));
+    const base = xtreamState.conn.server.replace(/\/+$/,'');
+    const seriesName = (sdCurrentInfo.info && sdCurrentInfo.info.name) || document.getElementById('sdTitle').textContent;
+    const queue = eps.map(ep => ({
+      url: `${base}/series/${xtreamState.conn.username}/${xtreamState.conn.password}/${ep.id}.${ep.container_extension || 'mp4'}`,
+      title: `${seriesName} · T${sdCurrentSeasonKey} E${ep.episode_num}${ep.title ? ' - ' + ep.title : ''}`
+    }));
+    playQueue(queue, idx, seriesName, 'poster');
+  });
+
+  document.getElementById('sdBack').onclick = () => {
+    document.getElementById('seriesDetailOverlay').style.display = 'none';
+  };
 
   // Categories matching this pattern (one-off pay-per-view "events" — not
   // regular linear channels) are hidden automatically from Vivo, since they
