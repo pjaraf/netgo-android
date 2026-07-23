@@ -505,6 +505,16 @@
     background:transparent; border:1px solid var(--line); color:var(--text-dim);
     font-size:12.5px; padding:10px 18px; border-radius:9px; cursor:pointer;
   }
+  .pin-input{
+    width:150px; text-align:center; font-size:24px; letter-spacing:12px;
+    padding:12px 10px 12px 22px; border-radius:10px; border:1px solid var(--line);
+    background:#0F2536; color:var(--text); margin:6px 0 4px;
+  }
+  .qr-close-btn-ghost{
+    background:transparent; color:var(--text-dim); border:1px solid var(--line);
+    margin-top:8px;
+  }
+  #pinOverlay{ z-index:210; }
   .qr-btn{
     flex:1; background:var(--card); border:1px solid var(--line); color:var(--text);
     font-family:'Inter'; font-weight:600; font-size:12.5px; padding:11px 8px; border-radius:9px;
@@ -544,7 +554,7 @@
 <div id="startScreen" class="start-screen">
   <div class="start-logo">N</div>
   <h1 class="start-title">NetGo</h1>
-  <p class="start-sub">Escanea este código con la cámara de tu teléfono (cualquier red, datos móviles incluido) para conectar tu proveedor y entrar.</p>
+  <p class="start-sub">Enviar QR a tu proveedor</p>
   <div id="startQrCanvas" class="start-qr"></div>
   <p class="start-status" id="startStatus">Generando código…</p>
   <button class="start-manual-btn" id="startManualBtn">Ingresar manualmente</button>
@@ -724,6 +734,17 @@
     <p class="qr-hint">Escanea este código con la cámara de <b>cualquier</b> teléfono, en <b>cualquier</b> red (datos móviles incluido). Se abrirá una página para escribir tu URL, usuario y clave — apenas la envíes, esta pantalla se conecta sola.</p>
     <p class="qr-hint" id="pairStatus" style="color:var(--amber)">Esperando…</p>
     <button class="qr-close-btn" id="pairClose">Cancelar</button>
+  </div>
+</div>
+
+<!-- Admin PIN gate for manual entry -->
+<div class="qr-overlay" id="pinOverlay" style="display:none">
+  <div class="qr-card">
+    <p class="qr-hint" style="margin-top:0">Acceso solo para el administrador</p>
+    <input type="password" id="pinInput" inputmode="numeric" maxlength="4" placeholder="••••" class="pin-input">
+    <p class="qr-hint" id="pinError" style="color:#FF6B6B; display:none">Clave incorrecta</p>
+    <button class="qr-close-btn" id="pinSubmit">Entrar</button>
+    <button class="qr-close-btn qr-close-btn-ghost" id="pinCancel">Cancelar</button>
   </div>
 </div>
 
@@ -1687,9 +1708,31 @@
     if(startPollTimer){ clearInterval(startPollTimer); startPollTimer = null; }
   }
   document.getElementById('startManualBtn').onclick = () => {
-    stopStartScreenPolling();
-    document.getElementById('startScreen').style.display = 'none';
-    overlay.classList.add('open');
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinError').style.display = 'none';
+    document.getElementById('pinOverlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('pinInput').focus(), 50);
+  };
+
+  const ADMIN_PIN = '1286';
+  function submitPin(){
+    const val = document.getElementById('pinInput').value.trim();
+    if(val === ADMIN_PIN){
+      document.getElementById('pinOverlay').style.display = 'none';
+      stopStartScreenPolling();
+      document.getElementById('startScreen').style.display = 'none';
+      overlay.classList.add('open');
+    } else {
+      document.getElementById('pinError').style.display = 'block';
+      document.getElementById('pinInput').value = '';
+    }
+  }
+  document.getElementById('pinSubmit').onclick = submitPin;
+  document.getElementById('pinInput').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') submitPin();
+  });
+  document.getElementById('pinCancel').onclick = () => {
+    document.getElementById('pinOverlay').style.display = 'none';
   };
 </script>
 
