@@ -1,0 +1,6 @@
+{
+  "appId": "com.netgo.mobile",
+  "appName": "NetGo",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
