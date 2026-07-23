@@ -19,12 +19,23 @@ import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import androidx.mediarouter.app.MediaRouteButton;
+
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.google.android.gms.cast.MediaInfo;
+import com.google.android.gms.cast.MediaLoadRequestData;
+import com.google.android.gms.cast.MediaMetadata;
+import com.google.android.gms.cast.MediaSeekOptions;
+import com.google.android.gms.cast.framework.CastButtonFactory;
+import com.google.android.gms.cast.framework.CastContext;
+import com.google.android.gms.cast.framework.CastSession;
+import com.google.android.gms.cast.framework.SessionManagerListener;
+import com.google.android.gms.cast.framework.media.RemoteMediaClient;
 
 import org.json.JSONObject;
 import org.videolan.libvlc.LibVLC;
@@ -39,8 +50,11 @@ import java.util.Locale;
 /**
  * Renders native video ON TOP of the WebView. Supports: play/pause, seek,
  * a fullscreen toggle (rotates to landscape, hides system bars), swipe
- * left/right to move between items in the queue, and auto-hiding controls
- * (tap the video to show/hide them) so they don't permanently cover the image.
+ * left/right to move between items in the queue, auto-hiding controls
+ * (tap the video to show/hide them), and casting to a Chromecast /
+ * Android TV device via Google Cast (same system YouTube uses) using
+ * Google's default receiver — no custom receiver app needed since we're
+ * just casting direct video URLs.
  */
 @CapacitorPlugin(name = "InlineVlcPlayer")
 public class InlineVlcPlayerPlugin extends Plugin {
@@ -60,6 +74,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
     private TextView timeCurView;
     private TextView timeDurView;
     private TextView liveBadgeView;
+    private TextView castBadgeView;
     private LinearLayout progressRow;
 
     private final List<String> urls = new ArrayList<>();
@@ -77,6 +92,23 @@ public class InlineVlcPlayerPlugin extends Plugin {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable progressTicker;
+
+    // ---------- Google Cast ----------
+    private CastContext castContext;
+    private CastSession currentCastSession;
+    private boolean isCasting = false;
+
+    private final SessionManagerListener<CastSession> sessionManagerListener = new SessionManagerListener<CastSession>() {
+        @Override public void onSessionStarted(CastSession session, String sessionId) { onCastConnected(session); }
+        @Override public void onSessionResumed(CastSession session, boolean wasSuspended) { onCastConnected(session); }
+        @Override public void onSessionEnded(CastSession session, int error) { onCastDisconnected(); }
+        @Override public void onSessionSuspended(CastSession session, int reason) {}
+        @Override public void onSessionStarting(CastSession session) {}
+        @Override public void onSessionStartFailed(CastSession session, int error) {}
+        @Override public void onSessionEnding(CastSession session) {}
+        @Override public void onSessionResuming(CastSession session, String sessionId) {}
+        @Override public void onSessionResumeFailed(CastSession session, int error) {}
+    };
 
     @PluginMethod
     public void mount(PluginCall call) {
@@ -129,12 +161,8 @@ public class InlineVlcPlayerPlugin extends Plugin {
     public void playPause(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             JSObject ret = new JSObject();
-            if (mediaPlayer != null) {
-                togglePlayPause();
-                ret.put("isPlaying", mediaPlayer.isPlaying());
-            } else {
-                ret.put("isPlaying", false);
-            }
+            togglePlayPause();
+            ret.put("isPlaying", isCasting ? isRemotePlaying() : (mediaPlayer != null && mediaPlayer.isPlaying()));
             call.resolve(ret);
         });
     }
@@ -161,6 +189,10 @@ public class InlineVlcPlayerPlugin extends Plugin {
             if (isFullscreen) exitFullscreen(getActivity());
             stopTicker();
             cancelAutoHide();
+            if (castContext != null) {
+                try { castContext.getSessionManager().removeSessionManagerListener(sessionManagerListener, CastSession.class); }
+                catch (Exception ignored) {}
+            }
             if (mediaPlayer != null) {
                 mediaPlayer.stop();
                 mediaPlayer.detachViews();
@@ -247,6 +279,16 @@ public class InlineVlcPlayerPlugin extends Plugin {
         });
 
         startTicker();
+
+        // ---- Google Cast setup (safe no-op if Play Services / Cast unavailable) ----
+        try {
+            castContext = CastContext.getSharedInstance(activity);
+            castContext.getSessionManager().addSessionManagerListener(sessionManagerListener, CastSession.class);
+            currentCastSession = castContext.getSessionManager().getCurrentCastSession();
+            if (currentCastSession != null && currentCastSession.isConnected()) onCastConnected(currentCastSession);
+        } catch (Exception e) {
+            castContext = null; // Device without Google Play Services / Cast — button just won't be added.
+        }
     }
 
     private void buildControls(Activity activity, FrameLayout parent) {
@@ -264,6 +306,21 @@ public class InlineVlcPlayerPlugin extends Plugin {
         titleView.setTextSize(13);
         titleView.setMaxLines(1);
         topBar.addView(titleView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        // Cast button (only added if Google Cast is actually available on this device)
+        if (castContext == null) {
+            try {
+                CastContext probe = CastContext.getSharedInstance(activity);
+                castContext = probe;
+            } catch (Exception ignored) {}
+        }
+        try {
+            MediaRouteButton castButton = new MediaRouteButton(activity);
+            CastButtonFactory.setUpMediaRouteButton(activity.getApplicationContext(), castButton);
+            topBar.addView(castButton, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 36)));
+        } catch (Exception ignored) {
+            // Cast not available on this device — simply no cast button, rest of the app works normally.
+        }
 
         fullscreenBtn = new TextView(activity);
         fullscreenBtn.setText("⤢");
@@ -344,9 +401,11 @@ public class InlineVlcPlayerPlugin extends Plugin {
             @Override public void onStartTrackingTouch(SeekBar sb) { userSeeking = true; cancelAutoHide(); }
             @Override public void onStopTrackingTouch(SeekBar sb) {
                 userSeeking = false;
-                if (mediaPlayer != null) {
-                    long duration = mediaPlayer.getLength();
-                    if (duration > 0) mediaPlayer.setTime((long) (duration * (sb.getProgress() / 1000.0)));
+                long duration = getCurrentDuration();
+                long newPos = (long) (duration * (sb.getProgress() / 1000.0));
+                if (duration > 0) {
+                    if (isCasting) seekRemote(newPos);
+                    else if (mediaPlayer != null) mediaPlayer.setTime(newPos);
                 }
                 scheduleAutoHide();
             }
@@ -374,10 +433,84 @@ public class InlineVlcPlayerPlugin extends Plugin {
         liveBadgeView.setVisibility(View.GONE);
         bottomBar.addView(liveBadgeView);
 
+        castBadgeView = new TextView(activity);
+        castBadgeView.setText("📺 Transmitiendo a la TV");
+        castBadgeView.setTextColor(0xFF3DDC84);
+        castBadgeView.setTextSize(11);
+        castBadgeView.setGravity(Gravity.CENTER);
+        castBadgeView.setPadding(0, dp(activity, 6), 0, 0);
+        castBadgeView.setVisibility(View.GONE);
+        bottomBar.addView(castBadgeView);
+
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         bottomLp.gravity = Gravity.BOTTOM;
         parent.addView(bottomBar, bottomLp);
+    }
+
+    // ---------- Google Cast logic ----------
+    private void onCastConnected(CastSession session) {
+        currentCastSession = session;
+        isCasting = true;
+        if (mediaPlayer != null && mediaPlayer.isPlaying()) mediaPlayer.pause();
+        if (castBadgeView != null) castBadgeView.setVisibility(View.VISIBLE);
+        castCurrentItem();
+    }
+
+    private void onCastDisconnected() {
+        currentCastSession = null;
+        isCasting = false;
+        if (castBadgeView != null) castBadgeView.setVisibility(View.GONE);
+        if (mediaPlayer != null) mediaPlayer.play();
+    }
+
+    private void castCurrentItem() {
+        if (currentCastSession == null || urls.isEmpty()) return;
+        RemoteMediaClient remoteMediaClient = currentCastSession.getRemoteMediaClient();
+        if (remoteMediaClient == null) return;
+
+        String url = urls.get(currentIndex);
+        String title = titles.get(currentIndex);
+        String contentType = url.contains(".m3u8") ? "application/x-mpegURL" : "video/mp4";
+
+        MediaMetadata metadata = new MediaMetadata(MediaMetadata.MEDIA_TYPE_MOVIE);
+        metadata.putString(MediaMetadata.KEY_TITLE, title);
+
+        MediaInfo mediaInfo = new MediaInfo.Builder(url)
+                .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+                .setContentType(contentType)
+                .setMetadata(metadata)
+                .build();
+
+        MediaLoadRequestData loadRequestData = new MediaLoadRequestData.Builder()
+                .setMediaInfo(mediaInfo)
+                .setAutoplay(true)
+                .build();
+
+        remoteMediaClient.load(loadRequestData);
+        if (titleView != null) titleView.setText(title);
+    }
+
+    private boolean isRemotePlaying() {
+        if (currentCastSession == null) return false;
+        RemoteMediaClient rmc = currentCastSession.getRemoteMediaClient();
+        return rmc != null && rmc.isPlaying();
+    }
+
+    private void seekRemote(long positionMs) {
+        if (currentCastSession == null) return;
+        RemoteMediaClient rmc = currentCastSession.getRemoteMediaClient();
+        if (rmc == null) return;
+        rmc.seek(new MediaSeekOptions.Builder().setPosition(positionMs).build());
+    }
+
+    private long getCurrentDuration() {
+        if (isCasting && currentCastSession != null) {
+            RemoteMediaClient rmc = currentCastSession.getRemoteMediaClient();
+            if (rmc != null && rmc.getMediaStatus() != null) return rmc.getMediaStatus().getMediaInfo().getStreamDuration();
+            return 0;
+        }
+        return mediaPlayer != null ? mediaPlayer.getLength() : 0;
     }
 
     // ---------- Auto-hide controls ----------
@@ -461,6 +594,12 @@ public class InlineVlcPlayerPlugin extends Plugin {
     }
 
     private void togglePlayPause() {
+        if (isCasting && currentCastSession != null) {
+            RemoteMediaClient rmc = currentCastSession.getRemoteMediaClient();
+            if (rmc == null) return;
+            if (rmc.isPlaying()) rmc.pause(); else rmc.play();
+            return;
+        }
         if (mediaPlayer == null) return;
         if (mediaPlayer.isPlaying()) {
             mediaPlayer.pause();
@@ -472,6 +611,13 @@ public class InlineVlcPlayerPlugin extends Plugin {
     }
 
     private void doSeekBy(int deltaSeconds) {
+        if (isCasting && currentCastSession != null) {
+            RemoteMediaClient rmc = currentCastSession.getRemoteMediaClient();
+            if (rmc == null || rmc.getMediaStatus() == null) return;
+            long newPos = rmc.getApproximateStreamPosition() + (deltaSeconds * 1000L);
+            seekRemote(Math.max(0, newPos));
+            return;
+        }
         if (mediaPlayer == null) return;
         long duration = mediaPlayer.getLength();
         long newTime = mediaPlayer.getTime() + (deltaSeconds * 1000L);
@@ -516,14 +662,18 @@ public class InlineVlcPlayerPlugin extends Plugin {
     }
 
     private void loadCurrent() {
-        if (mediaPlayer == null || urls.isEmpty()) return;
-        Media media = new Media(libVLC, android.net.Uri.parse(urls.get(currentIndex)));
-        media.setHWDecoderEnabled(true, false);
-        mediaPlayer.setMedia(media);
-        media.release();
-        mediaPlayer.play();
-
+        if (urls.isEmpty()) return;
         titleView.setText(titles.get(currentIndex));
+
+        if (isCasting) {
+            castCurrentItem();
+        } else if (mediaPlayer != null) {
+            Media media = new Media(libVLC, android.net.Uri.parse(urls.get(currentIndex)));
+            media.setHWDecoderEnabled(true, false);
+            mediaPlayer.setMedia(media);
+            media.release();
+            mediaPlayer.play();
+        }
 
         JSObject data = new JSObject();
         data.put("title", titles.get(currentIndex));
@@ -547,12 +697,23 @@ public class InlineVlcPlayerPlugin extends Plugin {
         progressTicker = new Runnable() {
             @Override
             public void run() {
-                if (mediaPlayer != null && !userSeeking) {
-                    long duration = mediaPlayer.getLength();
-                    long position = mediaPlayer.getTime();
+                if (!userSeeking) {
+                    long duration = getCurrentDuration();
+                    long position;
+                    boolean playing;
+                    if (isCasting && currentCastSession != null) {
+                        RemoteMediaClient rmc = currentCastSession.getRemoteMediaClient();
+                        position = rmc != null ? rmc.getApproximateStreamPosition() : 0;
+                        playing = rmc != null && rmc.isPlaying();
+                    } else if (mediaPlayer != null) {
+                        position = mediaPlayer.getTime();
+                        playing = mediaPlayer.isPlaying();
+                    } else {
+                        position = 0; playing = false;
+                    }
                     boolean isLive = duration <= 0;
                     progressRow.setVisibility(isLive ? View.GONE : View.VISIBLE);
-                    liveBadgeView.setVisibility(isLive ? View.VISIBLE : View.GONE);
+                    liveBadgeView.setVisibility((isLive && !isCasting) ? View.VISIBLE : View.GONE);
                     if (!isLive) {
                         timeCurView.setText(fmt(position));
                         timeDurView.setText(fmt(duration));
@@ -561,7 +722,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
                     JSObject data = new JSObject();
                     data.put("position", position);
                     data.put("duration", duration);
-                    data.put("isPlaying", mediaPlayer.isPlaying());
+                    data.put("isPlaying", playing);
                     notifyListeners("progress", data);
                 }
                 handler.postDelayed(this, 500);
