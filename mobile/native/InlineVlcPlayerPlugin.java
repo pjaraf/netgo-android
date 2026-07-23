@@ -1,6 +1,7 @@
 package com.netgo.mobile;
 
 import android.app.Activity;
+import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.GradientDrawable;
@@ -8,6 +9,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -33,6 +36,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Renders native video ON TOP of the WebView. Supports: play/pause, seek,
+ * a fullscreen toggle (rotates to landscape, hides system bars), and
+ * swipe-left/right to move to the next/previous item in the queue.
+ */
 @CapacitorPlugin(name = "InlineVlcPlayer")
 public class InlineVlcPlayerPlugin extends Plugin {
 
@@ -40,9 +48,11 @@ public class InlineVlcPlayerPlugin extends Plugin {
     private MediaPlayer mediaPlayer;
     private VLCVideoLayout videoLayout;
     private FrameLayout container;
+    private GestureDetector gestureDetector;
 
     private TextView titleView;
     private ImageButton playPauseBtn;
+    private TextView fullscreenBtn;
     private SeekBar seekBar;
     private TextView timeCurView;
     private TextView timeDurView;
@@ -53,6 +63,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
     private final List<String> titles = new ArrayList<>();
     private int currentIndex = 0;
     private boolean userSeeking = false;
+
+    private boolean isFullscreen = false;
+    private FrameLayout.LayoutParams savedLp;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable progressTicker;
@@ -69,7 +82,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
     @PluginMethod
     public void updateRect(PluginCall call) {
         getActivity().runOnUiThread(() -> {
-            if (container != null) applyRect(call);
+            if (container != null && !isFullscreen) applyRect(call);
             call.resolve();
         });
     }
@@ -137,6 +150,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
     @PluginMethod
     public void unmount(PluginCall call) {
         getActivity().runOnUiThread(() -> {
+            if (isFullscreen) exitFullscreen(getActivity());
             stopTicker();
             if (mediaPlayer != null) {
                 mediaPlayer.stop();
@@ -168,6 +182,21 @@ public class InlineVlcPlayerPlugin extends Plugin {
         videoLayout = new VLCVideoLayout(activity);
         container.addView(videoLayout, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        gestureDetector = new GestureDetector(activity, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+                if (e1 == null || e2 == null) return false;
+                float deltaX = e2.getX() - e1.getX();
+                float deltaY = e2.getY() - e1.getY();
+                if (Math.abs(deltaX) > Math.abs(deltaY) * 1.5f && Math.abs(deltaX) > 80) {
+                    if (deltaX < 0) goToNext(); else goToPrevious();
+                    return true;
+                }
+                return false;
+            }
+        });
+        videoLayout.setOnTouchListener((v, event) -> gestureDetector.onTouchEvent(event));
 
         buildControls(activity, container);
 
@@ -211,10 +240,20 @@ public class InlineVlcPlayerPlugin extends Plugin {
         titleView.setMaxLines(1);
         topBar.addView(titleView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        fullscreenBtn = new TextView(activity);
+        fullscreenBtn.setText("⤢");
+        fullscreenBtn.setTextColor(Color.WHITE);
+        fullscreenBtn.setTextSize(20);
+        fullscreenBtn.setGravity(Gravity.CENTER);
+        fullscreenBtn.setPadding(pad, 0, pad, 0);
+        fullscreenBtn.setOnClickListener(v -> toggleFullscreen(activity));
+        topBar.addView(fullscreenBtn, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 36)));
+
         ImageButton closeBtn = new ImageButton(activity);
         closeBtn.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
         closeBtn.setBackgroundColor(Color.TRANSPARENT);
         closeBtn.setOnClickListener(v -> {
+            if (isFullscreen) exitFullscreen(activity);
             container.setVisibility(View.GONE);
             notifyListeners("ended", new JSObject());
         });
@@ -301,7 +340,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         bottomBar.addView(progressRow);
 
         liveBadgeView = new TextView(activity);
-        liveBadgeView.setText("● EN VIVO");
+        liveBadgeView.setText("● EN VIVO — desliza para cambiar de canal");
         liveBadgeView.setTextColor(0xFFFF6B6B);
         liveBadgeView.setTextSize(11);
         liveBadgeView.setGravity(Gravity.CENTER);
@@ -313,6 +352,48 @@ public class InlineVlcPlayerPlugin extends Plugin {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         bottomLp.gravity = Gravity.BOTTOM;
         parent.addView(bottomBar, bottomLp);
+    }
+
+    private void toggleFullscreen(Activity activity) {
+        if (!isFullscreen) {
+            savedLp = new FrameLayout.LayoutParams((FrameLayout.LayoutParams) container.getLayoutParams());
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) container.getLayoutParams();
+            lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            lp.leftMargin = 0;
+            lp.topMargin = 0;
+            container.setLayoutParams(lp);
+            activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+            hideSystemBars(activity);
+            fullscreenBtn.setText("⤡");
+            isFullscreen = true;
+        } else {
+            exitFullscreen(activity);
+        }
+    }
+
+    private void exitFullscreen(Activity activity) {
+        if (savedLp != null) container.setLayoutParams(savedLp);
+        activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        showSystemBars(activity);
+        fullscreenBtn.setText("⤢");
+        isFullscreen = false;
+    }
+
+    private void hideSystemBars(Activity activity) {
+        View decor = activity.getWindow().getDecorView();
+        decor.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+    }
+
+    private void showSystemBars(Activity activity) {
+        View decor = activity.getWindow().getDecorView();
+        decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
     }
 
     private int dp(Activity activity, int value) {
@@ -340,8 +421,22 @@ public class InlineVlcPlayerPlugin extends Plugin {
         mediaPlayer.setTime(newTime);
     }
 
+    private void goToNext() {
+        if (currentIndex + 1 < urls.size()) {
+            currentIndex++;
+            loadCurrent();
+        }
+    }
+
+    private void goToPrevious() {
+        if (currentIndex - 1 >= 0) {
+            currentIndex--;
+            loadCurrent();
+        }
+    }
+
     private void applyRect(PluginCall call) {
-        if (container == null) return;
+        if (container == null || isFullscreen) return;
         DisplayMetrics dm = getContext().getResources().getDisplayMetrics();
         JSONObject data = call.getData();
         double x = data.optDouble("x", 0);
