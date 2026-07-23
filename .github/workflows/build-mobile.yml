@@ -43,6 +43,9 @@ jobs:
       - name: Add Android TV home-screen launcher support
         run: node scripts/patch-tv-launcher.js
 
+      - name: Keep MainActivity alive across screen rotation (fullscreen video)
+        run: node scripts/patch-orientation.js
+
       - name: Allow cleartext (http://) traffic for IPTV providers
         run: node scripts/patch-cleartext.js
 
