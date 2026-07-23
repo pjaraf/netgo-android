@@ -145,6 +145,91 @@
   }
   .dot-off{ width:6px; height:6px; border-radius:50%; background:#6B7C88; }
 
+  /* ---------- Inline embedded player (native video shows through here) ---------- */
+  .hero-player{
+    position:absolute; inset:0; z-index:5;
+    display:none; flex-direction:column; justify-content:space-between;
+    background: transparent;
+  }
+  .hero.playing .hero-inner,
+  .hero.playing::before{ display:none; }
+  .hero.playing{ background: transparent; border-color: rgba(234,242,245,0.14); }
+  .hero.playing .hero-player{ display:flex; }
+
+  .hp-top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; background:linear-gradient(180deg, rgba(6,14,20,.75), transparent);
+  }
+  .hp-title{ color:#fff; font-size:12.5px; font-weight:600; max-width:80%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hp-close{
+    width:28px; height:28px; border-radius:50%; background:rgba(6,14,20,.6);
+    color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; cursor:pointer;
+  }
+  .hp-spinner-wrap{ flex:1; display:flex; align-items:center; justify-content:center; }
+  .hp-spinner{
+    width:26px; height:26px; border-radius:50%; border:3px solid rgba(255,255,255,.25);
+    border-top-color: var(--amber); animation: spin 1s linear infinite; display:none;
+  }
+  .hp-spinner-wrap.loading .hp-spinner{ display:block; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .hp-bottom{ padding:10px 14px 14px; background:linear-gradient(0deg, rgba(6,14,20,.8), transparent); }
+  .hp-controls{ display:flex; align-items:center; justify-content:center; gap:22px; margin-bottom:10px; }
+  .hp-btn{
+    background:rgba(6,14,20,.55); border:1px solid rgba(255,255,255,.15); color:#fff;
+    font-family:'JetBrains Mono'; font-size:11px; border-radius:999px; padding:8px 12px; cursor:pointer;
+  }
+  .hp-btn-main{
+    width:44px; height:44px; border-radius:50%; font-size:16px; padding:0;
+    background: var(--amber); border:none; color:#1A0E00; display:flex; align-items:center; justify-content:center;
+  }
+  .hp-progress{ display:flex; align-items:center; gap:8px; }
+  .hp-progress .mono{ color:#fff; font-size:10px; min-width:34px; }
+  .hp-progress input[type=range]{
+    flex:1; height:3px; -webkit-appearance:none; background: rgba(255,255,255,.3); border-radius:2px; outline:none;
+  }
+  .hp-progress input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:13px; height:13px; border-radius:50%; background: var(--amber); cursor:pointer;
+  }
+  .hp-live-badge{ text-align:center; color:#FF6B6B; font-size:11px; font-weight:600; }
+
+  /* ---------- Vivo: category sidebar + channel list (EPG style) ---------- */
+  .vivo-view{ margin: 0 0 26px; }
+  .vivo-tabs{ display:flex; gap:22px; padding: 4px 22px 14px; border-bottom:1px solid var(--line); }
+  .vivo-tab{ font-size:13.5px; font-weight:600; color:var(--text-dim); padding-bottom:10px; cursor:pointer; position:relative; }
+  .vivo-tab.active{ color:var(--amber); }
+  .vivo-tab.active::after{ content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--amber); border-radius:2px; }
+
+  .vivo-body{ display:flex; height:56vh; min-height:380px; }
+  .vivo-sidebar{
+    width:118px; flex-shrink:0; overflow-y:auto; border-right:1px solid var(--line);
+    background: rgba(255,255,255,0.015);
+  }
+  .vivo-cat-item{
+    padding:14px 12px; font-size:12.5px; color:var(--text-dim); border-left:3px solid transparent;
+    cursor:pointer; line-height:1.3;
+  }
+  .vivo-cat-item.active{ color:var(--amber); font-weight:600; border-left-color:var(--amber); background:var(--amber-dim); }
+
+  .vivo-list{ flex:1; overflow-y:auto; }
+  .vivo-chan-row{
+    display:flex; align-items:center; gap:12px; padding:11px 14px;
+    border-bottom:1px solid var(--line); cursor:pointer;
+  }
+  .vivo-chan-row.active{ background: var(--amber-dim); }
+  .vivo-chan-logo{
+    width:34px; height:34px; border-radius:7px; flex-shrink:0; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+    background: var(--card);
+  }
+  .vivo-chan-logo img{ width:100%; height:100%; object-fit:cover; }
+  .vivo-chan-num{ font-family:'JetBrains Mono'; font-size:12px; color:var(--amber); min-width:30px; flex-shrink:0; }
+  .vivo-chan-name{ flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vivo-chan-star{ font-size:15px; color:var(--text-dim); padding:4px; flex-shrink:0; }
+  .vivo-chan-star.on{ color:var(--amber); }
+  .vivo-chan-arrow{ color:var(--text-dim); flex-shrink:0; }
+  .vivo-empty{ padding:30px 20px; text-align:center; color:var(--text-dim); font-size:12.5px; }
+
   /* ---------- Category rail ---------- */
   .cats{
     display:flex; gap:12px; padding: 0 22px 26px;
@@ -320,8 +405,8 @@
   </div>
 </header>
 
-<div class="hero">
-  <div class="hero-inner">
+<div class="hero" id="heroBox">
+  <div class="hero-inner" id="heroInner">
     <div class="hero-badge" id="heroBadge"><span class="dot-off"></span> Sin proveedor conectado</div>
     <div class="pulse-wrap">
       <div class="pulse-ring"></div>
@@ -332,6 +417,28 @@
     <div class="hero-title display" id="heroTitle">Aún no hay señal</div>
     <div class="hero-sub" id="heroSub">Conecta tu proveedor de streaming con licencia (Xtream Codes o lista M3U) para empezar a ver canales, series y películas.</div>
     <button class="hero-cta" id="heroConnect">Conectar proveedor</button>
+  </div>
+
+  <!-- Inline native video renders through here (this stays transparent while playing) -->
+  <div class="hero-player" id="heroPlayer">
+    <div class="hp-top">
+      <span class="hp-title mono" id="hpTitle">—</span>
+      <span class="hp-close" id="hpClose">✕</span>
+    </div>
+    <div class="hp-spinner-wrap" id="hpSpinnerWrap"><div class="hp-spinner"></div></div>
+    <div class="hp-bottom">
+      <div class="hp-controls">
+        <button class="hp-btn" id="hpSeekBack">⏪ 10</button>
+        <button class="hp-btn hp-btn-main" id="hpPlayPause">⏸</button>
+        <button class="hp-btn" id="hpSeekFwd">10 ⏩</button>
+      </div>
+      <div class="hp-progress" id="hpProgress">
+        <span class="mono" id="hpTimeCur">00:00</span>
+        <input type="range" id="hpSeekbar" min="0" max="1000" value="0">
+        <span class="mono" id="hpTimeDur">00:00</span>
+      </div>
+      <div class="hp-live-badge mono" id="hpLiveBadge" style="display:none">● EN VIVO</div>
+    </div>
   </div>
 </div>
 
@@ -344,6 +451,16 @@
 </div>
 
 
+<div id="vivoView" class="vivo-view" style="display:none">
+  <div class="vivo-tabs">
+    <div class="vivo-tab active" id="vivoTabCat">Categoría</div>
+    <div class="vivo-tab" id="vivoTabFav">Favoritos</div>
+  </div>
+  <div class="vivo-body">
+    <div class="vivo-sidebar" id="vivoSidebar"></div>
+    <div class="vivo-list" id="vivoList"></div>
+  </div>
+</div>
 <div id="rowsContainer"></div>
 
 <!-- Fullscreen video player -->
@@ -481,19 +598,126 @@
 
   function renderCategory(cat){
     currentCat = cat;
-    const d = activeData()[cat];
-    const container = document.getElementById('rowsContainer');
-    if(!d || !d.rows.length){
-      container.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">Tu proveedor no tiene contenido en esta categoría</div></div></section>`;
+    const rowsContainer = document.getElementById('rowsContainer');
+    const vivoView = document.getElementById('vivoView');
+
+    if(cat === 'vivo'){
+      rowsContainer.style.display = 'none';
+      vivoView.style.display = 'block';
+      renderVivoView();
       return;
     }
-    container.innerHTML = d.rows.map(row => `
+    vivoView.style.display = 'none';
+    rowsContainer.style.display = 'block';
+
+    const d = activeData()[cat];
+    if(!d || !d.rows.length){
+      rowsContainer.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">Tu proveedor no tiene contenido en esta categoría</div></div></section>`;
+      return;
+    }
+    rowsContainer.innerHTML = d.rows.map(row => `
       <section class="row">
         <div class="row-head"><h2>${row.title}</h2><span class="count mono">${row.items.length} ${d.type === 'channel' ? 'canales' : 'títulos'}</span></div>
         <div class="row-scroll">${row.items.map(d.type === 'channel' ? channelCard : posterCard).join('')}</div>
       </section>
     `).join('');
   }
+
+  // ============================================================
+  //  VIVO: category sidebar + channel list (EPG-style)
+  // ============================================================
+  const FAV_KEY = 'netgo_fav_channels';
+  function getFavorites(){ try{ return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); }catch(e){ return []; } }
+  function saveFavorites(list){ localStorage.setItem(FAV_KEY, JSON.stringify(list)); }
+  function isFavorite(url){ return getFavorites().some(f => f.url === url); }
+  function toggleFavorite(chan){
+    let list = getFavorites();
+    if(list.some(f => f.url === chan.url)) list = list.filter(f => f.url !== chan.url);
+    else list.push(chan);
+    saveFavorites(list);
+  }
+
+  let vivoTab = 'categoria';
+  let vivoActiveCatIndex = 0;
+  let activeChannelUrl = null;
+
+  function channelRowHtml(c){
+    const fav = isFavorite(c.url);
+    const art = c.img ? `<img src="${c.img}" loading="lazy" onerror="this.style.display='none'">` : (c.icon || '📡');
+    const activeCls = c.url === activeChannelUrl ? ' active' : '';
+    return `<div class="vivo-chan-row${activeCls}" data-url="${c.url}" data-title="${c.t}" data-num="${c.num||''}" data-img="${c.img||''}">
+      <div class="vivo-chan-logo">${art}</div>
+      <div class="vivo-chan-num">${c.num||''}</div>
+      <div class="vivo-chan-name">${c.t}</div>
+      <div class="vivo-chan-star${fav?' on':''}" data-fav-toggle="1">${fav ? '★' : '☆'}</div>
+      <div class="vivo-chan-arrow">›</div>
+    </div>`;
+  }
+
+  function renderVivoView(){
+    const d = activeData().vivo;
+    const sidebar = document.getElementById('vivoSidebar');
+    const list = document.getElementById('vivoList');
+
+    if(vivoTab === 'favoritos'){
+      sidebar.innerHTML = '';
+      sidebar.style.display = 'none';
+      const favs = getFavorites();
+      list.innerHTML = favs.length
+        ? favs.map(channelRowHtml).join('')
+        : `<div class="vivo-empty">Aún no tienes canales favoritos.<br>Toca la ☆ junto a un canal para guardarlo aquí.</div>`;
+      return;
+    }
+
+    sidebar.style.display = 'block';
+    if(!d || !d.rows.length){
+      list.innerHTML = `<div class="vivo-empty">Tu proveedor no tiene canales en vivo.</div>`;
+      return;
+    }
+    if(vivoActiveCatIndex >= d.rows.length) vivoActiveCatIndex = 0;
+
+    sidebar.innerHTML = d.rows.map((row, i) => `
+      <div class="vivo-cat-item${i === vivoActiveCatIndex ? ' active' : ''}" data-idx="${i}">${row.title}</div>
+    `).join('');
+
+    const activeRow = d.rows[vivoActiveCatIndex];
+    list.innerHTML = activeRow.items.map(channelRowHtml).join('');
+  }
+
+  document.getElementById('vivoTabCat').onclick = () => {
+    vivoTab = 'categoria';
+    document.getElementById('vivoTabCat').classList.add('active');
+    document.getElementById('vivoTabFav').classList.remove('active');
+    renderVivoView();
+  };
+  document.getElementById('vivoTabFav').onclick = () => {
+    vivoTab = 'favoritos';
+    document.getElementById('vivoTabFav').classList.add('active');
+    document.getElementById('vivoTabCat').classList.remove('active');
+    renderVivoView();
+  };
+
+  document.getElementById('vivoSidebar').addEventListener('click', (e) => {
+    const item = e.target.closest('.vivo-cat-item');
+    if(!item) return;
+    vivoActiveCatIndex = parseInt(item.dataset.idx, 10);
+    renderVivoView();
+  });
+
+  document.getElementById('vivoList').addEventListener('click', (e) => {
+    const row = e.target.closest('.vivo-chan-row');
+    if(!row) return;
+    const url = row.dataset.url, title = row.dataset.title;
+
+    if(e.target.closest('[data-fav-toggle]')){
+      toggleFavorite({ url, t: title, num: row.dataset.num, img: row.dataset.img });
+      renderVivoView();
+      return;
+    }
+    activeChannelUrl = url;
+    document.querySelectorAll('.vivo-chan-row').forEach(r => r.classList.toggle('active', r.dataset.url === url));
+    playQueue([{ url, title }], 0, title, 'channel');
+  });
 
   document.querySelectorAll('.cat').forEach(cat => {
     cat.onclick = () => {
@@ -540,21 +764,121 @@
     }
   }
 
-  // queue: [{url, title}, ...]  — a movie/channel is a queue of 1; a series is
-  // every episode in order, so the native player can auto-advance through it.
-  function playQueue(queue, startIndex, fallbackTitle){
-    if(!queue || !queue.length) return;
-    if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
-      // Native path: real device/APK — libVLC handles every codec AND
-      // auto-advances to the next item in the queue when one ends. When a
-      // movie or the last episode ends, the native activity just closes and
-      // the app is left showing whatever screen was underneath.
-      window.Capacitor.Plugins.VlcPlayer.play({ queue, startIndex: startIndex || 0 })
-        .catch(err => console.error('VlcPlayer error:', err));
+  // ============================================================
+  //  INLINE PLAYER (embedded in the hero box, native video shows through)
+  // ============================================================
+  const heroBox = document.getElementById('heroBox');
+  const heroPlayerEl = document.getElementById('heroPlayer');
+  const hpSpinnerWrap = document.getElementById('hpSpinnerWrap');
+  const hpTitle = document.getElementById('hpTitle');
+  const hpPlayPause = document.getElementById('hpPlayPause');
+  const hpSeekbar = document.getElementById('hpSeekbar');
+  const hpTimeCur = document.getElementById('hpTimeCur');
+  const hpTimeDur = document.getElementById('hpTimeDur');
+  const hpProgress = document.getElementById('hpProgress');
+  const hpLiveBadge = document.getElementById('hpLiveBadge');
+
+  const inlineAvailable = () => window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.InlineVlcPlayer;
+  let lastKnownDuration = 0;
+  let userIsDraggingSeek = false;
+
+  function fmtTime(ms){
+    if(!ms || ms < 0) return '00:00';
+    const totalSec = Math.floor(ms/1000);
+    const h = Math.floor(totalSec/3600), m = Math.floor((totalSec%3600)/60), s = totalSec%60;
+    const pad = n => String(n).padStart(2,'0');
+    return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }
+
+  function getHeroRect(){
+    const r = heroBox.getBoundingClientRect();
+    return { x: r.left, y: r.top, width: r.width, height: r.height };
+  }
+
+  async function positionInlinePlayer(){
+    if(!inlineAvailable()) return;
+    try{ await window.Capacitor.Plugins.InlineVlcPlayer.updateRect(getHeroRect()); }catch(e){}
+  }
+  // Keep the native video aligned with the hero box while scrolling/resizing
+  let rafPending = false;
+  function schedulePositionUpdate(){
+    if(rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => { rafPending = false; positionInlinePlayer(); });
+  }
+  window.addEventListener('scroll', schedulePositionUpdate, { passive:true });
+  window.addEventListener('resize', schedulePositionUpdate);
+
+  async function playInline(queue, startIndex, kind){
+    if(!inlineAvailable()){
+      const item = queue[startIndex || 0];
+      playStreamWeb(item.url, item.title);
       return;
     }
-    const item = queue[startIndex || 0];
-    playStreamWeb(item.url, item.title || fallbackTitle);
+    heroBox.classList.add('playing');
+    hpProgress.style.display = kind === 'channel' ? 'none' : 'flex';
+    hpLiveBadge.style.display = kind === 'channel' ? 'block' : 'none';
+    hpSpinnerWrap.classList.add('loading');
+    hpPlayPause.textContent = '⏸';
+    window.scrollTo({ top:0, behavior:'smooth' });
+
+    const P = window.Capacitor.Plugins.InlineVlcPlayer;
+    await P.mount(getHeroRect());
+    await P.loadQueue({ queue, startIndex: startIndex || 0 });
+    // Reposition a couple more times shortly after, in case the smooth
+    // scroll or layout is still settling.
+    setTimeout(positionInlinePlayer, 150);
+    setTimeout(positionInlinePlayer, 500);
+  }
+
+  async function closeInlinePlayer(){
+    if(inlineAvailable()){
+      try{ await window.Capacitor.Plugins.InlineVlcPlayer.unmount(); }catch(e){}
+    }
+    heroBox.classList.remove('playing');
+  }
+
+  document.getElementById('hpClose').onclick = closeInlinePlayer;
+  hpPlayPause.onclick = async () => {
+    if(!inlineAvailable()) return;
+    const r = await window.Capacitor.Plugins.InlineVlcPlayer.playPause();
+    hpPlayPause.textContent = r.isPlaying ? '⏸' : '▶';
+  };
+  document.getElementById('hpSeekBack').onclick = () => inlineAvailable() && window.Capacitor.Plugins.InlineVlcPlayer.seekBy({ deltaSeconds:-10 });
+  document.getElementById('hpSeekFwd').onclick = () => inlineAvailable() && window.Capacitor.Plugins.InlineVlcPlayer.seekBy({ deltaSeconds:10 });
+
+  hpSeekbar.addEventListener('input', () => { userIsDraggingSeek = true; });
+  hpSeekbar.addEventListener('change', () => {
+    userIsDraggingSeek = false;
+    if(!inlineAvailable() || !lastKnownDuration) return;
+    const positionMs = Math.round((hpSeekbar.value / 1000) * lastKnownDuration);
+    window.Capacitor.Plugins.InlineVlcPlayer.seekTo({ positionMs });
+  });
+
+  if(inlineAvailable()){
+    window.Capacitor.Plugins.InlineVlcPlayer.addListener('progress', (data) => {
+      hpSpinnerWrap.classList.remove('loading');
+      hpPlayPause.textContent = data.isPlaying ? '⏸' : '▶';
+      lastKnownDuration = data.duration || 0;
+      if(!userIsDraggingSeek){
+        hpTimeCur.textContent = fmtTime(data.position);
+        hpTimeDur.textContent = fmtTime(data.duration);
+        hpSeekbar.value = data.duration ? Math.round((data.position / data.duration) * 1000) : 0;
+      }
+    });
+    window.Capacitor.Plugins.InlineVlcPlayer.addListener('trackChanged', (data) => {
+      hpTitle.textContent = data.title || 'Reproduciendo';
+    });
+    window.Capacitor.Plugins.InlineVlcPlayer.addListener('ended', () => {
+      closeInlinePlayer();
+    });
+  }
+
+  // queue: [{url, title}, ...]  — a movie/channel is a queue of 1; a series is
+  // every episode in order, so the native player can auto-advance through it.
+  function playQueue(queue, startIndex, fallbackTitle, kind){
+    if(!queue || !queue.length) return;
+    playInline(queue, startIndex || 0, kind);
   }
   function closePlayer(){
     playerOverlay.classList.remove('open');
@@ -570,15 +894,13 @@
     const kind = card.dataset.kind;
     const title = card.dataset.title;
     if(kind === 'series'){
-      showPlayerMsg('Buscando episodios…');
-      playerOverlay.classList.add('open');
+      hpTitle.textContent = 'Buscando episodios…';
       try{
         const queue = await resolveSeriesQueue(card.dataset.sid, title);
-        if(queue.length) playQueue(queue, 0, title);
-        else showPlayerMsg('Esta serie no tiene episodios disponibles todavía.');
-      }catch(err){ showPlayerMsg('No se pudo cargar la serie: ' + err.message); }
+        if(queue.length) playQueue(queue, 0, title, 'poster');
+      }catch(err){ console.error(err); }
     } else if(card.dataset.url){
-      playQueue([{ url: card.dataset.url, title }], 0, title);
+      playQueue([{ url: card.dataset.url, title }], 0, title, card.classList.contains('channel-card') ? 'channel' : 'poster');
     }
   });
 
