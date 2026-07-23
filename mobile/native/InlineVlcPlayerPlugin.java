@@ -226,7 +226,12 @@ public class InlineVlcPlayerPlugin extends Plugin {
         options.add("--no-drop-late-frames");
         options.add("--no-skip-frames");
         options.add("--rtsp-tcp");
-        options.add("--network-caching=1500");
+        options.add("--network-caching=600");
+        options.add("--live-caching=600");
+        options.add("--file-caching=300");
+        options.add("--clock-jitter=0");
+        options.add("--clock-synchro=0");
+        options.add("--no-stats");
         libVLC = new LibVLC(activity, options);
         mediaPlayer = new MediaPlayer(libVLC);
         mediaPlayer.attachViews(videoLayout, null, false, true);
