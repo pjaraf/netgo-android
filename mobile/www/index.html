@@ -476,6 +476,35 @@
   /* ---------- QR login ---------- */
   .qr-actions{ display:flex; gap:10px; margin-top:4px; margin-bottom:6px; }
   .qr-btn-wide{ flex:1; }
+
+  /* ---------- Startup screen (logo + auto QR) ---------- */
+  .start-screen{
+    position:fixed; inset:0; z-index:200;
+    background:
+      radial-gradient(900px 620px at 15% -8%, rgba(139,124,246,0.30), transparent 60%),
+      radial-gradient(760px 560px at 96% 4%, rgba(255,138,61,0.30), transparent 55%),
+      var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:32px 26px; text-align:center;
+  }
+  .start-logo{
+    width:60px; height:60px; border-radius:16px;
+    background: linear-gradient(135deg, var(--amber), #FFB870);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk'; font-weight:700; color:#0B1B26; font-size:26px;
+    margin-bottom:14px;
+  }
+  .start-title{ font-family:'Space Grotesk'; font-size:22px; font-weight:700; margin:0 0 10px; }
+  .start-sub{ color:var(--text-dim); font-size:13px; line-height:1.55; max-width:320px; margin:0 0 22px; }
+  .start-qr{
+    background:#fff; padding:16px; border-radius:16px; margin-bottom:18px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .start-status{ color:var(--amber); font-size:12.5px; margin:0 0 26px; min-height:16px; }
+  .start-manual-btn{
+    background:transparent; border:1px solid var(--line); color:var(--text-dim);
+    font-size:12.5px; padding:10px 18px; border-radius:9px; cursor:pointer;
+  }
   .qr-btn{
     flex:1; background:var(--card); border:1px solid var(--line); color:var(--text);
     font-family:'Inter'; font-weight:600; font-size:12.5px; padding:11px 8px; border-radius:9px;
@@ -510,6 +539,15 @@
 </style>
 </head>
 <body>
+
+<!-- Startup screen: shown before the app if no provider is connected yet -->
+<div id="startScreen" class="start-screen">
+  <div class="start-logo">N</div>
+  <h1 class="start-title">NetGo</h1>
+  <p class="start-sub">Escanea este código con la cámara de tu teléfono (cualquier red, datos móviles incluido) para conectar tu proveedor y entrar.</p>
+  <div id="startQrCanvas" class="start-qr"></div>
+  <p class="start-status" id="startStatus">Generando código…</p>
+</div>
 
 <header>
   <div class="brand">
@@ -1403,10 +1441,16 @@
 
   renderCategory('peliculas');
 
-  // Auto-connect on load if credentials were saved previously
+  // Auto-connect on load if credentials were saved previously; otherwise
+  // show the startup QR pairing screen.
   window.addEventListener('load', () => {
     const conn = getConn();
-    if(conn && conn.type === 'xtream') tryConnect(conn, { silent:true });
+    if(conn && conn.type === 'xtream'){
+      document.getElementById('startScreen').style.display = 'none';
+      tryConnect(conn, { silent:true });
+    } else {
+      showStartScreenPairing();
+    }
   });
 </script>
 
@@ -1419,7 +1463,7 @@
   tick(); setInterval(tick, 1000 * 30);
 
   const overlay = document.getElementById('overlay');
-  document.getElementById('openSettings').onclick = () => overlay.classList.add('open');
+  document.getElementById('openSettings').onclick = () => { showStartScreenPairing(); };
   document.getElementById('heroConnect').onclick = () => overlay.classList.add('open');
   document.getElementById('closeSettings').onclick = () => overlay.classList.remove('open');
   overlay.onclick = (e) => { if(e.target === overlay) overlay.classList.remove('open'); };
@@ -1603,6 +1647,44 @@
     stopPairPolling();
     document.getElementById('pairOverlay').style.display = 'none';
   };
+
+  // ---------- Startup QR screen ----------
+  let startPollTimer = null;
+
+  function showStartScreenPairing(){
+    document.getElementById('startScreen').style.display = 'flex';
+    pairCode = randomPairCode();
+    const pairUrl = `${PAIR_SITE}?code=${pairCode}`;
+    const holder = document.getElementById('startQrCanvas');
+    holder.innerHTML = '';
+    if(window.QRCode){
+      new QRCode(holder, { text: pairUrl, width:200, height:200, colorDark:'#0B1B26', colorLight:'#ffffff' });
+    }
+    document.getElementById('startStatus').textContent = 'Esperando que escanees y envíes los datos…';
+    startStartScreenPolling();
+  }
+
+  function startStartScreenPolling(){
+    stopStartScreenPolling();
+    startPollTimer = setInterval(async () => {
+      try{
+        const res = await fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`);
+        if(!res.ok) return;
+        const data = await res.json();
+        if(data && data.server && data.username && data.password){
+          fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`, { method:'DELETE' }).catch(()=>{});
+          stopStartScreenPolling();
+          document.getElementById('startScreen').style.display = 'none';
+          const conn = { type:'xtream', server:data.server, username:data.username, password:data.password };
+          saveConn(conn);
+          tryConnect(conn);
+        }
+      }catch(err){ /* keep polling silently */ }
+    }, 2500);
+  }
+  function stopStartScreenPolling(){
+    if(startPollTimer){ clearInterval(startPollTimer); startPollTimer = null; }
+  }
 </script>
 
 </body>
