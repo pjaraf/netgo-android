@@ -761,7 +761,13 @@
     }
     activeChannelUrl = url;
     document.querySelectorAll('.vivo-chan-row').forEach(r => r.classList.toggle('active', r.dataset.url === url));
-    playQueue([{ url, title }], 0, title, 'channel');
+
+    // Build the queue from every channel row currently visible in the list,
+    // so swiping left/right in the native player moves between real siblings.
+    const rows = Array.from(document.querySelectorAll('#vivoList .vivo-chan-row'));
+    const queue = rows.map(r => ({ url: r.dataset.url, title: r.dataset.title }));
+    const startIndex = Math.max(0, rows.findIndex(r => r.dataset.url === url));
+    playQueue(queue, startIndex, title, 'channel');
   });
 
   document.querySelectorAll('.cat').forEach(cat => {
@@ -945,7 +951,16 @@
         if(queue.length) playQueue(queue, 0, title, 'poster');
       }catch(err){ console.error(err); }
     } else if(card.dataset.url){
-      playQueue([{ url: card.dataset.url, title }], 0, title, card.classList.contains('channel-card') ? 'channel' : 'poster');
+      if(card.classList.contains('channel-card')){
+        // Build the queue from sibling channel cards in the same row so
+        // swiping left/right in the native player moves between them.
+        const siblings = Array.from(card.parentElement.querySelectorAll('.channel-card'));
+        const queue = siblings.map(c => ({ url: c.dataset.url, title: c.dataset.title }));
+        const startIndex = Math.max(0, siblings.indexOf(card));
+        playQueue(queue, startIndex, title, 'channel');
+      } else {
+        playQueue([{ url: card.dataset.url, title }], 0, title, 'poster');
+      }
     }
   });
 
