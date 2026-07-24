@@ -834,13 +834,93 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #channelSearch';
+
+  function focusableEls(){
+    return Array.from(document.querySelectorAll(NAV_SELECTOR)).filter(el => {
+      if(el.offsetParent === null) return false; // hidden (display:none or detached)
+      const style = getComputedStyle(el);
+      return style.visibility !== 'hidden';
+    });
+  }
+
+  // Real 2D spatial navigation: picks the closest focusable element in the
+  // pressed direction, using each element's on-screen position — this is
+  // what makes arrow keys actually move between cards instead of doing
+  // nothing (which is what made the remote feel "stuck").
+  function moveFocus(direction){
+    const candidates = focusableEls();
+    if(!candidates.length) return;
+    const current = document.activeElement && document.activeElement.matches(NAV_SELECTOR)
+      ? document.activeElement
+      : null;
+
+    if(!current){
+      candidates[0].focus();
+      return;
+    }
+
+    const r0 = current.getBoundingClientRect();
+    const c0 = { x: r0.left + r0.width/2, y: r0.top + r0.height/2 };
+    let best = null, bestScore = Infinity;
+
+    for(const el of candidates){
+      if(el === current) continue;
+      const r = el.getBoundingClientRect();
+      const c = { x: r.left + r.width/2, y: r.top + r.height/2 };
+      const dx = c.x - c0.x, dy = c.y - c0.y;
+
+      let primary, perpendicular, aligned;
+      if(direction === 'right'){ aligned = dx > 4; primary = dx; perpendicular = Math.abs(dy); }
+      else if(direction === 'left'){ aligned = dx < -4; primary = -dx; perpendicular = Math.abs(dy); }
+      else if(direction === 'down'){ aligned = dy > 4; primary = dy; perpendicular = Math.abs(dx); }
+      else { aligned = dy < -4; primary = -dy; perpendicular = Math.abs(dx); }
+
+      if(!aligned) continue;
+      // Heavily penalize perpendicular offset so navigation stays "in lane"
+      // (e.g. moving right stays in the same row instead of jumping rows).
+      const score = primary + perpendicular * 3;
+      if(score < bestScore){ bestScore = score; best = el; }
+    }
+
+    if(best){
+      best.focus();
+      // 'auto' (instant) instead of 'smooth' — smooth-scroll animations are
+      // what make navigation feel laggy on underpowered TV hardware.
+      best.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'auto' });
+    }
+  }
+
   document.addEventListener('keydown', (e) => {
-    if(e.key !== 'Enter' && e.key !== ' ') return;
-    const el = document.activeElement;
-    if(!el) return;
-    if(el.matches('.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle]')){
-      e.preventDefault();
-      el.click();
+    if(e.key === 'Enter' || e.key === ' '){
+      const el = document.activeElement;
+      if(el && el.matches(NAV_SELECTOR)){
+        e.preventDefault();
+        el.click();
+      }
+      return;
+    }
+    if(!document.body.classList.contains('tv-mode')) return; // arrow nav only matters on TV
+    const dirMap = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
+    const dir = dirMap[e.key];
+    if(!dir) return;
+    // Don't hijack arrow keys while typing in a text field.
+    if(document.activeElement && document.activeElement.tagName === 'INPUT' &&
+       !document.activeElement.matches('#channelSearch')) return;
+    e.preventDefault();
+    moveFocus(dir);
+  });
+
+  // Start with something focused on TV so the very first D-pad press
+  // already works, instead of requiring an initial random keypress.
+  window.addEventListener('load', () => {
+    if(document.body.classList.contains('tv-mode')){
+      setTimeout(() => {
+        if(!document.activeElement || document.activeElement === document.body){
+          const first = focusableEls()[0];
+          if(first) first.focus();
+        }
+      }, 400);
     }
   });
 
@@ -909,7 +989,7 @@
 
   function posterCard(m){
     const art = m.img
-      ? `<img class="poster-cover-img" src="${m.img}" loading="lazy" onerror="this.style.display='none'">`
+      ? `<img class="poster-cover-img" src="${m.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="poster-art">${m.icon||'🎬'}</div>`;
     return `<div class="poster-card" tabindex="0" data-kind="${m.kind||''}" data-url="${m.url||''}" data-sid="${m.series_id||''}" data-title="${m.t}">
       ${art}
@@ -921,7 +1001,7 @@
   }
   function channelCard(c){
     const art = c.img
-      ? `<img class="channel-cover-img" src="${c.img}" loading="lazy" onerror="this.style.display='none'">`
+      ? `<img class="channel-cover-img" src="${c.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : c.icon||'📡';
     return `<div class="channel-card" tabindex="0" data-kind="live" data-url="${c.url||''}" data-title="${c.t}">
       <div class="channel-thumb" style="background:${c.grad||'linear-gradient(155deg,#123,#456)'}">
@@ -980,7 +1060,7 @@
 
   function channelRowHtml(c){
     const fav = isFavorite(c.url);
-    const art = c.img ? `<img src="${c.img}" loading="lazy" onerror="this.style.display='none'">` : (c.icon || '📡');
+    const art = c.img ? `<img src="${c.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">` : (c.icon || '📡');
     const activeCls = c.url === activeChannelUrl ? ' active' : '';
     return `<div class="vivo-chan-row${activeCls}" tabindex="0" data-url="${c.url}" data-title="${c.t}" data-num="${c.num||''}" data-img="${c.img||''}">
       <div class="vivo-chan-logo">${art}</div>
@@ -1300,7 +1380,7 @@
     } finally { clearTimeout(timeout); }
   }
 
-  function groupByCategory(items, categories, maxItemsPerRow=20){
+  function groupByCategory(items, categories, maxItemsPerRow=(isTV() ? 12 : 20)){
     const byCat = {};
     items.forEach(it => {
       const cid = it.category_id;
@@ -1317,7 +1397,7 @@
     return rows;
   }
 
-  function categoriesByKeyword(items, categories, regex, maxItemsPerRow=20){
+  function categoriesByKeyword(items, categories, regex, maxItemsPerRow=(isTV() ? 12 : 20)){
     const matched = (categories||[]).filter(c => regex.test(c.category_name));
     return groupByCategory(items, matched, maxItemsPerRow);
   }
