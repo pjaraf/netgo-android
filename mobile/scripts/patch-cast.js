@@ -1,3 +1,6 @@
+// Registers the Google Cast SDK configuration in AndroidManifest.xml.
+// Run AFTER `npx cap add android` and BEFORE building.
+
 const fs = require('fs');
 const path = require('path');
 
@@ -30,4 +33,18 @@ if (!xml.includes('CHANGE_WIFI_MULTICAST_STATE')) {
   );
   fs.writeFileSync(manifestPath, xml);
   console.log('✓ Multicast permission added (needed for Cast device discovery).');
+}
+
+// Android 13+ requires this specific runtime permission for the Cast SDK to
+// find any devices at all — without it, discovery silently returns zero
+// results even though everything else (network, device) works fine.
+if (!xml.includes('NEARBY_WIFI_DEVICES')) {
+  xml = fs.readFileSync(manifestPath, 'utf8');
+  xml = xml.replace(
+    '<application',
+    '<uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />\n' +
+    '    <application'
+  );
+  fs.writeFileSync(manifestPath, xml);
+  console.log('✓ NEARBY_WIFI_DEVICES permission added (required on Android 13+ for Cast discovery).');
 }
