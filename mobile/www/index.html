@@ -1368,15 +1368,25 @@
   }
   function saveConn(conn){ localStorage.setItem(CONN_KEY, JSON.stringify(conn)); }
 
-  async function xtreamFetch(conn, action, extra=''){
+  async function xtreamFetch(conn, action, extra='', attempt=1){
     const base = conn.server.replace(/\/+$/,'');
     const url = `${base}/player_api.php?username=${encodeURIComponent(conn.username)}&password=${encodeURIComponent(conn.password)}&action=${action}${extra}`;
     const ctrl = new AbortController();
-    const timeout = setTimeout(()=>ctrl.abort(), 12000);
+    // Slow mobile data needs a generous timeout — 12s was too tight and
+    // would fail requests that were still genuinely loading, not stuck.
+    const timeout = setTimeout(()=>ctrl.abort(), 25000);
     try{
       const res = await fetch(url, { signal: ctrl.signal });
       if(!res.ok) throw new Error('HTTP ' + res.status);
       return await res.json();
+    } catch(err){
+      // Retry up to 2 extra times on flaky/slow connections before giving up,
+      // with a short growing pause between tries.
+      if(attempt < 3){
+        await new Promise(r => setTimeout(r, 1200 * attempt));
+        return xtreamFetch(conn, action, extra, attempt + 1);
+      }
+      throw err;
     } finally { clearTimeout(timeout); }
   }
 
