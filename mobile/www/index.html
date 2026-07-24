@@ -501,6 +501,7 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     padding:32px 26px; text-align:center;
   }
+  #lockoutScreen{ z-index:9999; }
   .start-logo{
     width:60px; height:60px; border-radius:16px;
     background: linear-gradient(135deg, var(--amber), #FFB870);
@@ -715,6 +716,12 @@
     <div class="start-code-digits" id="startCodeDigits">------</div>
     <p class="start-status" id="startStatus">Esperando que el administrador active tu cuenta…</p>
   </div>
+</div>
+
+<div id="lockoutScreen" class="start-screen" style="display:none">
+  <div class="start-logo" style="background:linear-gradient(135deg, #FF6B6B, #D64545);">🔒</div>
+  <h1 class="start-title" id="lockoutTitle">Cuenta pausada</h1>
+  <p class="start-sub" id="lockoutMsg">El administrador pausó tu acceso. Contáctalo para reactivarlo.</p>
 </div>
 
 <header>
@@ -1043,67 +1050,22 @@
   });
 
   // ============================================================
-  //  DEMO CATALOG — shown until you connect a real provider below
+  //  EMPTY CATALOG — shown only until a real provider connects.
+  //  No sample/demo movies or series are bundled in the app.
   // ============================================================
-  const demoData = {
-    peliculas: { rows: [
-      { title:"Estrenos", items:[
-        { t:"Horizonte Rojo", meta:"2025 · 2h 08m", badge:"4K", r:"8.4", icon:"🚀", grad:"linear-gradient(155deg,#3A1E5C,#7C3AED)" },
-        { t:"El Último Vuelo", meta:"2024 · 1h 54m", badge:"HD", r:"7.9", icon:"✈️", grad:"linear-gradient(155deg,#0E3B4D,#1587A8)" },
-        { t:"Código Nocturno", meta:"2026 · 2h 01m", badge:"4K", r:"8.1", icon:"🕵️", grad:"linear-gradient(155deg,#1A2B12,#3DDC84)" },
-        { t:"Tormenta Silenciosa", meta:"2023 · 1h 47m", badge:"HD", r:"7.2", icon:"⛈️", grad:"linear-gradient(155deg,#3A1420,#E23E7A)" },
-      ]},
-      { title:"Acción", items:[
-        { t:"Zona de Impacto", meta:"2025 · 1h 58m", badge:"4K", r:"7.8", icon:"💥", grad:"linear-gradient(155deg,#3A1010,#D64545)" },
-        { t:"Punto de Quiebre", meta:"2024 · 2h 03m", badge:"HD", r:"7.4", icon:"🔫", grad:"linear-gradient(155deg,#241A3E,#6C4FE0)" },
-        { t:"Escuadrón Cero", meta:"2026 · 1h 49m", badge:"4K", r:"8.0", icon:"🎯", grad:"linear-gradient(155deg,#102A1E,#209E6B)" },
-      ]},
-      { title:"Recomendadas para ti", items:[
-        { t:"Días de Invierno", meta:"2021 · 1h 52m", badge:"HD", r:"8.6", icon:"❄️", grad:"linear-gradient(155deg,#132C3A,#4FA8C9)" },
-        { t:"El Faro Distante", meta:"2024 · 1h 59m", badge:"4K", r:"8.0", icon:"🏮", grad:"linear-gradient(155deg,#2A1B08,#C97B2E)" },
-        { t:"Reino de Cristal", meta:"2026 · 2h 12m", badge:"4K", r:"8.3", icon:"🔮", grad:"linear-gradient(155deg,#0F1F3D,#5A6FE0)" },
-      ]},
-    ], type:'poster' },
-    series: { rows: [
-      { title:"Continuar viendo", items:[
-        { t:"Frontera Azul", meta:"T2 · Ep 5", badge:"4K", r:"8.7", icon:"🌊", grad:"linear-gradient(155deg,#0C2233,#2C6E8F)" },
-        { t:"Casa de Vidrio", meta:"T1 · Ep 3", badge:"HD", r:"7.9", icon:"🏠", grad:"linear-gradient(155deg,#241A3E,#6C4FE0)" },
-      ]},
-      { title:"Series populares", items:[
-        { t:"Ciudad Perdida", meta:"T3 · 12 eps", badge:"4K", r:"8.5", icon:"🏙️", grad:"linear-gradient(155deg,#1A2B12,#3DDC84)" },
-        { t:"El Cartógrafo", meta:"T1 · 8 eps", badge:"HD", r:"7.6", icon:"🗺️", grad:"linear-gradient(155deg,#3A1420,#E23E7A)" },
-        { t:"Doble Filo", meta:"T4 · 10 eps", badge:"4K", r:"8.2", icon:"🔪", grad:"linear-gradient(155deg,#3A1010,#D64545)" },
-      ]},
-    ], type:'poster' },
-    anime: { rows: [
-      { title:"Nuevos episodios", items:[
-        { t:"Katana Estelar", meta:"T3 · Ep 12", badge:"4K", r:"9.0", icon:"⚔️", grad:"linear-gradient(155deg,#241A3E,#6C4FE0)" },
-        { t:"Nube Carmesí", meta:"T1 · Ep 4", badge:"HD", r:"8.3", icon:"☁️", grad:"linear-gradient(155deg,#3A1420,#E23E7A)" },
-      ]},
-    ], type:'poster' },
-    kids: { rows: [
-      { title:"Para los peques", items:[
-        { t:"Aventuras del Bosque", meta:"T1 · 12 eps", badge:"HD", r:"8.2", icon:"🦊", grad:"linear-gradient(155deg,#123A2A,#2FA36B)" },
-        { t:"El Tren Mágico", meta:"T2 · 20 eps", badge:"HD", r:"8.0", icon:"🚂", grad:"linear-gradient(155deg,#1A2B4A,#4E7FD9)" },
-      ]},
-    ], type:'poster' },
-    vivo: { rows: [
-      { title:"Recomendados", items:[
-        { t:"Discovery World HD", program:"Ingeniería extrema", num:"104", grad:"linear-gradient(155deg,#0E3B4D,#1587A8)", icon:"🌍" },
-        { t:"Cine Estrella", program:"Función de la tarde", num:"212", grad:"linear-gradient(155deg,#3A1E5C,#7C3AED)", icon:"🎬" },
-        { t:"DeporTV", program:"Liga en vivo", num:"055", grad:"linear-gradient(155deg,#1A2B12,#3DDC84)", icon:"⚽" },
-      ]},
-      { title:"Noticias", items:[
-        { t:"Canal 24 Noticias", program:"Edición central", num:"010", grad:"linear-gradient(155deg,#1E1E1E,#5A5A5A)", icon:"📰" },
-        { t:"Mundo Hoy", program:"Reporte económico", num:"021", grad:"linear-gradient(155deg,#2A1B08,#C97B2E)", icon:"🌐" },
-      ]},
-    ], type:'channel' }
+  const emptyData = {
+    peliculas: { rows: [], type:'movie' },
+    series: { rows: [], type:'movie' },
+    anime: { rows: [], type:'movie' },
+    kids: { rows: [], type:'movie' },
+    vivo: { rows: [], type:'channel' }
   };
+
 
   let liveData = null;          // becomes real provider data once connected
   let currentCat = 'peliculas';
 
-  function activeData(){ return liveData || demoData; }
+  function activeData(){ return liveData || emptyData; }
 
   function posterCard(m){
     const art = m.img
@@ -1530,7 +1492,7 @@
     } finally { clearTimeout(timeout); }
   }
 
-  function groupByCategory(items, categories, maxItemsPerRow=(isTV() ? 10 : 20)){
+  function groupByCategory(items, categories, maxItemsPerRow=Infinity){
     const byCat = {};
     items.forEach(it => {
       const cid = it.category_id;
@@ -1547,7 +1509,7 @@
     return rows;
   }
 
-  function categoriesByKeyword(items, categories, regex, maxItemsPerRow=(isTV() ? 10 : 20)){
+  function categoriesByKeyword(items, categories, regex, maxItemsPerRow=Infinity){
     const matched = (categories||[]).filter(c => regex.test(c.category_name));
     return groupByCategory(items, matched, maxItemsPerRow);
   }
@@ -1818,6 +1780,36 @@
     document.getElementById('updateBanner').style.display = 'none';
   };
 
+  // ---------- Remote lock (paused / blocked / removed by the admin) ----------
+  // Checked on every app open, and again every 2 minutes while it's running,
+  // so an admin pausing/blocking/deleting a client takes effect without the
+  // client needing to reinstall or do anything on their end.
+  let statusCheckTimer = null;
+  async function checkClientStatus(){
+    try{
+      const code = getDeviceCode();
+      const res = await fetch(`${FIREBASE_BASE}/status/${code}.json`, { cache:'no-store' });
+      if(!res.ok) return;
+      const data = await res.json();
+      if(data && (data.blocked || data.paused)){
+        showLockout(data.blocked ? 'blocked' : 'paused');
+      }
+    }catch(err){ /* offline — don't lock the app out just because of no signal */ }
+  }
+  function showLockout(kind){
+    if(statusCheckTimer){ clearInterval(statusCheckTimer); statusCheckTimer = null; }
+    document.getElementById('lockoutTitle').textContent = kind === 'blocked' ? 'Cuenta bloqueada' : 'Cuenta pausada';
+    document.getElementById('lockoutMsg').textContent = kind === 'blocked'
+      ? 'El administrador bloqueó tu acceso. Contáctalo para más información.'
+      : 'El administrador pausó tu acceso. Contáctalo para reactivarlo.';
+    document.getElementById('lockoutScreen').style.display = 'flex';
+  }
+  function startStatusPolling(){
+    checkClientStatus();
+    if(statusCheckTimer) clearInterval(statusCheckTimer);
+    statusCheckTimer = setInterval(checkClientStatus, 120000);
+  }
+
   // Auto-connect on load if credentials were saved previously; otherwise
   // show the startup QR pairing screen.
   window.addEventListener('load', () => {
@@ -1825,6 +1817,7 @@
     if(conn && conn.type === 'xtream'){
       document.getElementById('startScreen').style.display = 'none';
       tryConnect(conn, { silent:true });
+      startStatusPolling();
     } else {
       showStartScreenPairing();
     }
@@ -1880,6 +1873,7 @@
   };
   document.getElementById('accountLogoutBtn').onclick = () => {
     localStorage.removeItem(CONN_KEY);
+    if(typeof statusCheckTimer !== 'undefined' && statusCheckTimer){ clearInterval(statusCheckTimer); statusCheckTimer = null; }
     document.getElementById('accountInfoOverlay').style.display = 'none';
     showStartScreenPairing();
   };
