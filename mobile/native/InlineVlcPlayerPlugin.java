@@ -332,17 +332,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         }
         try {
             MediaRouteButton castButton = new MediaRouteButton(activity);
-            // The old 2-arg overload silently swallows ModuleUnavailableException
-            // if the Cast module fails to load — which would look exactly like
-            // "button works but finds zero devices" with no error anywhere. This
-            // version reports failures instead of hiding them.
-            CastButtonFactory.setUpMediaRouteButton(
-                    activity.getApplicationContext(),
-                    androidx.core.content.ContextCompat.getMainExecutor(activity),
-                    castButton
-            ).addOnFailureListener(e ->
-                    android.util.Log.e("NetGoCast", "Cast module failed to load: " + e.getMessage(), e)
-            );
+            CastButtonFactory.setUpMediaRouteButton(activity.getApplicationContext(), castButton);
             topBar.addView(castButton, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 36)));
         } catch (Exception ignored) {
             // Cast not available on this device — simply no cast button, rest of the app works normally.
