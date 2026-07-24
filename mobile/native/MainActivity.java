@@ -10,6 +10,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.google.android.gms.cast.framework.CastContext;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -31,6 +32,19 @@ public class MainActivity extends BridgeActivity {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.NEARBY_WIFI_DEVICES}, 4201);
             }
+        }
+
+        // Initialize Cast as early as possible (app start), not lazily when
+        // the user first taps play — apps like YouTube/Netflix start
+        // scanning for Cast devices from launch, giving discovery time to
+        // find devices in the background before the user ever opens the
+        // device picker. Initializing it late was likely why our cast
+        // dialog found zero devices even on networks/TVs that work fine
+        // with other apps.
+        try {
+            CastContext.getSharedInstance(this);
+        } catch (Exception ignored) {
+            // Device without Google Play Services / Cast support — safe to ignore.
         }
     }
 }
