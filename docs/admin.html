@@ -97,6 +97,21 @@
     text-transform:none; letter-spacing:0;
   }
   .empty-msg{ color:var(--text-dim); font-size:13px; text-align:center; padding:20px; }
+
+  .stats-grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;
+  }
+  .stat-card{
+    background: var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:18px 14px; text-align:center;
+  }
+  .stat-num{ font-size:30px; font-weight:700; font-family:'JetBrains Mono', monospace; }
+  .stat-label{ font-size:11.5px; color:var(--text-dim); margin-top:4px; }
+  .stat-card.new .stat-num{ color:#8B7CF6; }
+  .stat-card.active .stat-num{ color:var(--green); }
+  .stat-card.expiring .stat-num{ color:var(--amber); }
+  .stat-card.expired .stat-num{ color:var(--red); }
+  .stat-card.paused .stat-num{ color:var(--text-dim); }
 </style>
 </head>
 <body>
@@ -123,13 +138,44 @@
   </div>
 
   <div class="tabs">
-    <button class="tab active" data-tab="activate">Activación x código</button>
+    <button class="tab active" data-tab="summary">Resumen</button>
+    <button class="tab" data-tab="activate">Activación x código</button>
     <button class="tab" data-tab="new">Usuarios nuevos</button>
     <button class="tab" data-tab="active">Usuarios activos</button>
     <button class="tab" data-tab="expiring">Usuarios por vencer</button>
     <button class="tab" data-tab="expired">Usuarios vencidos</button>
     <button class="tab" data-tab="admins" id="adminsTabBtn" style="display:none">Paneles de administradores</button>
     <button class="tab" data-tab="servers" id="serversTabBtn" style="display:none">Servidores</button>
+  </div>
+
+  <div class="tab-panel" id="tab-summary">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-num" id="statTotal">—</div>
+        <div class="stat-label">Total de clientes</div>
+      </div>
+      <div class="stat-card new">
+        <div class="stat-num" id="statNew">—</div>
+        <div class="stat-label">Nuevos (7 días)</div>
+      </div>
+      <div class="stat-card active">
+        <div class="stat-num" id="statActive">—</div>
+        <div class="stat-label">Activos</div>
+      </div>
+      <div class="stat-card expiring">
+        <div class="stat-num" id="statExpiring">—</div>
+        <div class="stat-label">Por vencer (7 días)</div>
+      </div>
+      <div class="stat-card expired">
+        <div class="stat-num" id="statExpired">—</div>
+        <div class="stat-label">Vencidos</div>
+      </div>
+      <div class="stat-card paused">
+        <div class="stat-num" id="statPaused">—</div>
+        <div class="stat-label">Pausados / bloqueados</div>
+      </div>
+    </div>
+    <button class="ghost small" id="refreshSummaryBtn" style="width:auto;">🔄 Actualizar</button>
   </div>
 
   <div class="tab-panel" id="tab-servers" style="display:none">
@@ -167,7 +213,7 @@
     </div>
   </div>
 
-  <div class="tab-panel" id="tab-activate">
+  <div class="tab-panel" id="tab-activate" style="display:none">
     <div class="card">
       <h2 id="formTitle">Agregar / actualizar cliente</h2>
       <label>Código del cliente</label>
@@ -298,12 +344,13 @@
       document.getElementById('sessionUser').textContent = user;
       document.getElementById('adminsTabBtn').style.display = (user === SUPER_ADMIN_USER) ? 'inline-block' : 'none';
       document.getElementById('serversTabBtn').style.display = (user === SUPER_ADMIN_USER) ? 'inline-block' : 'none';
-      // Always land on "Activación x código" right after logging in.
-      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'activate'));
+      // Always land on "Resumen" right after logging in.
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'summary'));
       document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
-      document.getElementById('tab-activate').style.display = 'block';
+      document.getElementById('tab-summary').style.display = 'block';
       loadAllLists();
       loadServerOptions();
+      loadSummary();
     } else {
       gateMsg.style.display = 'block';
       gateMsg.textContent = 'Usuario o clave incorrectos';
@@ -528,6 +575,7 @@
       document.getElementById('tab-' + tab.dataset.tab).style.display = 'block';
       if(tab.dataset.tab === 'admins') loadAdminsList();
       else if(tab.dataset.tab === 'servers') loadServersList();
+      else if(tab.dataset.tab === 'summary') loadSummary();
       else if(tab.dataset.tab !== 'activate') loadAllLists();
     };
   });
@@ -542,6 +590,36 @@
   });
 
   const DAY_MS = 24 * 60 * 60 * 1000;
+
+  async function loadSummary(){
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/${clientsPath()}.json`);
+      const data = await res.json() || {};
+      const codes = Object.keys(data);
+      const today = new Date().toISOString().slice(0,10);
+      const in7days = new Date(Date.now() + 7*DAY_MS).toISOString().slice(0,10);
+      const sevenDaysAgo = Date.now() - 7*DAY_MS;
+
+      const total = codes.length;
+      const newCount = codes.filter(c => (data[c].createdAt||0) >= sevenDaysAgo).length;
+      const activeCount = codes.filter(c => data[c].expiry && data[c].expiry >= today && !data[c].paused && !data[c].blocked).length;
+      const expiringCount = codes.filter(c => data[c].expiry && data[c].expiry >= today && data[c].expiry <= in7days).length;
+      const expiredCount = codes.filter(c => data[c].expiry && data[c].expiry < today).length;
+      const pausedBlockedCount = codes.filter(c => data[c].paused || data[c].blocked).length;
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statNew').textContent = newCount;
+      document.getElementById('statActive').textContent = activeCount;
+      document.getElementById('statExpiring').textContent = expiringCount;
+      document.getElementById('statExpired').textContent = expiredCount;
+      document.getElementById('statPaused').textContent = pausedBlockedCount;
+    }catch(err){
+      ['Total','New','Active','Expiring','Expired','Paused'].forEach(k => {
+        document.getElementById('stat' + k).textContent = '—';
+      });
+    }
+  }
+  document.getElementById('refreshSummaryBtn').onclick = loadSummary;
 
   async function loadAllLists(){
     try{
