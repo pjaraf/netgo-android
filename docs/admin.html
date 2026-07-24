@@ -25,6 +25,9 @@
     display:flex; align-items:center; justify-content:center; font-weight:700; color:#0B1B26; font-size:17px;
   }
   .logo-row h1{ font-size:17px; margin:0; }
+  .session-line{ font-size:11.5px; color:var(--text-dim); margin-top:2px; }
+  .session-line b{ color:var(--text); }
+  .session-line a{ color:var(--amber); text-decoration:none; }
 
   #gate{ min-height:90vh; display:flex; align-items:center; justify-content:center; padding:20px; }
   .gate-card{
@@ -102,16 +105,21 @@
   <div class="gate-card">
     <div class="logo" style="margin:0 auto 12px;">N</div>
     <h1 style="font-size:16px; margin:0;">Panel de administrador</h1>
+    <input id="gateUser" type="text" placeholder="Usuario" autocapitalize="off">
     <input id="gatePass" type="password" placeholder="Clave">
     <button id="gateBtn">Entrar</button>
-    <p class="msg err" id="gateMsg" style="display:none">Clave incorrecta</p>
+    <p class="msg err" id="gateMsg" style="display:none">Usuario o clave incorrectos</p>
   </div>
 </div>
+
 
 <div class="wrap" id="panel" style="display:none">
   <div class="logo-row">
     <div class="logo">N</div>
-    <h1>Panel de administrador — NetGo</h1>
+    <div style="flex:1;">
+      <h1>Panel de administrador — NetGo</h1>
+      <div class="session-line">Conectado como <b id="sessionUser">—</b> · <a href="#" id="logoutLink">Cerrar sesión</a></div>
+    </div>
   </div>
 
   <div class="tabs">
@@ -120,6 +128,25 @@
     <button class="tab" data-tab="active">Usuarios activos</button>
     <button class="tab" data-tab="expiring">Usuarios por vencer</button>
     <button class="tab" data-tab="expired">Usuarios vencidos</button>
+    <button class="tab" data-tab="admins" id="adminsTabBtn" style="display:none">Paneles de administradores</button>
+  </div>
+
+  <div class="tab-panel" id="tab-admins" style="display:none">
+    <div class="card">
+      <h2>Crear panel para otra persona</h2>
+      <p class="tab-hint">Le das a esa persona su usuario y clave — al entrar va a ver este mismo panel, pero con sus propios clientes, separados de los tuyos.</p>
+      <label>Usuario nuevo</label>
+      <input id="newAdminUser" type="text" autocapitalize="off" placeholder="ej: carlos">
+      <label>Clave nueva</label>
+      <input id="newAdminPass" type="text" placeholder="ej: Carlos2026">
+      <button id="btnCreateAdmin">Crear panel</button>
+      <p class="msg" id="adminMsg"></p>
+    </div>
+    <div class="card">
+      <h2>Administradores existentes</h2>
+      <button class="ghost small" id="refreshAdminsBtn">🔄 Actualizar</button>
+      <div id="adminsList"></div>
+    </div>
   </div>
 
   <div class="tab-panel" id="tab-activate">
@@ -203,21 +230,107 @@
 
 <script>
   const FIREBASE_BASE = 'https://netgo-pairing-default-rtdb.firebaseio.com';
-  const ADMIN_PASSWORD = 'NetGoAdmin26';
+  const SUPER_ADMIN_USER = 'admin';
+  const SUPER_ADMIN_PASS = 'NetGoAdmin26';
 
-  document.getElementById('gateBtn').onclick = () => {
-    const val = document.getElementById('gatePass').value;
-    if(val === ADMIN_PASSWORD){
+  let currentAdminUser = null;
+
+  function clientsPath(){
+    return `admins/${encodeURIComponent(currentAdminUser)}/clients`;
+  }
+
+  document.getElementById('gateBtn').onclick = async () => {
+    const user = document.getElementById('gateUser').value.trim();
+    const pass = document.getElementById('gatePass').value;
+    const gateMsg = document.getElementById('gateMsg');
+    if(!user || !pass){ gateMsg.style.display = 'block'; return; }
+
+    let ok = false;
+    if(user === SUPER_ADMIN_USER && pass === SUPER_ADMIN_PASS){
+      ok = true;
+    } else {
+      try{
+        const res = await fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(user)}.json`);
+        const data = await res.json();
+        if(data && data.password === pass) ok = true;
+      }catch(e){}
+    }
+
+    if(ok){
+      currentAdminUser = user;
+      gateMsg.style.display = 'none';
       document.getElementById('gate').style.display = 'none';
       document.getElementById('panel').style.display = 'block';
+      document.getElementById('sessionUser').textContent = user;
+      document.getElementById('adminsTabBtn').style.display = (user === SUPER_ADMIN_USER) ? 'inline-block' : 'none';
       loadAllLists();
     } else {
-      document.getElementById('gateMsg').style.display = 'block';
+      gateMsg.style.display = 'block';
     }
   };
   document.getElementById('gatePass').addEventListener('keydown', (e) => {
     if(e.key === 'Enter') document.getElementById('gateBtn').click();
   });
+  document.getElementById('logoutLink').onclick = (e) => {
+    e.preventDefault();
+    currentAdminUser = null;
+    document.getElementById('gateUser').value = '';
+    document.getElementById('gatePass').value = '';
+    document.getElementById('panel').style.display = 'none';
+    document.getElementById('gate').style.display = 'flex';
+  };
+
+  // ---------- Create a panel (account) for someone else — super-admin only ----------
+  document.getElementById('btnCreateAdmin').onclick = async () => {
+    const newUser = document.getElementById('newAdminUser').value.trim();
+    const newPass = document.getElementById('newAdminPass').value.trim();
+    const msg = document.getElementById('adminMsg');
+    if(!newUser || !newPass){
+      msg.textContent = 'Completa usuario y clave.'; msg.className = 'msg err'; return;
+    }
+    if(newUser === SUPER_ADMIN_USER){
+      msg.textContent = 'Ese nombre de usuario está reservado.'; msg.className = 'msg err'; return;
+    }
+    msg.textContent = 'Creando…'; msg.className = 'msg info';
+    try{
+      await fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(newUser)}.json`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ password:newPass, createdAt: Date.now() })
+      });
+      msg.textContent = `✓ Panel creado. Dale a esa persona el usuario "${newUser}" y su clave para que entre.`;
+      msg.className = 'msg ok';
+      document.getElementById('newAdminUser').value = '';
+      document.getElementById('newAdminPass').value = '';
+      loadAdminsList();
+    }catch(err){
+      msg.textContent = 'Error: ' + err.message; msg.className = 'msg err';
+    }
+  };
+
+  document.getElementById('refreshAdminsBtn').onclick = loadAdminsList;
+
+  async function loadAdminsList(){
+    const list = document.getElementById('adminsList');
+    list.innerHTML = '<p class="msg info">Cargando…</p>';
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/admins.json`);
+      const data = await res.json() || {};
+      const users = Object.keys(data);
+      if(!users.length){
+        list.innerHTML = '<p class="empty-msg">Todavía no creaste ningún panel para nadie.</p>';
+        return;
+      }
+      list.innerHTML = users.map(u => `
+        <div class="client-card">
+          <div class="client-top">
+            <div class="client-name">${u}</div>
+          </div>
+        </div>
+      `).join('');
+    }catch(err){
+      list.innerHTML = `<p class="msg err">No se pudo cargar: ${err.message}</p>`;
+    }
+  }
 
   document.getElementById('btnSave').onclick = async () => {
     const code = document.getElementById('fCode').value.trim();
@@ -235,14 +348,14 @@
     try{
       let createdAt = Date.now();
       try{
-        const existingRes = await fetch(`${FIREBASE_BASE}/clients/${code}.json`);
+        const existingRes = await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`);
         const existing = await existingRes.json();
         if(existing && existing.createdAt) createdAt = existing.createdAt;
       }catch(e){}
 
       const record = { name, server, username, password, planValue, expiry, createdAt, updatedAt: Date.now() };
 
-      await fetch(`${FIREBASE_BASE}/clients/${code}.json`, {
+      await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, {
         method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(record)
       });
       await fetch(`${FIREBASE_BASE}/pairs/${code}.json`, {
@@ -276,7 +389,8 @@
       tab.classList.add('active');
       document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
       document.getElementById('tab-' + tab.dataset.tab).style.display = 'block';
-      if(tab.dataset.tab !== 'activate') loadAllLists();
+      if(tab.dataset.tab === 'admins') loadAdminsList();
+      else if(tab.dataset.tab !== 'activate') loadAllLists();
     };
   });
   function switchToActivateTab(){
@@ -293,7 +407,7 @@
 
   async function loadAllLists(){
     try{
-      const res = await fetch(`${FIREBASE_BASE}/clients.json`);
+      const res = await fetch(`${FIREBASE_BASE}/${clientsPath()}.json`);
       const data = await res.json() || {};
       const codes = Object.keys(data);
       const now = Date.now();
@@ -375,7 +489,7 @@
 
   window.editClient = async (code) => {
     try{
-      const res = await fetch(`${FIREBASE_BASE}/clients/${code}.json`);
+      const res = await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`);
       const c = await res.json();
       if(!c) return;
       document.getElementById('fCode').value = code;
