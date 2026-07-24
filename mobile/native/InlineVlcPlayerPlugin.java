@@ -258,9 +258,14 @@ public class InlineVlcPlayerPlugin extends Plugin {
         options.add("--no-drop-late-frames");
         options.add("--no-skip-frames");
         options.add("--rtsp-tcp");
-        options.add("--network-caching=600");
-        options.add("--live-caching=600");
-        options.add("--file-caching=300");
+        // A bigger buffer than before: 600ms was tuned for fast start on
+        // good WiFi, but on slow/flaky mobile data it caused constant
+        // rebuffering. 2500ms is a safer middle ground — still starts
+        // reasonably fast, but absorbs slow-network hiccups much better.
+        options.add("--network-caching=2500");
+        options.add("--live-caching=2500");
+        options.add("--file-caching=1000");
+        options.add("--http-reconnect");
         options.add("--clock-jitter=0");
         options.add("--clock-synchro=0");
         options.add("--no-stats");
