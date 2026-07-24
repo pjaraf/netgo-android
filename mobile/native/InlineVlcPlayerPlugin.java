@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -63,6 +64,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
     private MediaPlayer mediaPlayer;
     private VLCVideoLayout videoLayout;
     private FrameLayout container;
+    private FrameLayout maintenanceView;
+    private Runnable maintenanceRunnable;
+    private static final long MAINTENANCE_TIMEOUT_MS = 10000;
     private GestureDetector gestureDetector;
 
     private LinearLayout topBar;
@@ -189,6 +193,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
             if (isFullscreen) exitFullscreen(getActivity());
             stopTicker();
             cancelAutoHide();
+            cancelMaintenanceTimer();
             if (castContext != null) {
                 try { castContext.getSessionManager().removeSessionManagerListener(sessionManagerListener, CastSession.class); }
                 catch (Exception ignored) {}
@@ -208,6 +213,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
             }
             container = null;
             videoLayout = null;
+            maintenanceView = null;
             urls.clear();
             titles.clear();
             call.resolve();
@@ -251,6 +257,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         });
 
         buildControls(activity, container);
+        buildMaintenanceView(activity, container);
 
         root.addView(container, new FrameLayout.LayoutParams(0, 0));
 
@@ -277,7 +284,11 @@ public class InlineVlcPlayerPlugin extends Plugin {
             if (event.type == MediaPlayer.Event.EndReached) {
                 getActivity().runOnUiThread(this::advanceOrNotifyEnd);
             } else if (event.type == MediaPlayer.Event.Playing) {
-                getActivity().runOnUiThread(() -> playPauseBtn.setImageResource(android.R.drawable.ic_media_pause));
+                getActivity().runOnUiThread(() -> {
+                    playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
+                    cancelMaintenanceTimer();
+                    if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
+                });
             } else if (event.type == MediaPlayer.Event.Paused) {
                 getActivity().runOnUiThread(() -> playPauseBtn.setImageResource(android.R.drawable.ic_media_play));
             }
@@ -669,6 +680,8 @@ public class InlineVlcPlayerPlugin extends Plugin {
     private void loadCurrent() {
         if (urls.isEmpty()) return;
         titleView.setText(titles.get(currentIndex));
+        if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
+        scheduleMaintenanceTimer();
 
         if (isCasting) {
             castCurrentItem();
@@ -685,6 +698,70 @@ public class InlineVlcPlayerPlugin extends Plugin {
         data.put("index", currentIndex);
         data.put("count", urls.size());
         notifyListeners("trackChanged", data);
+    }
+
+    // ---------- "Canal en mantenimiento" (stuck-loading) screen ----------
+    private void buildMaintenanceView(Activity activity, FrameLayout parent) {
+        maintenanceView = new FrameLayout(activity);
+        maintenanceView.setBackgroundColor(0xFF0B1B26);
+        maintenanceView.setVisibility(View.GONE);
+
+        LinearLayout col = new LinearLayout(activity);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER);
+
+        ImageView logo = new ImageView(activity);
+        int logoSize = dp(activity, 56);
+        try {
+            logo.setImageResource(activity.getResources().getIdentifier(
+                    "ic_launcher_foreground", "mipmap", activity.getPackageName()));
+        } catch (Exception ignored) { }
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(logoSize, logoSize);
+        logoLp.bottomMargin = dp(activity, 14);
+        col.addView(logo, logoLp);
+
+        TextView msg = new TextView(activity);
+        msg.setText("Canal en mantenimiento");
+        msg.setTextColor(Color.WHITE);
+        msg.setTextSize(15);
+        msg.setTypeface(msg.getTypeface(), android.graphics.Typeface.BOLD);
+        msg.setGravity(Gravity.CENTER);
+        col.addView(msg);
+
+        TextView sub = new TextView(activity);
+        sub.setText("No pudimos cargar esta señal");
+        sub.setTextColor(0xFF9FB6C4);
+        sub.setTextSize(11);
+        sub.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        subLp.topMargin = dp(activity, 6);
+        col.addView(sub, subLp);
+
+        FrameLayout.LayoutParams colLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        colLp.gravity = Gravity.CENTER;
+        maintenanceView.addView(col, colLp);
+
+        // Sits above the video but below the top/bottom control bars.
+        parent.addView(maintenanceView, 1, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    private void scheduleMaintenanceTimer() {
+        cancelMaintenanceTimer();
+        maintenanceRunnable = () -> {
+            if (maintenanceView != null) {
+                maintenanceView.setAlpha(0f);
+                maintenanceView.setVisibility(View.VISIBLE);
+                maintenanceView.animate().alpha(1f).setDuration(200).start();
+            }
+        };
+        handler.postDelayed(maintenanceRunnable, MAINTENANCE_TIMEOUT_MS);
+    }
+
+    private void cancelMaintenanceTimer() {
+        if (maintenanceRunnable != null) handler.removeCallbacks(maintenanceRunnable);
     }
 
     private void advanceOrNotifyEnd() {
