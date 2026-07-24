@@ -207,7 +207,6 @@
       </div>
 
       <button id="btnSave">Guardar y enviar al cliente</button>
-      <button class="ghost" id="btnClear">Limpiar formulario</button>
       <p class="msg" id="formMsg"></p>
     </div>
   </div>
@@ -483,8 +482,6 @@
         body: JSON.stringify({ server, username, password, ts: Date.now() })
       });
 
-      showFormMsg('✓ Guardado y enviado al cliente.', 'ok');
-
       // Open WhatsApp with the activation message pre-filled and ready —
       // WhatsApp itself never allows sending with zero taps from a website
       // (anti-spam protection no app can bypass), so this still needs one
@@ -504,16 +501,17 @@
       }
 
       loadAllLists();
+      clearForm();
+      showFormMsg('✓ Guardado y enviado al cliente. Listo para el siguiente.', 'ok');
     }catch(err){
       showFormMsg('Error: ' + err.message, 'err');
     }
   };
 
-  document.getElementById('btnClear').onclick = () => {
+  function clearForm(){
     ['fCode','fName','fServer','fPhone','fUser','fPass','fPlanValue','fExpiry'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('formTitle').textContent = 'Agregar / actualizar cliente';
-    showFormMsg('', '');
-  };
+  }
 
   function showFormMsg(text, type){
     const msg = document.getElementById('formMsg');
