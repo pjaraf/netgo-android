@@ -7,113 +7,285 @@
 <style>
   :root{
     --bg:#0B1B26; --card:#16334A; --line:rgba(234,242,245,0.12);
-    --text:#EAF2F5; --text-dim:#9FB6C4; --amber:#FF8A3D; --green:#3DDC84;
+    --text:#EAF2F5; --text-dim:#9FB6C4; --amber:#FF8A3D; --green:#3DDC84; --red:#FF6B6B;
   }
   *{box-sizing:border-box;}
   body{
-    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-    background: radial-gradient(900px 600px at 20% -10%, rgba(139,124,246,.25), transparent 60%),
-                radial-gradient(700px 500px at 100% 0%, rgba(255,138,61,.22), transparent 55%),
+    margin:0; min-height:100vh;
+    background: radial-gradient(900px 600px at 20% -10%, rgba(139,124,246,.20), transparent 60%),
+                radial-gradient(700px 500px at 100% 0%, rgba(255,138,61,.16), transparent 55%),
                 var(--bg);
     font-family: -apple-system, Roboto, Arial, sans-serif;
-    color: var(--text); padding:20px;
+    color: var(--text);
   }
-  .card{
-    background: var(--card); border:1px solid var(--line); border-radius:18px;
-    padding:28px 24px; max-width:400px; width:100%;
-  }
+  .wrap{ max-width:720px; margin:0 auto; padding:20px 16px 60px; }
+  .logo-row{ display:flex; align-items:center; gap:10px; margin-bottom:18px; }
   .logo{
-    width:44px; height:44px; border-radius:11px; background:linear-gradient(135deg, var(--amber), #FFB870);
-    display:flex; align-items:center; justify-content:center; font-weight:700; color:#0B1B26; font-size:20px;
-    margin-bottom:14px;
+    width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg, var(--amber), #FFB870);
+    display:flex; align-items:center; justify-content:center; font-weight:700; color:#0B1B26; font-size:17px;
   }
-  h1{ font-size:19px; margin:0 0 6px; }
-  p.help{ color:var(--text-dim); font-size:13px; line-height:1.5; margin:0 0 22px; }
-  label{ display:block; font-size:12px; color:var(--text-dim); margin-bottom:6px; margin-top:14px; }
+  .logo-row h1{ font-size:17px; margin:0; }
+
+  #gate{ min-height:90vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .gate-card{
+    background: var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:26px 22px; max-width:320px; width:100%; text-align:center;
+  }
+  .gate-card input{
+    width:100%; background:#0F2536; border:1px solid var(--line); color:var(--text);
+    padding:12px 13px; border-radius:9px; font-size:15px; margin:14px 0; text-align:center;
+  }
+
+  .card{
+    background: var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:18px 16px; margin-bottom:16px;
+  }
+  .card h2{ font-size:14px; margin:0 0 14px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; }
+  label{ display:block; font-size:12px; color:var(--text-dim); margin-bottom:5px; margin-top:12px; }
+  label:first-of-type{ margin-top:0; }
   input{
     width:100%; background:#0F2536; border:1px solid var(--line); color:var(--text);
-    padding:12px 13px; border-radius:9px; font-size:14px;
+    padding:11px 12px; border-radius:9px; font-size:13.5px;
   }
-  input#code{
-    font-size:22px; letter-spacing:6px; text-align:center; font-weight:700;
-  }
+  .row2{ display:flex; gap:10px; }
+  .row2 > div{ flex:1; }
   button{
-    width:100%; margin-top:22px; background:var(--amber); color:#1A0E00; border:none;
-    font-weight:700; font-size:15px; padding:13px; border-radius:10px; cursor:pointer;
+    background:var(--amber); color:#1A0E00; border:none; font-weight:700; font-size:14px;
+    padding:12px; border-radius:9px; cursor:pointer; width:100%; margin-top:16px;
   }
-  button:disabled{ opacity:.6; }
-  .msg{ margin-top:16px; font-size:13px; text-align:center; display:none; }
+  button.ghost{ background:transparent; border:1px solid var(--line); color:var(--text-dim); font-weight:600; }
+  button.small{ width:auto; padding:8px 14px; font-size:12.5px; margin-top:0; }
+  .msg{ margin-top:12px; font-size:12.5px; text-align:center; display:none; }
   .msg.ok{ color: var(--green); display:block; }
-  .msg.err{ color:#FF6B6B; display:block; }
+  .msg.err{ color: var(--red); display:block; }
   .msg.info{ color: var(--text-dim); display:block; }
+
+  .client-card{
+    background:#0F2536; border:1px solid var(--line); border-radius:12px;
+    padding:14px; margin-bottom:10px;
+  }
+  .client-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px; }
+  .client-name{ font-size:15px; font-weight:700; }
+  .client-code{ font-family:'JetBrains Mono', monospace; font-size:11.5px; color:var(--text-dim); }
+  .badge{ font-size:10.5px; font-weight:700; padding:4px 9px; border-radius:999px; white-space:nowrap; }
+  .badge.active{ background:rgba(61,220,132,.15); color:var(--green); }
+  .badge.expired{ background:rgba(255,107,107,.15); color:var(--red); }
+  .badge.unknown{ background:rgba(159,182,196,.15); color:var(--text-dim); }
+  .client-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; font-size:12px; }
+  .client-grid div span{ color:var(--text-dim); display:block; font-size:10.5px; }
+  .client-grid div b{ word-break:break-all; }
+  .client-actions{ display:flex; gap:8px; margin-top:12px; }
+  #refreshBtn{ margin-bottom:14px; }
+  #clientsEmpty{ color:var(--text-dim); font-size:13px; text-align:center; padding:20px; }
 </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo">N</div>
-    <h1>Panel de administrador</h1>
-    <p class="help">Pide al cliente el código numérico que le aparece en la app, escríbelo abajo junto con su URL, usuario y clave, y envíaselo — su app se conectará sola.</p>
 
+<div id="gate">
+  <div class="gate-card">
+    <div class="logo" style="margin:0 auto 12px;">N</div>
+    <h1 style="font-size:16px; margin:0;">Panel de administrador</h1>
+    <input id="gatePass" type="password" placeholder="Clave">
+    <button id="gateBtn">Entrar</button>
+    <p class="msg err" id="gateMsg" style="display:none">Clave incorrecta</p>
+  </div>
+</div>
+
+<div class="wrap" id="panel" style="display:none">
+  <div class="logo-row">
+    <div class="logo">N</div>
+    <h1>Panel de administrador — NetGo</h1>
+  </div>
+
+  <div class="card">
+    <h2 id="formTitle">Agregar / actualizar cliente</h2>
     <label>Código del cliente</label>
-    <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="123456">
+    <input id="fCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456">
+
+    <label>Nombre del cliente</label>
+    <input id="fName" type="text" placeholder="Juan Pérez">
 
     <label>URL del servidor</label>
     <input id="fServer" type="text" placeholder="http://proveedor.ejemplo.com:8080">
 
-    <label>Usuario</label>
-    <input id="fUser" type="text" placeholder="usuario">
+    <div class="row2">
+      <div>
+        <label>Usuario</label>
+        <input id="fUser" type="text" placeholder="usuario">
+      </div>
+      <div>
+        <label>Contraseña</label>
+        <input id="fPass" type="text" placeholder="••••••••">
+      </div>
+    </div>
 
-    <label>Contraseña</label>
-    <input id="fPass" type="text" placeholder="••••••••">
+    <div class="row2">
+      <div>
+        <label>Valor del plan</label>
+        <input id="fPlanValue" type="text" placeholder="$10.000">
+      </div>
+      <div>
+        <label>Fecha de vencimiento</label>
+        <input id="fExpiry" type="date">
+      </div>
+    </div>
 
-    <button id="btnSend">Enviar al cliente</button>
-
-    <div class="msg" id="msg"></div>
+    <button id="btnSave">Guardar y enviar al cliente</button>
+    <button class="ghost" id="btnClear">Limpiar formulario</button>
+    <p class="msg" id="formMsg"></p>
   </div>
+
+  <div class="card">
+    <h2>Clientes</h2>
+    <button class="ghost small" id="refreshBtn">🔄 Actualizar lista</button>
+    <div id="clientsList"></div>
+    <p id="clientsEmpty" style="display:none">Todavía no hay clientes guardados.</p>
+  </div>
+</div>
 
 <script>
   const FIREBASE_BASE = 'https://netgo-pairing-default-rtdb.firebaseio.com';
-  const msg = document.getElementById('msg');
+  const ADMIN_PASSWORD = 'NetGoAdmin26';
 
-  function showMsg(text, type){
+  document.getElementById('gateBtn').onclick = () => {
+    const val = document.getElementById('gatePass').value;
+    if(val === ADMIN_PASSWORD){
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('panel').style.display = 'block';
+      loadClients();
+    } else {
+      document.getElementById('gateMsg').style.display = 'block';
+    }
+  };
+  document.getElementById('gatePass').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') document.getElementById('gateBtn').click();
+  });
+
+  document.getElementById('btnSave').onclick = async () => {
+    const code = document.getElementById('fCode').value.trim();
+    const name = document.getElementById('fName').value.trim();
+    const server = document.getElementById('fServer').value.trim();
+    const username = document.getElementById('fUser').value.trim();
+    const password = document.getElementById('fPass').value.trim();
+    const planValue = document.getElementById('fPlanValue').value.trim();
+    const expiry = document.getElementById('fExpiry').value;
+
+    if(!code || code.length < 4){ showFormMsg('Escribe el código del cliente.', 'err'); return; }
+    if(!server || !username || !password){ showFormMsg('Completa URL, usuario y contraseña.', 'err'); return; }
+
+    showFormMsg('Guardando…', 'info');
+    try{
+      let createdAt = Date.now();
+      try{
+        const existingRes = await fetch(`${FIREBASE_BASE}/clients/${code}.json`);
+        const existing = await existingRes.json();
+        if(existing && existing.createdAt) createdAt = existing.createdAt;
+      }catch(e){}
+
+      const record = { name, server, username, password, planValue, expiry, createdAt, updatedAt: Date.now() };
+
+      await fetch(`${FIREBASE_BASE}/clients/${code}.json`, {
+        method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(record)
+      });
+      await fetch(`${FIREBASE_BASE}/pairs/${code}.json`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ server, username, password, ts: Date.now() })
+      });
+
+      showFormMsg('✓ Guardado y enviado al cliente.', 'ok');
+      loadClients();
+    }catch(err){
+      showFormMsg('Error: ' + err.message, 'err');
+    }
+  };
+
+  document.getElementById('btnClear').onclick = () => {
+    ['fCode','fName','fServer','fUser','fPass','fPlanValue','fExpiry'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('formTitle').textContent = 'Agregar / actualizar cliente';
+    showFormMsg('', '');
+  };
+
+  function showFormMsg(text, type){
+    const msg = document.getElementById('formMsg');
     msg.textContent = text;
     msg.className = 'msg ' + type;
   }
 
-  document.getElementById('btnSend').onclick = async () => {
-    const code = document.getElementById('code').value.trim();
-    const server = document.getElementById('fServer').value.trim();
-    const username = document.getElementById('fUser').value.trim();
-    const password = document.getElementById('fPass').value.trim();
+  document.getElementById('refreshBtn').onclick = loadClients;
 
-    if(!code || code.length < 4){
-      showMsg('Escribe el código de 6 dígitos que te dio el cliente.', 'err');
-      return;
-    }
-    if(!server || !username || !password){
-      showMsg('Completa URL, usuario y contraseña.', 'err');
-      return;
-    }
-
-    const btn = document.getElementById('btnSend');
-    btn.disabled = true;
-    showMsg('Enviando…', 'info');
+  async function loadClients(){
+    const list = document.getElementById('clientsList');
+    const empty = document.getElementById('clientsEmpty');
+    list.innerHTML = '<p class="msg info">Cargando…</p>';
     try{
-      const res = await fetch(`${FIREBASE_BASE}/pairs/${encodeURIComponent(code)}.json`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ server, username, password, ts: Date.now() })
-      });
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      showMsg('✓ Enviado. La app del cliente debería conectarse sola en unos segundos.', 'ok');
-      document.getElementById('code').value = '';
-      document.getElementById('fServer').value = '';
-      document.getElementById('fUser').value = '';
-      document.getElementById('fPass').value = '';
+      const res = await fetch(`${FIREBASE_BASE}/clients.json`);
+      const data = await res.json();
+      if(!data){
+        list.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      const codes = Object.keys(data).sort((a,b) => (data[b].updatedAt||0) - (data[a].updatedAt||0));
+      list.innerHTML = codes.map(code => clientCardHtml(code, data[code])).join('');
     }catch(err){
-      showMsg('No se pudo enviar: ' + err.message, 'err');
+      list.innerHTML = `<p class="msg err">No se pudo cargar la lista: ${err.message}</p>`;
     }
-    btn.disabled = false;
+  }
+
+  function statusBadge(expiry){
+    if(!expiry) return '<span class="badge unknown">Sin fecha</span>';
+    const today = new Date().toISOString().slice(0,10);
+    return expiry >= today
+      ? '<span class="badge active">Activo</span>'
+      : '<span class="badge expired">Vencido</span>';
+  }
+
+  function fmtDate(ts){
+    if(!ts) return '—';
+    return new Date(ts).toLocaleDateString('es-ES', { year:'numeric', month:'short', day:'numeric' });
+  }
+
+  function clientCardHtml(code, c){
+    return `
+      <div class="client-card">
+        <div class="client-top">
+          <div>
+            <div class="client-name">${c.name || '(sin nombre)'}</div>
+            <div class="client-code">Código: ${code}</div>
+          </div>
+          ${statusBadge(c.expiry)}
+        </div>
+        <div class="client-grid">
+          <div><span>Usuario</span><b>${c.username || '—'}</b></div>
+          <div><span>Contraseña</span><b>${c.password || '—'}</b></div>
+          <div><span>URL</span><b>${c.server || '—'}</b></div>
+          <div><span>Valor del plan</span><b>${c.planValue || '—'}</b></div>
+          <div><span>Creado</span><b>${fmtDate(c.createdAt)}</b></div>
+          <div><span>Vence</span><b>${c.expiry || '—'}</b></div>
+        </div>
+        <div class="client-actions">
+          <button class="ghost small" onclick="editClient('${code}')">Editar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  window.editClient = async (code) => {
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/clients/${code}.json`);
+      const c = await res.json();
+      if(!c) return;
+      document.getElementById('fCode').value = code;
+      document.getElementById('fName').value = c.name || '';
+      document.getElementById('fServer').value = c.server || '';
+      document.getElementById('fUser').value = c.username || '';
+      document.getElementById('fPass').value = c.password || '';
+      document.getElementById('fPlanValue').value = c.planValue || '';
+      document.getElementById('fExpiry').value = c.expiry || '';
+      document.getElementById('formTitle').textContent = 'Editando: ' + (c.name || code);
+      window.scrollTo({ top:0, behavior:'smooth' });
+    }catch(err){}
   };
 </script>
 </body>
