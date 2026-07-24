@@ -611,6 +611,18 @@
   body.tv-mode .sd-episode-row{ padding:14px; }
   body.tv-mode .sd-ep-title{ font-size:16px; }
 
+  /* On TV: move the category bar from the bottom (phone style) to a
+     left-side rail (TV style) — phones are completely untouched. */
+  body.tv-mode{ padding-left:126px; }
+  body.tv-mode .cats{
+    left:0; right:auto; top:0; bottom:0; width:126px;
+    flex-direction:column; justify-content:flex-start; align-items:stretch;
+    padding:96px 10px 20px; gap:10px;
+    border-top:none; border-right:1px solid var(--line);
+  }
+  body.tv-mode .cat{ flex:none; padding:12px 4px; }
+  body.tv-mode #rowsContainer, body.tv-mode .vivo-view{ padding-bottom:20px; }
+
   /* Blur (backdrop-filter) is very GPU-expensive on weak TV hardware —
      disable it in TV mode; the semi-opaque backgrounds still read fine
      without it, just slightly less "glassy". */
@@ -847,7 +859,7 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #channelSearch';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn';
 
   function focusableEls(){
     return Array.from(document.querySelectorAll(NAV_SELECTOR)).filter(el => {
