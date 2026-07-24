@@ -48,6 +48,9 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Pin the debug signing key inside the Android project
+        run: node scripts/patch-signing.js
+
       - name: Install native libVLC player plugin (full codec support)
         run: node scripts/patch-vlc-plugin.js
 
