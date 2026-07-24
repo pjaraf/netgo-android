@@ -15,6 +15,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -38,7 +39,9 @@ import java.util.List;
  *  - Movies: queue of length 1 — when it ends, the activity closes.
  *  - Live channels: queue of every channel in that category — the remote's
  *    Channel Up/Down (or D-pad Up/Down as a fallback) moves between them,
- *    showing an on-screen "now playing" banner each time.
+ *    showing an on-screen "now playing" banner each time. If a channel
+ *    hasn't started playing after 10 seconds, a "Canal en mantenimiento"
+ *    screen (with the app logo) appears instead of a stuck spinner.
  *  - Series: queue of every episode in order, auto-advancing.
  */
 public class VlcPlayerActivity extends Activity {
@@ -61,6 +64,11 @@ public class VlcPlayerActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable hideBannerRunnable;
 
+    // ---- "Canal en mantenimiento" (stuck-loading) screen ----
+    private FrameLayout maintenanceView;
+    private Runnable maintenanceRunnable;
+    private static final long MAINTENANCE_TIMEOUT_MS = 10000;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -74,6 +82,7 @@ public class VlcPlayerActivity extends Activity {
         closeBtn.setOnClickListener(v -> finish());
 
         buildChannelBanner();
+        buildMaintenanceView();
 
         if (!parseQueueFromIntent()) {
             finish();
@@ -95,11 +104,16 @@ public class VlcPlayerActivity extends Activity {
 
         mediaPlayer.setEventListener(event -> {
             if (event.type == MediaPlayer.Event.Playing) {
-                runOnUiThread(() -> spinner.setVisibility(View.GONE));
+                runOnUiThread(() -> {
+                    spinner.setVisibility(View.GONE);
+                    cancelMaintenanceTimer();
+                    hideMaintenanceView();
+                });
             } else if (event.type == MediaPlayer.Event.EncounteredError) {
                 runOnUiThread(() -> {
                     spinner.setVisibility(View.GONE);
                     titleView.setText("No se pudo reproducir esta señal");
+                    cancelMaintenanceTimer();
                 });
             } else if (event.type == MediaPlayer.Event.EndReached) {
                 runOnUiThread(this::advanceOrFinish);
@@ -166,11 +180,79 @@ public class VlcPlayerActivity extends Activity {
     private void loadCurrent() {
         spinner.setVisibility(View.VISIBLE);
         titleView.setText(titles.get(currentIndex));
+        hideMaintenanceView();
+        scheduleMaintenanceTimer();
         Media media = new Media(libVLC, Uri.parse(urls.get(currentIndex)));
         media.setHWDecoderEnabled(true, false);
         mediaPlayer.setMedia(media);
         media.release();
         mediaPlayer.play();
+    }
+
+    // ---------- "Canal en mantenimiento" screen ----------
+    private void buildMaintenanceView() {
+        FrameLayout root = findViewById(android.R.id.content);
+        maintenanceView = new FrameLayout(this);
+        maintenanceView.setBackgroundColor(0xFF0B1B26);
+        maintenanceView.setVisibility(View.GONE);
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER);
+
+        ImageView logo = new ImageView(this);
+        int logoSize = dp(84);
+        try {
+            logo.setImageResource(getResources().getIdentifier("ic_launcher_foreground", "mipmap", getPackageName()));
+        } catch (Exception ignored) { }
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(logoSize, logoSize);
+        logoLp.bottomMargin = dp(20);
+        col.addView(logo, logoLp);
+
+        TextView msg = new TextView(this);
+        msg.setText("Canal en mantenimiento");
+        msg.setTextColor(Color.WHITE);
+        msg.setTextSize(20);
+        msg.setTypeface(msg.getTypeface(), android.graphics.Typeface.BOLD);
+        msg.setGravity(Gravity.CENTER);
+        col.addView(msg);
+
+        TextView sub = new TextView(this);
+        sub.setText("No pudimos cargar esta señal. Prueba otro canal.");
+        sub.setTextColor(0xFF9FB6C4);
+        sub.setTextSize(13);
+        sub.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        subLp.topMargin = dp(8);
+        col.addView(sub, subLp);
+
+        FrameLayout.LayoutParams colLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        colLp.gravity = Gravity.CENTER;
+        maintenanceView.addView(col, colLp);
+
+        root.addView(maintenanceView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    private void scheduleMaintenanceTimer() {
+        cancelMaintenanceTimer();
+        maintenanceRunnable = () -> {
+            spinner.setVisibility(View.GONE);
+            maintenanceView.setAlpha(0f);
+            maintenanceView.setVisibility(View.VISIBLE);
+            maintenanceView.animate().alpha(1f).setDuration(200).start();
+        };
+        handler.postDelayed(maintenanceRunnable, MAINTENANCE_TIMEOUT_MS);
+    }
+
+    private void cancelMaintenanceTimer() {
+        if (maintenanceRunnable != null) handler.removeCallbacks(maintenanceRunnable);
+    }
+
+    private void hideMaintenanceView() {
+        if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
     }
 
     // ---------- Channel change banner (native, attractive, auto-hides) ----------
@@ -285,6 +367,7 @@ public class VlcPlayerActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
+        cancelMaintenanceTimer();
         if (mediaPlayer != null) mediaPlayer.release();
         if (libVLC != null) libVLC.release();
     }
