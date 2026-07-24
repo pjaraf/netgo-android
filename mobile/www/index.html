@@ -510,11 +510,19 @@
   }
   .start-title{ font-family:'Space Grotesk'; font-size:22px; font-weight:700; margin:0 0 10px; }
   .start-sub{ color:var(--text-dim); font-size:13px; line-height:1.55; max-width:320px; margin:0 0 22px; }
-  .start-qr{
-    background:#fff; padding:16px; border-radius:16px; margin-bottom:18px;
-    display:flex; align-items:center; justify-content:center;
+  .start-generate-btn{
+    background:var(--amber); color:#1A0E00; border:none; font-weight:700; font-size:15px;
+    padding:15px 36px; border-radius:12px; cursor:pointer; margin-bottom:18px;
   }
-  .start-status{ color:var(--amber); font-size:12.5px; margin:0 0 26px; min-height:16px; }
+  .start-code-box{
+    background: var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:22px 28px; margin-bottom:18px; text-align:center;
+  }
+  .start-code-digits{
+    font-family:'JetBrains Mono', monospace; font-size:38px; font-weight:700;
+    letter-spacing:10px; color:var(--amber); margin-bottom:10px;
+  }
+  .start-status{ color:var(--amber); font-size:12.5px; margin:0; min-height:16px; }
   .start-manual-btn{
     background:transparent; border:1px solid var(--line); color:var(--text-dim);
     font-size:12.5px; padding:10px 18px; border-radius:9px; cursor:pointer;
@@ -697,9 +705,15 @@
 <div id="startScreen" class="start-screen">
   <div class="start-logo">N</div>
   <h1 class="start-title">NetGo</h1>
-  <p class="start-sub">Enviar QR a tu proveedor</p>
-  <div id="startQrCanvas" class="start-qr"></div>
-  <p class="start-status" id="startStatus">Generando código…</p>
+  <p class="start-sub">Genera un código y envíaselo al administrador para activar tu cuenta.</p>
+
+  <button class="start-generate-btn" id="startGenerateBtn">Generar código</button>
+
+  <div id="startCodeBox" class="start-code-box" style="display:none">
+    <div class="start-code-digits" id="startCodeDigits">------</div>
+    <p class="start-status" id="startStatus">Esperando que el administrador active tu cuenta…</p>
+  </div>
+
   <button class="start-manual-btn" id="startManualBtn">Ingresar manualmente</button>
 </div>
 
@@ -1999,9 +2013,8 @@
   let pairCode = null;
 
   function randomPairCode(){
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let out = '';
-    for(let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    for(let i = 0; i < 6; i++) out += Math.floor(Math.random() * 10);
     return out;
   }
 
@@ -2054,16 +2067,19 @@
 
   function showStartScreenPairing(){
     document.getElementById('startScreen').style.display = 'flex';
-    pairCode = randomPairCode();
-    const pairUrl = `${PAIR_SITE}?code=${pairCode}`;
-    const holder = document.getElementById('startQrCanvas');
-    holder.innerHTML = '';
-    if(window.QRCode){
-      new QRCode(holder, { text: pairUrl, width:200, height:200, colorDark:'#0B1B26', colorLight:'#ffffff' });
-    }
-    document.getElementById('startStatus').textContent = 'Esperando que escanees y envíes los datos…';
-    startStartScreenPolling();
+    document.getElementById('startGenerateBtn').style.display = 'inline-block';
+    document.getElementById('startCodeBox').style.display = 'none';
+    stopStartScreenPolling();
   }
+
+  document.getElementById('startGenerateBtn').onclick = () => {
+    pairCode = randomPairCode();
+    document.getElementById('startGenerateBtn').style.display = 'none';
+    document.getElementById('startCodeBox').style.display = 'block';
+    document.getElementById('startCodeDigits').textContent = pairCode;
+    document.getElementById('startStatus').textContent = 'Esperando que el administrador active tu cuenta…';
+    startStartScreenPolling();
+  };
 
   function startStartScreenPolling(){
     stopStartScreenPolling();
