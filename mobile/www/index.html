@@ -612,16 +612,27 @@
   body.tv-mode .sd-ep-title{ font-size:16px; }
 
   /* On TV: move the category bar from the bottom (phone style) to a
-     left-side rail (TV style) — phones are completely untouched. */
+     left-side rail (TV style) — phones are completely untouched.
+     Every size below uses clamp() tied to viewport height (vh), so the
+     whole rail compresses proportionally on shorter TV screens (720p)
+     and stays comfortable on taller ones (1080p/4K) — nothing gets
+     pushed off-screen. overflow-y:auto is kept as a last-resort safety
+     net in case some resolution still doesn't fit. */
   body.tv-mode{ padding-left:126px; }
   body.tv-mode .cats{
     left:0; right:auto; top:0; bottom:0; width:126px;
     flex-direction:column; justify-content:flex-start; align-items:stretch;
-    padding:28px 10px 20px; gap:8px;
+    padding: clamp(10px, 3vh, 28px) 10px clamp(8px, 2vh, 20px);
+    gap: clamp(2px, 1.2vh, 8px);
     border-top:none; border-right:1px solid var(--line);
-    overflow-y:auto; /* safety net: scroll instead of clipping on short screens */
+    overflow-y:auto;
   }
-  body.tv-mode .cat{ flex:none; padding:12px 4px; }
+  body.tv-mode .cat{
+    flex:none;
+    padding: clamp(5px, 1.6vh, 12px) 4px;
+  }
+  body.tv-mode .cat .icon{ font-size: clamp(15px, 2.6vh, 25px); }
+  body.tv-mode .cat span{ font-size: clamp(10px, 1.6vh, 14px); }
   body.tv-mode #rowsContainer, body.tv-mode .vivo-view{ padding-bottom:20px; }
 
   /* TV only: hide the phone header entirely (logo, version, signal icon,
@@ -635,17 +646,22 @@
   .tv-sidebar-brand{ display:none; }
   .tv-sidebar-gear{ display:none; }
   body.tv-mode .tv-sidebar-brand{
-    display:flex; flex-direction:column; align-items:center; gap:8px;
-    margin-bottom:26px;
+    display:flex; flex-direction:column; align-items:center;
+    gap: clamp(3px, 0.8vh, 8px);
+    margin-bottom: clamp(8px, 2.4vh, 26px);
+    flex-shrink:0;
   }
   body.tv-mode .tv-sidebar-brand .mark{
-    width:50px; height:50px; border-radius:13px;
+    width: clamp(30px, 5vh, 50px); height: clamp(30px, 5vh, 50px);
+    border-radius:13px;
     background:linear-gradient(135deg, var(--amber), #FFB870);
     display:flex; align-items:center; justify-content:center;
-    font-family:'Space Grotesk'; font-weight:700; color:#0B1B26; font-size:24px;
+    font-family:'Space Grotesk'; font-weight:700; color:#0B1B26;
+    font-size: clamp(14px, 2.4vh, 24px);
   }
   body.tv-mode .tv-sidebar-brand .name{
-    font-family:'Space Grotesk'; font-weight:700; font-size:15px; color:var(--text);
+    font-family:'Space Grotesk'; font-weight:700;
+    font-size: clamp(11px, 1.6vh, 15px); color:var(--text);
   }
   body.tv-mode .tv-sidebar-gear{
     display:flex; margin-top:auto; flex-shrink:0;
