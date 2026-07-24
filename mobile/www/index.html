@@ -623,6 +623,29 @@
   body.tv-mode .cat{ flex:none; padding:12px 4px; }
   body.tv-mode #rowsContainer, body.tv-mode .vivo-view{ padding-bottom:20px; }
 
+  /* TV only: hide the phone header entirely (logo, version, signal icon,
+     clock, gear all move into / disappear from the side rail instead). */
+  body.tv-mode header{ display:none; }
+
+  .tv-sidebar-brand{ display:none; }
+  .tv-sidebar-gear{ display:none; }
+  body.tv-mode .tv-sidebar-brand{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    margin-bottom:18px;
+  }
+  body.tv-mode .tv-sidebar-brand .mark{
+    width:34px; height:34px; border-radius:9px;
+    background:linear-gradient(135deg, var(--amber), #FFB870);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk'; font-weight:700; color:#0B1B26; font-size:16px;
+  }
+  body.tv-mode .tv-sidebar-brand .name{
+    font-family:'Space Grotesk'; font-weight:700; font-size:13px; color:var(--text);
+  }
+  body.tv-mode .tv-sidebar-gear{
+    display:flex; margin-top:auto;
+  }
+
   /* Blur (backdrop-filter) is very GPU-expensive on weak TV hardware —
      disable it in TV mode; the semi-opaque backgrounds still read fine
      without it, just slightly less "glassy". */
@@ -715,11 +738,21 @@
 </div>
 
 <div class="cats">
+  <div class="tv-sidebar-brand">
+    <div class="mark">N</div>
+    <div class="name">NetGo</div>
+  </div>
   <div class="cat" tabindex="0" data-cat="vivo"><div class="icon">📡</div><span>Vivo</span></div>
   <div class="cat" tabindex="0" data-cat="series"><div class="icon">📺</div><span>Series</span></div>
   <div class="cat active" tabindex="0" data-cat="peliculas"><div class="icon">🎬</div><span>Películas</span></div>
   <div class="cat" tabindex="0" data-cat="anime"><div class="icon">🎌</div><span>Anime</span></div>
   <div class="cat" tabindex="0" data-cat="kids"><div class="icon">🧒</div><span>Kids</span></div>
+  <div class="cat tv-sidebar-gear" tabindex="0" id="openSettingsTV">
+    <div class="icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#EAF2F5" stroke-width="1.6" width="19" height="19"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </div>
+    <span>Ajustes</span>
+  </div>
 </div>
 
 
@@ -1207,9 +1240,9 @@
     playQueue(queue, startIndex, title, 'channel');
   });
 
-  document.querySelectorAll('.cat').forEach(cat => {
+  document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(cat => {
     cat.onclick = () => {
-      document.querySelectorAll('.cat').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.remove('active'));
       cat.classList.add('active');
       renderCategory(cat.dataset.cat);
     };
@@ -1749,6 +1782,7 @@
 
   const overlay = document.getElementById('overlay');
   document.getElementById('openSettings').onclick = () => { showStartScreenPairing(); };
+  document.getElementById('openSettingsTV').onclick = () => { showStartScreenPairing(); };
   document.getElementById('heroConnect').onclick = () => overlay.classList.add('open');
   document.getElementById('closeSettings').onclick = () => overlay.classList.remove('open');
   overlay.onclick = (e) => { if(e.target === overlay) overlay.classList.remove('open'); };
