@@ -547,6 +547,10 @@
   }
   .account-row span{ color:#5A6B78; font-size:12.5px; }
   .account-row b{ color:#0B1B26; font-size:13.5px; text-align:right; }
+  .qr-close-btn-danger{
+    background:transparent; color:#D64545; border:1px solid rgba(214,69,69,0.4);
+    margin-top:10px;
+  }
   .qr-btn{
     flex:1; background:var(--card); border:1px solid var(--line); color:var(--text);
     font-family:'Inter'; font-weight:600; font-size:12.5px; padding:11px 8px; border-radius:9px;
@@ -928,6 +932,7 @@
       <div class="account-row"><span>Vence el</span><b id="accInfoExpiry">—</b></div>
     </div>
     <button class="qr-close-btn" id="accountInfoClose">Cerrar</button>
+    <button class="qr-close-btn qr-close-btn-danger" id="accountLogoutBtn">Cerrar sesión</button>
   </div>
 </div>
 
@@ -1872,6 +1877,11 @@
   }
   document.getElementById('accountInfoClose').onclick = () => {
     document.getElementById('accountInfoOverlay').style.display = 'none';
+  };
+  document.getElementById('accountLogoutBtn').onclick = () => {
+    localStorage.removeItem(CONN_KEY);
+    document.getElementById('accountInfoOverlay').style.display = 'none';
+    showStartScreenPairing();
   };
   document.getElementById('openSettings').onclick = () => { showAccountInfo(); };
   document.getElementById('openSettingsTV').onclick = () => { showAccountInfo(); };
