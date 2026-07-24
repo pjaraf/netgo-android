@@ -19,6 +19,19 @@ import org.videolan.libvlc.util.VLCVideoLayout;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Fullscreen native video player using libVLC (bundles its own decoders —
+ * H.264, H.265/HEVC, MPEG-2, AC-3, E-AC-3, DTS, AAC, MKV, TS — regardless of
+ * what the Android WebView/Chromium supports).
+ *
+ * Plays a queue of one or more items:
+ *  - Movies / live channels: queue of length 1 — when it ends, the activity
+ *    closes and the app is left showing whatever screen was underneath
+ *    (e.g. the Películas grid), which is effectively "return automatically".
+ *  - Series: queue of every episode in order — when one episode ends, the
+ *    next one loads and plays automatically; when the last one ends, the
+ *    activity closes the same way.
+ */
 public class VlcPlayerActivity extends Activity {
 
     private LibVLC libVLC;
@@ -51,7 +64,10 @@ public class VlcPlayerActivity extends Activity {
         options.add("--no-drop-late-frames");
         options.add("--no-skip-frames");
         options.add("--rtsp-tcp");
-        options.add("--network-caching=1500");
+        options.add("--network-caching=2500");
+        options.add("--live-caching=2500");
+        options.add("--file-caching=1000");
+        options.add("--http-reconnect");
 
         libVLC = new LibVLC(this, options);
         mediaPlayer = new MediaPlayer(libVLC);
@@ -66,6 +82,7 @@ public class VlcPlayerActivity extends Activity {
                     titleView.setText("No se pudo reproducir esta señal");
                 });
             } else if (event.type == MediaPlayer.Event.EndReached) {
+                // Fires when the current item finishes playing.
                 runOnUiThread(this::advanceOrFinish);
             }
         });
@@ -90,11 +107,15 @@ public class VlcPlayerActivity extends Activity {
         }
     }
 
+    /** Called when one item in the queue finishes: play the next one, or close. */
     private void advanceOrFinish() {
         if (currentIndex + 1 < urls.size()) {
             currentIndex++;
             loadCurrent();
         } else {
+            // Last (or only) item — movie ended, live channel stopped, or the
+            // final episode of a series just finished. Close and return to
+            // the app, which is already on the right screen underneath.
             finish();
         }
     }
