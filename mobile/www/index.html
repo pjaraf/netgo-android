@@ -705,16 +705,12 @@
 <div id="startScreen" class="start-screen">
   <div class="start-logo">N</div>
   <h1 class="start-title">NetGo</h1>
-  <p class="start-sub">Genera un código y envíaselo al administrador para activar tu cuenta.</p>
+  <p class="start-sub">Envía este código al administrador para activar tu cuenta.</p>
 
-  <button class="start-generate-btn" id="startGenerateBtn">Generar código</button>
-
-  <div id="startCodeBox" class="start-code-box" style="display:none">
+  <div id="startCodeBox" class="start-code-box">
     <div class="start-code-digits" id="startCodeDigits">------</div>
     <p class="start-status" id="startStatus">Esperando que el administrador active tu cuenta…</p>
   </div>
-
-  <button class="start-manual-btn" id="startManualBtn">Ingresar manualmente</button>
 </div>
 
 <header>
@@ -2065,21 +2061,28 @@
   // ---------- Startup QR screen ----------
   let startPollTimer = null;
 
-  function showStartScreenPairing(){
-    document.getElementById('startScreen').style.display = 'flex';
-    document.getElementById('startGenerateBtn').style.display = 'inline-block';
-    document.getElementById('startCodeBox').style.display = 'none';
-    stopStartScreenPolling();
+  // ---------- Persistent per-device code ----------
+  // Generated once the first time the app ever opens, then stored on-device
+  // forever (until the app is uninstalled/reinstalled) — so every install
+  // has its own fixed, unique code the admin can use to identify it, even
+  // across app restarts.
+  const DEVICE_CODE_KEY = 'netgo_device_code';
+  function getDeviceCode(){
+    let code = localStorage.getItem(DEVICE_CODE_KEY);
+    if(!code){
+      code = randomPairCode();
+      localStorage.setItem(DEVICE_CODE_KEY, code);
+    }
+    return code;
   }
 
-  document.getElementById('startGenerateBtn').onclick = () => {
-    pairCode = randomPairCode();
-    document.getElementById('startGenerateBtn').style.display = 'none';
-    document.getElementById('startCodeBox').style.display = 'block';
+  function showStartScreenPairing(){
+    document.getElementById('startScreen').style.display = 'flex';
+    pairCode = getDeviceCode();
     document.getElementById('startCodeDigits').textContent = pairCode;
     document.getElementById('startStatus').textContent = 'Esperando que el administrador active tu cuenta…';
     startStartScreenPolling();
-  };
+  }
 
   function startStartScreenPolling(){
     stopStartScreenPolling();
@@ -2102,12 +2105,6 @@
   function stopStartScreenPolling(){
     if(startPollTimer){ clearInterval(startPollTimer); startPollTimer = null; }
   }
-  document.getElementById('startManualBtn').onclick = () => {
-    document.getElementById('pinInput').value = '';
-    document.getElementById('pinError').style.display = 'none';
-    document.getElementById('pinOverlay').style.display = 'flex';
-    setTimeout(() => document.getElementById('pinInput').focus(), 50);
-  };
 
   const ADMIN_PIN = '1286';
   function submitPin(){
