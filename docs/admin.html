@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetGo — Panel de administrador</title>
+<style>
+  :root{
+    --bg:#0B1B26; --card:#16334A; --line:rgba(234,242,245,0.12);
+    --text:#EAF2F5; --text-dim:#9FB6C4; --amber:#FF8A3D; --green:#3DDC84;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(900px 600px at 20% -10%, rgba(139,124,246,.25), transparent 60%),
+                radial-gradient(700px 500px at 100% 0%, rgba(255,138,61,.22), transparent 55%),
+                var(--bg);
+    font-family: -apple-system, Roboto, Arial, sans-serif;
+    color: var(--text); padding:20px;
+  }
+  .card{
+    background: var(--card); border:1px solid var(--line); border-radius:18px;
+    padding:28px 24px; max-width:400px; width:100%;
+  }
+  .logo{
+    width:44px; height:44px; border-radius:11px; background:linear-gradient(135deg, var(--amber), #FFB870);
+    display:flex; align-items:center; justify-content:center; font-weight:700; color:#0B1B26; font-size:20px;
+    margin-bottom:14px;
+  }
+  h1{ font-size:19px; margin:0 0 6px; }
+  p.help{ color:var(--text-dim); font-size:13px; line-height:1.5; margin:0 0 22px; }
+  label{ display:block; font-size:12px; color:var(--text-dim); margin-bottom:6px; margin-top:14px; }
+  input{
+    width:100%; background:#0F2536; border:1px solid var(--line); color:var(--text);
+    padding:12px 13px; border-radius:9px; font-size:14px;
+  }
+  input#code{
+    font-size:22px; letter-spacing:6px; text-align:center; font-weight:700;
+  }
+  button{
+    width:100%; margin-top:22px; background:var(--amber); color:#1A0E00; border:none;
+    font-weight:700; font-size:15px; padding:13px; border-radius:10px; cursor:pointer;
+  }
+  button:disabled{ opacity:.6; }
+  .msg{ margin-top:16px; font-size:13px; text-align:center; display:none; }
+  .msg.ok{ color: var(--green); display:block; }
+  .msg.err{ color:#FF6B6B; display:block; }
+  .msg.info{ color: var(--text-dim); display:block; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">N</div>
+    <h1>Panel de administrador</h1>
+    <p class="help">Pide al cliente el código numérico que le aparece en la app, escríbelo abajo junto con su URL, usuario y clave, y envíaselo — su app se conectará sola.</p>
+
+    <label>Código del cliente</label>
+    <input id="code" type="text" inputmode="numeric" maxlength="6" placeholder="123456">
+
+    <label>URL del servidor</label>
+    <input id="fServer" type="text" placeholder="http://proveedor.ejemplo.com:8080">
+
+    <label>Usuario</label>
+    <input id="fUser" type="text" placeholder="usuario">
+
+    <label>Contraseña</label>
+    <input id="fPass" type="text" placeholder="••••••••">
+
+    <button id="btnSend">Enviar al cliente</button>
+
+    <div class="msg" id="msg"></div>
+  </div>
+
+<script>
+  const FIREBASE_BASE = 'https://netgo-pairing-default-rtdb.firebaseio.com';
+  const msg = document.getElementById('msg');
+
+  function showMsg(text, type){
+    msg.textContent = text;
+    msg.className = 'msg ' + type;
+  }
+
+  document.getElementById('btnSend').onclick = async () => {
+    const code = document.getElementById('code').value.trim();
+    const server = document.getElementById('fServer').value.trim();
+    const username = document.getElementById('fUser').value.trim();
+    const password = document.getElementById('fPass').value.trim();
+
+    if(!code || code.length < 4){
+      showMsg('Escribe el código de 6 dígitos que te dio el cliente.', 'err');
+      return;
+    }
+    if(!server || !username || !password){
+      showMsg('Completa URL, usuario y contraseña.', 'err');
+      return;
+    }
+
+    const btn = document.getElementById('btnSend');
+    btn.disabled = true;
+    showMsg('Enviando…', 'info');
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/pairs/${encodeURIComponent(code)}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server, username, password, ts: Date.now() })
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      showMsg('✓ Enviado. La app del cliente debería conectarse sola en unos segundos.', 'ok');
+      document.getElementById('code').value = '';
+      document.getElementById('fServer').value = '';
+      document.getElementById('fUser').value = '';
+      document.getElementById('fPass').value = '';
+    }catch(err){
+      showMsg('No se pudo enviar: ' + err.message, 'err');
+    }
+    btn.disabled = false;
+  };
+</script>
+</body>
+</html>
