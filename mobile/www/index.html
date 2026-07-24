@@ -1066,7 +1066,7 @@
     const art = c.img
       ? `<img class="channel-cover-img" src="${c.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : c.icon||'📡';
-    return `<div class="channel-card" tabindex="0" data-kind="live" data-url="${c.url||''}" data-title="${c.t}">
+    return `<div class="channel-card" tabindex="0" data-kind="live" data-url="${c.url||''}" data-title="${c.t}" data-num="${c.num||''}">
       <div class="channel-thumb" style="background:${c.grad||'linear-gradient(155deg,#123,#456)'}">
         ${art}
         <div class="channel-live mono"><span class="live-dot"></span>EN VIVO</div>
@@ -1240,7 +1240,7 @@
     // Build the queue from every channel row currently visible in the list,
     // so swiping left/right in the native player moves between real siblings.
     const rows = Array.from(document.querySelectorAll('#vivoList .vivo-chan-row'));
-    const queue = rows.map(r => ({ url: r.dataset.url, title: r.dataset.title }));
+    const queue = rows.map(r => ({ url: r.dataset.url, title: r.dataset.title, num: r.dataset.num }));
     const startIndex = Math.max(0, rows.findIndex(r => r.dataset.url === url));
     playQueue(queue, startIndex, title, 'channel');
   });
@@ -1434,7 +1434,7 @@
         // Build the queue from sibling channel cards in the same row so
         // swiping left/right in the native player moves between them.
         const siblings = Array.from(card.parentElement.querySelectorAll('.channel-card'));
-        const queue = siblings.map(c => ({ url: c.dataset.url, title: c.dataset.title }));
+        const queue = siblings.map(c => ({ url: c.dataset.url, title: c.dataset.title, num: c.dataset.num }));
         const startIndex = Math.max(0, siblings.indexOf(card));
         playQueue(queue, startIndex, title, 'channel');
       } else {
