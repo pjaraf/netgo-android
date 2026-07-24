@@ -161,6 +161,9 @@
       <label>URL del servidor</label>
       <input id="fServer" type="text" placeholder="http://proveedor.ejemplo.com:8080">
 
+      <label>Teléfono del cliente (WhatsApp, con código de país)</label>
+      <input id="fPhone" type="text" inputmode="tel" placeholder="+56912345678">
+
       <div class="row2">
         <div>
           <label>Usuario</label>
@@ -401,6 +404,7 @@
     const code = document.getElementById('fCode').value.trim();
     const name = document.getElementById('fName').value.trim();
     const server = document.getElementById('fServer').value.trim();
+    const phone = document.getElementById('fPhone').value.trim();
     const username = document.getElementById('fUser').value.trim();
     const password = document.getElementById('fPass').value.trim();
     const planValue = document.getElementById('fPlanValue').value.trim();
@@ -418,7 +422,7 @@
         if(existing && existing.createdAt) createdAt = existing.createdAt;
       }catch(e){}
 
-      const record = { name, server, username, password, planValue, expiry, createdAt, updatedAt: Date.now() };
+      const record = { name, server, phone, username, password, planValue, expiry, createdAt, updatedAt: Date.now() };
 
       await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, {
         method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(record)
@@ -429,6 +433,27 @@
       });
 
       showFormMsg('✓ Guardado y enviado al cliente.', 'ok');
+
+      // Open WhatsApp with the activation message pre-filled and ready —
+      // WhatsApp itself never allows sending with zero taps from a website
+      // (anti-spam protection no app can bypass), so this still needs one
+      // tap on "Enviar" inside WhatsApp.
+      if(phone){
+        const digits = phone.replace(/[^\d+]/g, '').replace(/^\+/, '');
+        const lines = [
+          `¡Hola ${name || ''}! Tu cuenta de NetGo fue activada con éxito ✅`,
+          '',
+          `📺 Usuario: ${username}`,
+          `🔑 Contraseña: ${password}`,
+          `🌐 Servidor: ${server}`,
+        ];
+        if(planValue) lines.push(`💳 Valor del plan: ${planValue}`);
+        if(expiry) lines.push(`📅 Vence: ${expiry}`);
+        lines.push('', '¡Gracias por tu confianza!');
+        const waText = encodeURIComponent(lines.join('\n'));
+        window.open(`https://wa.me/${digits}?text=${waText}`, '_blank');
+      }
+
       loadAllLists();
     }catch(err){
       showFormMsg('Error: ' + err.message, 'err');
@@ -436,7 +461,7 @@
   };
 
   document.getElementById('btnClear').onclick = () => {
-    ['fCode','fName','fServer','fUser','fPass','fPlanValue','fExpiry'].forEach(id => document.getElementById(id).value = '');
+    ['fCode','fName','fServer','fPhone','fUser','fPass','fPlanValue','fExpiry'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('formTitle').textContent = 'Agregar / actualizar cliente';
     showFormMsg('', '');
   };
@@ -538,6 +563,7 @@
           ${statusBadge(c.expiry)}
         </div>
         <div class="client-grid">
+          <div><span>Teléfono</span><b>${c.phone || '—'}</b></div>
           <div><span>Usuario</span><b>${c.username || '—'}</b></div>
           <div><span>Contraseña</span><b>${c.password || '—'}</b></div>
           <div><span>URL</span><b>${c.server || '—'}</b></div>
@@ -560,6 +586,7 @@
       document.getElementById('fCode').value = code;
       document.getElementById('fName').value = c.name || '';
       document.getElementById('fServer').value = c.server || '';
+      document.getElementById('fPhone').value = c.phone || '';
       document.getElementById('fUser').value = c.username || '';
       document.getElementById('fPass').value = c.password || '';
       document.getElementById('fPlanValue').value = c.planValue || '';
