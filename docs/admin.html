@@ -243,7 +243,7 @@
     const user = document.getElementById('gateUser').value.trim();
     const pass = document.getElementById('gatePass').value;
     const gateMsg = document.getElementById('gateMsg');
-    if(!user || !pass){ gateMsg.style.display = 'block'; return; }
+    if(!user || !pass){ gateMsg.style.display = 'block'; gateMsg.textContent = 'Usuario o clave incorrectos'; return; }
 
     let ok = false;
     if(user === SUPER_ADMIN_USER && pass === SUPER_ADMIN_PASS){
@@ -252,7 +252,19 @@
       try{
         const res = await fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(user)}.json`);
         const data = await res.json();
-        if(data && data.password === pass) ok = true;
+        if(data && data.password === pass){
+          if(data.blocked){
+            gateMsg.style.display = 'block';
+            gateMsg.textContent = 'Este panel está bloqueado. Contacta al administrador.';
+            return;
+          }
+          if(data.paused){
+            gateMsg.style.display = 'block';
+            gateMsg.textContent = 'Este panel está pausado. Contacta al administrador.';
+            return;
+          }
+          ok = true;
+        }
       }catch(e){}
     }
 
@@ -263,9 +275,14 @@
       document.getElementById('panel').style.display = 'block';
       document.getElementById('sessionUser').textContent = user;
       document.getElementById('adminsTabBtn').style.display = (user === SUPER_ADMIN_USER) ? 'inline-block' : 'none';
+      // Always land on "Activación x código" right after logging in.
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'activate'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+      document.getElementById('tab-activate').style.display = 'block';
       loadAllLists();
     } else {
       gateMsg.style.display = 'block';
+      gateMsg.textContent = 'Usuario o clave incorrectos';
     }
   };
   document.getElementById('gatePass').addEventListener('keydown', (e) => {
@@ -324,17 +341,61 @@
         list.innerHTML = '<p class="empty-msg">Todavía no creaste ningún panel para nadie.</p>';
         return;
       }
-      list.innerHTML = users.map(u => `
-        <div class="client-card">
-          <div class="client-top">
-            <div class="client-name">${u}</div>
-          </div>
-        </div>
-      `).join('');
+      list.innerHTML = users.map(u => adminCardHtml(u, data[u])).join('');
     }catch(err){
       list.innerHTML = `<p class="msg err">No se pudo cargar: ${err.message}</p>`;
     }
   }
+
+  function adminCardHtml(user, a){
+    a = a || {};
+    let badge = '<span class="badge active">Activo</span>';
+    if(a.blocked) badge = '<span class="badge expired">Bloqueado</span>';
+    else if(a.paused) badge = '<span class="badge unknown">Pausado</span>';
+    return `
+      <div class="client-card">
+        <div class="client-top">
+          <div class="client-name">${user}</div>
+          ${badge}
+        </div>
+        <div class="client-actions" style="flex-wrap:wrap;">
+          <button class="ghost small" onclick="changeAdminPass('${user}')">Cambiar clave</button>
+          <button class="ghost small" onclick="togglePause('${user}', ${!!a.paused})">${a.paused ? 'Reactivar' : 'Pausar'}</button>
+          <button class="ghost small" onclick="toggleBlock('${user}', ${!!a.blocked})">${a.blocked ? 'Desbloquear' : 'Bloquear'}</button>
+          <button class="ghost small" style="color:var(--red); border-color:rgba(255,107,107,.4);" onclick="deleteAdmin('${user}')">Eliminar panel</button>
+        </div>
+      </div>
+    `;
+  }
+
+  window.changeAdminPass = async (user) => {
+    const newPass = prompt(`Nueva clave para "${user}":`);
+    if(!newPass) return;
+    await fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(user)}/password.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(newPass)
+    });
+    alert('Clave actualizada.');
+  };
+
+  window.togglePause = async (user, currentlyPaused) => {
+    await fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(user)}/paused.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(!currentlyPaused)
+    });
+    loadAdminsList();
+  };
+
+  window.toggleBlock = async (user, currentlyBlocked) => {
+    await fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(user)}/blocked.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(!currentlyBlocked)
+    });
+    loadAdminsList();
+  };
+
+  window.deleteAdmin = async (user) => {
+    if(!confirm(`¿Eliminar el panel de "${user}" y todos sus clientes? Esto no se puede deshacer.`)) return;
+    await fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(user)}.json`, { method:'DELETE' });
+    loadAdminsList();
+  };
 
   document.getElementById('btnSave').onclick = async () => {
     const code = document.getElementById('fCode').value.trim();
