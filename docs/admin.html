@@ -46,7 +46,7 @@
   .card h2{ font-size:14px; margin:0 0 14px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.04em; }
   label{ display:block; font-size:12px; color:var(--text-dim); margin-bottom:5px; margin-top:12px; }
   label:first-of-type{ margin-top:0; }
-  input{
+  input, select{
     width:100%; background:#0F2536; border:1px solid var(--line); color:var(--text);
     padding:11px 12px; border-radius:9px; font-size:13.5px;
   }
@@ -129,6 +129,24 @@
     <button class="tab" data-tab="expiring">Usuarios por vencer</button>
     <button class="tab" data-tab="expired">Usuarios vencidos</button>
     <button class="tab" data-tab="admins" id="adminsTabBtn" style="display:none">Paneles de administradores</button>
+    <button class="tab" data-tab="servers" id="serversTabBtn" style="display:none">Servidores</button>
+  </div>
+
+  <div class="tab-panel" id="tab-servers" style="display:none">
+    <div class="card">
+      <h2>Agregar servidor</h2>
+      <label>Nombre / etiqueta</label>
+      <input id="newServerLabel" type="text" placeholder="ej: Servidor Principal">
+      <label>URL del servidor</label>
+      <input id="newServerUrl" type="text" placeholder="http://proveedor.ejemplo.com:8080">
+      <button id="btnAddServer">Agregar servidor</button>
+      <p class="msg" id="serverMsg"></p>
+    </div>
+    <div class="card">
+      <h2>Servidores configurados</h2>
+      <button class="ghost small" id="refreshServersBtn">🔄 Actualizar</button>
+      <div id="serversList"></div>
+    </div>
   </div>
 
   <div class="tab-panel" id="tab-admins" style="display:none">
@@ -159,7 +177,9 @@
       <input id="fName" type="text" placeholder="Juan Pérez">
 
       <label>URL del servidor</label>
-      <input id="fServer" type="text" placeholder="http://proveedor.ejemplo.com:8080">
+      <select id="fServer">
+        <option value="">Selecciona un servidor…</option>
+      </select>
 
       <label>Teléfono del cliente (WhatsApp, con código de país)</label>
       <input id="fPhone" type="text" inputmode="tel" placeholder="+56912345678">
@@ -278,11 +298,13 @@
       document.getElementById('panel').style.display = 'block';
       document.getElementById('sessionUser').textContent = user;
       document.getElementById('adminsTabBtn').style.display = (user === SUPER_ADMIN_USER) ? 'inline-block' : 'none';
+      document.getElementById('serversTabBtn').style.display = (user === SUPER_ADMIN_USER) ? 'inline-block' : 'none';
       // Always land on "Activación x código" right after logging in.
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'activate'));
       document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
       document.getElementById('tab-activate').style.display = 'block';
       loadAllLists();
+      loadServerOptions();
     } else {
       gateMsg.style.display = 'block';
       gateMsg.textContent = 'Usuario o clave incorrectos';
@@ -507,6 +529,7 @@
       document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
       document.getElementById('tab-' + tab.dataset.tab).style.display = 'block';
       if(tab.dataset.tab === 'admins') loadAdminsList();
+      else if(tab.dataset.tab === 'servers') loadServersList();
       else if(tab.dataset.tab !== 'activate') loadAllLists();
     };
   });
@@ -662,6 +685,84 @@
       window.scrollTo({ top:0, behavior:'smooth' });
     }catch(err){}
   };
+
+  // ---------- Servers (managed by the super-admin, everyone picks from the list) ----------
+  document.getElementById('btnAddServer').onclick = async () => {
+    if(currentAdminUser !== SUPER_ADMIN_USER){
+      alert('Solo el administrador principal puede agregar servidores.');
+      return;
+    }
+    const label = document.getElementById('newServerLabel').value.trim();
+    const url = document.getElementById('newServerUrl').value.trim();
+    const msg = document.getElementById('serverMsg');
+    if(!label || !url){ msg.textContent = 'Completa nombre y URL.'; msg.className = 'msg err'; return; }
+    msg.textContent = 'Guardando…'; msg.className = 'msg info';
+    try{
+      await fetch(`${FIREBASE_BASE}/servers.json`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ label, url, createdAt: Date.now() })
+      });
+      msg.textContent = '✓ Servidor agregado.'; msg.className = 'msg ok';
+      document.getElementById('newServerLabel').value = '';
+      document.getElementById('newServerUrl').value = '';
+      loadServersList();
+      loadServerOptions();
+    }catch(err){
+      msg.textContent = 'Error: ' + err.message; msg.className = 'msg err';
+    }
+  };
+
+  document.getElementById('refreshServersBtn').onclick = loadServersList;
+
+  async function loadServersList(){
+    const list = document.getElementById('serversList');
+    list.innerHTML = '<p class="msg info">Cargando…</p>';
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/servers.json`);
+      const data = await res.json() || {};
+      const ids = Object.keys(data);
+      if(!ids.length){
+        list.innerHTML = '<p class="empty-msg">Todavía no agregaste ningún servidor.</p>';
+        return;
+      }
+      list.innerHTML = ids.map(id => `
+        <div class="client-card">
+          <div class="client-top">
+            <div class="client-name">${data[id].label}</div>
+          </div>
+          <div class="client-grid">
+            <div style="grid-column:1/-1;"><span>URL</span><b>${data[id].url}</b></div>
+          </div>
+          <div class="client-actions">
+            <button class="ghost small" style="color:var(--red); border-color:rgba(255,107,107,.4);" onclick="deleteServer('${id}')">Eliminar servidor</button>
+          </div>
+        </div>
+      `).join('');
+    }catch(err){
+      list.innerHTML = `<p class="msg err">No se pudo cargar: ${err.message}</p>`;
+    }
+  }
+
+  window.deleteServer = async (id) => {
+    if(currentAdminUser !== SUPER_ADMIN_USER) return;
+    if(!confirm('¿Eliminar este servidor de la lista?')) return;
+    await fetch(`${FIREBASE_BASE}/servers/${id}.json`, { method:'DELETE' });
+    loadServersList();
+    loadServerOptions();
+  };
+
+  async function loadServerOptions(){
+    const select = document.getElementById('fServer');
+    const currentValue = select.value;
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/servers.json`);
+      const data = await res.json() || {};
+      const ids = Object.keys(data);
+      select.innerHTML = '<option value="">Selecciona un servidor…</option>' +
+        ids.map(id => `<option value="${data[id].url}">${data[id].label}</option>`).join('');
+      if(currentValue) select.value = currentValue;
+    }catch(err){}
+  }
 </script>
 </body>
 </html>
