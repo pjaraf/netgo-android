@@ -560,6 +560,56 @@
     position:relative; z-index:1; color:#fff; font-size:13px; margin-top:18px; text-align:center;
   }
   .qr-scan-overlay .qr-close-btn{ position:relative; z-index:1; margin-top:22px; }
+
+  /* ============================================================
+     TV MODE — applied automatically when the app detects it's
+     running on a TV (no touchscreen). Bigger everything, and a
+     visible focus ring for remote-control (D-pad) navigation.
+     ============================================================ */
+
+  /* Works everywhere, phone or TV: only shows when navigating with a
+     keyboard/remote (not on a touch tap), so it's harmless on phones. */
+  .poster-card:focus-visible,
+  .channel-card:focus-visible,
+  .cat:focus-visible,
+  .vivo-cat-item:focus-visible,
+  .vivo-chan-row:focus-visible,
+  .save-btn:focus-visible,
+  .qr-btn:focus-visible,
+  .gear:focus-visible,
+  .start-manual-btn:focus-visible,
+  #channelSearch:focus-visible{
+    outline: 3px solid var(--amber);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px rgba(255,138,61,0.25);
+  }
+  .poster-card:focus-visible, .channel-card:focus-visible{
+    transform: scale(1.06);
+    z-index: 3;
+  }
+
+  body.tv-mode{ font-size:17px; }
+  body.tv-mode .cats{ padding-bottom:14px; }
+  body.tv-mode .cat{ padding:11px 3px; }
+  body.tv-mode .cat .icon{ font-size:25px; }
+  body.tv-mode .cat span{ font-size:14px; }
+  body.tv-mode .row-head h2{ font-size:20px; }
+  body.tv-mode .row-head .count{ font-size:14px; }
+  body.tv-mode .poster-card{ min-width:200px; }
+  body.tv-mode .poster-meta .t{ font-size:16px; }
+  body.tv-mode .poster-meta .s{ font-size:13px; }
+  body.tv-mode .channel-card{ min-width:220px; }
+  body.tv-mode .hero-title, body.tv-mode #heroTitle{ font-size:26px; }
+  body.tv-mode #heroSub{ font-size:15px; }
+  body.tv-mode .searchbar input{ font-size:17px; }
+  body.tv-mode .searchbar{ padding:15px 16px; }
+  body.tv-mode .vivo-cat-item{ font-size:15px; padding:14px 12px; }
+  body.tv-mode .vivo-chan-row .name{ font-size:16px; }
+  body.tv-mode .vivo-chan-row{ padding:14px 16px; }
+  body.tv-mode .brand span{ font-size:20px; }
+  body.tv-mode .sd-title{ font-size:26px; }
+  body.tv-mode .sd-episode-row{ padding:14px; }
+  body.tv-mode .sd-ep-title{ font-size:16px; }
 </style>
 </head>
 <body>
@@ -640,11 +690,11 @@
 </div>
 
 <div class="cats">
-  <div class="cat" data-cat="vivo"><div class="icon">📡</div><span>Vivo</span></div>
-  <div class="cat" data-cat="series"><div class="icon">📺</div><span>Series</span></div>
-  <div class="cat active" data-cat="peliculas"><div class="icon">🎬</div><span>Películas</span></div>
-  <div class="cat" data-cat="anime"><div class="icon">🎌</div><span>Anime</span></div>
-  <div class="cat" data-cat="kids"><div class="icon">🧒</div><span>Kids</span></div>
+  <div class="cat" tabindex="0" data-cat="vivo"><div class="icon">📡</div><span>Vivo</span></div>
+  <div class="cat" tabindex="0" data-cat="series"><div class="icon">📺</div><span>Series</span></div>
+  <div class="cat active" tabindex="0" data-cat="peliculas"><div class="icon">🎬</div><span>Películas</span></div>
+  <div class="cat" tabindex="0" data-cat="anime"><div class="icon">🎌</div><span>Anime</span></div>
+  <div class="cat" tabindex="0" data-cat="kids"><div class="icon">🧒</div><span>Kids</span></div>
 </div>
 
 
@@ -770,6 +820,31 @@
 
 <script>
   // ============================================================
+  //  TV MODE — detect Android TV / Google TV (no touchscreen) and
+  //  adapt the UI: bigger sizing, visible remote-control focus rings,
+  //  fullscreen playback instead of the touch-gesture inline player.
+  // ============================================================
+  function isTV(){
+    const noTouch = !('ontouchstart' in window) && (navigator.maxTouchPoints || 0) === 0;
+    const wideAspect = window.innerWidth > window.innerHeight * 1.2;
+    return noTouch || wideAspect;
+  }
+  if(isTV()) document.body.classList.add('tv-mode');
+
+  // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
+  // Plain <div tabindex="0"> elements don't auto-click on Enter like
+  // buttons/links do, so we do it ourselves for our interactive cards.
+  document.addEventListener('keydown', (e) => {
+    if(e.key !== 'Enter' && e.key !== ' ') return;
+    const el = document.activeElement;
+    if(!el) return;
+    if(el.matches('.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle]')){
+      e.preventDefault();
+      el.click();
+    }
+  });
+
+  // ============================================================
   //  DEMO CATALOG — shown until you connect a real provider below
   // ============================================================
   const demoData = {
@@ -836,7 +911,7 @@
     const art = m.img
       ? `<img class="poster-cover-img" src="${m.img}" loading="lazy" onerror="this.style.display='none'">`
       : `<div class="poster-art">${m.icon||'🎬'}</div>`;
-    return `<div class="poster-card" data-kind="${m.kind||''}" data-url="${m.url||''}" data-sid="${m.series_id||''}" data-title="${m.t}">
+    return `<div class="poster-card" tabindex="0" data-kind="${m.kind||''}" data-url="${m.url||''}" data-sid="${m.series_id||''}" data-title="${m.t}">
       ${art}
       <div class="poster-badge mono">${m.badge||'HD'}</div>
       <div class="poster-rating mono">★ ${m.r||'—'}</div>
@@ -848,7 +923,7 @@
     const art = c.img
       ? `<img class="channel-cover-img" src="${c.img}" loading="lazy" onerror="this.style.display='none'">`
       : c.icon||'📡';
-    return `<div class="channel-card" data-kind="live" data-url="${c.url||''}" data-title="${c.t}">
+    return `<div class="channel-card" tabindex="0" data-kind="live" data-url="${c.url||''}" data-title="${c.t}">
       <div class="channel-thumb" style="background:${c.grad||'linear-gradient(155deg,#123,#456)'}">
         ${art}
         <div class="channel-live mono"><span class="live-dot"></span>EN VIVO</div>
@@ -907,7 +982,7 @@
     const fav = isFavorite(c.url);
     const art = c.img ? `<img src="${c.img}" loading="lazy" onerror="this.style.display='none'">` : (c.icon || '📡');
     const activeCls = c.url === activeChannelUrl ? ' active' : '';
-    return `<div class="vivo-chan-row${activeCls}" data-url="${c.url}" data-title="${c.t}" data-num="${c.num||''}" data-img="${c.img||''}">
+    return `<div class="vivo-chan-row${activeCls}" tabindex="0" data-url="${c.url}" data-title="${c.t}" data-num="${c.num||''}" data-img="${c.img||''}">
       <div class="vivo-chan-logo">${art}</div>
       <div class="vivo-chan-num">${c.num||''}</div>
       <div class="vivo-chan-name">${c.t}</div>
@@ -939,7 +1014,7 @@
     if(vivoActiveCatIndex >= d.rows.length) vivoActiveCatIndex = 0;
 
     sidebar.innerHTML = d.rows.map((row, i) => `
-      <div class="vivo-cat-item${i === vivoActiveCatIndex ? ' active' : ''}" data-idx="${i}">${row.title}</div>
+      <div class="vivo-cat-item${i === vivoActiveCatIndex ? ' active' : ''}" tabindex="0" data-idx="${i}">${row.title}</div>
     `).join('');
 
     const activeRow = d.rows[vivoActiveCatIndex];
@@ -1162,9 +1237,16 @@
 
   // queue: [{url, title}, ...]  — a movie/channel is a queue of 1; a series is
   // every episode in order, so the native player can auto-advance through it.
-  // Native overlay player renders on top of the WebView, positioned over the hero box.
+  // On TV (no touchscreen / remote control) we use the fullscreen native
+  // player, since the inline player's swipe/tap gestures need a finger on
+  // the screen. On phones we keep the inline overlay player.
   function playQueue(queue, startIndex, fallbackTitle, kind){
     if(!queue || !queue.length) return;
+    if(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
+      window.Capacitor.Plugins.VlcPlayer.play({ queue, startIndex: startIndex || 0 })
+        .catch(err => console.error('VlcPlayer error:', err));
+      return;
+    }
     playInline(queue, startIndex || 0, kind);
   }
   function closePlayer(){
