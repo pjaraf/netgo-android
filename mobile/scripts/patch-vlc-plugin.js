@@ -55,4 +55,18 @@ if (!gradle.includes('libvlc-all')) {
   fs.writeFileSync(gradlePath, gradle);
 }
 
+// 5) The Cast SDK requires minSdkVersion 23+ (Android 6.0). Capacitor's
+// default template project uses 22 — bump it so the manifest merge doesn't
+// fail. Every target device here (phones, Google TV, Android TV boxes) is
+// comfortably newer than Android 6.0, so this drops no real support.
+const variablesPath = path.join(projectRoot, 'android', 'variables.gradle');
+if (fs.existsSync(variablesPath)) {
+  let variables = fs.readFileSync(variablesPath, 'utf8');
+  const bumped = variables.replace(/minSdkVersion\s*=\s*\d+/, 'minSdkVersion = 23');
+  if (bumped !== variables) {
+    fs.writeFileSync(variablesPath, bumped);
+    console.log('✓ minSdkVersion bumped to 23 (required by the Cast SDK).');
+  }
+}
+
 console.log('✓ Native libVLC player plugin installed (package: ' + appId + ').');
