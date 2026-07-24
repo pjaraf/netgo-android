@@ -282,6 +282,10 @@
 
   // ---------- Create a panel (account) for someone else — super-admin only ----------
   document.getElementById('btnCreateAdmin').onclick = async () => {
+    if(currentAdminUser !== SUPER_ADMIN_USER){
+      alert('Solo el administrador principal puede crear paneles.');
+      return;
+    }
     const newUser = document.getElementById('newAdminUser').value.trim();
     const newPass = document.getElementById('newAdminPass').value.trim();
     const msg = document.getElementById('adminMsg');
