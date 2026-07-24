@@ -529,6 +529,16 @@
     margin-top:8px;
   }
   #pinOverlay{ z-index:210; }
+
+  .account-icon{ font-size:34px; margin-bottom:6px; }
+  .account-title{ color:#0B1B26; font-size:16px; margin:0 0 16px; }
+  .account-rows{ width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:18px; }
+  .account-row{
+    display:flex; justify-content:space-between; align-items:center; gap:12px;
+    padding-bottom:10px; border-bottom:1px solid rgba(11,27,38,0.1);
+  }
+  .account-row span{ color:#5A6B78; font-size:12.5px; }
+  .account-row b{ color:#0B1B26; font-size:13.5px; text-align:right; }
   .qr-btn{
     flex:1; background:var(--card); border:1px solid var(--line); color:var(--text);
     font-family:'Inter'; font-weight:600; font-size:12.5px; padding:11px 8px; border-radius:9px;
@@ -894,6 +904,20 @@
     <p class="qr-hint" id="pinError" style="color:#FF6B6B; display:none">Clave incorrecta</p>
     <button class="qr-close-btn" id="pinSubmit">Entrar</button>
     <button class="qr-close-btn qr-close-btn-ghost" id="pinCancel">Cancelar</button>
+  </div>
+</div>
+
+<!-- Account info panel (opened from the gear icon) -->
+<div class="qr-overlay" id="accountInfoOverlay" style="display:none">
+  <div class="qr-card">
+    <div class="account-icon">👤</div>
+    <h3 class="account-title">Tu cuenta</h3>
+    <div class="account-rows">
+      <div class="account-row"><span>Usuario</span><b id="accInfoUser">—</b></div>
+      <div class="account-row"><span>Conexiones máximas</span><b id="accInfoMaxConn">—</b></div>
+      <div class="account-row"><span>Vence el</span><b id="accInfoExpiry">—</b></div>
+    </div>
+    <button class="qr-close-btn" id="accountInfoClose">Cerrar</button>
   </div>
 </div>
 
@@ -1802,8 +1826,45 @@
   tick(); setInterval(tick, 1000 * 30);
 
   const overlay = document.getElementById('overlay');
-  document.getElementById('openSettings').onclick = () => { showStartScreenPairing(); };
-  document.getElementById('openSettingsTV').onclick = () => { showStartScreenPairing(); };
+  async function showAccountInfo(){
+    const overlay = document.getElementById('accountInfoOverlay');
+    const userEl = document.getElementById('accInfoUser');
+    const maxConnEl = document.getElementById('accInfoMaxConn');
+    const expiryEl = document.getElementById('accInfoExpiry');
+    userEl.textContent = 'Cargando…';
+    maxConnEl.textContent = '—';
+    expiryEl.textContent = '—';
+    overlay.style.display = 'flex';
+
+    const conn = getConn();
+    if(!conn || conn.type !== 'xtream'){
+      userEl.textContent = 'Sin proveedor conectado';
+      return;
+    }
+    try{
+      const base = conn.server.replace(/\/+$/,'');
+      const url = `${base}/player_api.php?username=${encodeURIComponent(conn.username)}&password=${encodeURIComponent(conn.password)}`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const info = data.user_info || {};
+      userEl.textContent = info.username || conn.username;
+      maxConnEl.textContent = info.max_connections || '—';
+      if(info.exp_date){
+        const d = new Date(parseInt(info.exp_date, 10) * 1000);
+        expiryEl.textContent = d.toLocaleDateString('es-ES', { year:'numeric', month:'long', day:'numeric' });
+      } else {
+        expiryEl.textContent = 'Sin vencimiento';
+      }
+    }catch(err){
+      userEl.textContent = 'No se pudo obtener la información';
+    }
+  }
+  document.getElementById('accountInfoClose').onclick = () => {
+    document.getElementById('accountInfoOverlay').style.display = 'none';
+  };
+  document.getElementById('openSettings').onclick = () => { showAccountInfo(); };
+  document.getElementById('openSettingsTV').onclick = () => { showAccountInfo(); };
   document.getElementById('heroConnect').onclick = () => overlay.classList.add('open');
   document.getElementById('closeSettings').onclick = () => overlay.classList.remove('open');
   overlay.onclick = (e) => { if(e.target === overlay) overlay.classList.remove('open'); };
