@@ -610,6 +610,19 @@
   body.tv-mode .sd-title{ font-size:26px; }
   body.tv-mode .sd-episode-row{ padding:14px; }
   body.tv-mode .sd-ep-title{ font-size:16px; }
+
+  /* Blur (backdrop-filter) is very GPU-expensive on weak TV hardware —
+     disable it in TV mode; the semi-opaque backgrounds still read fine
+     without it, just slightly less "glassy". */
+  body.tv-mode *{ backdrop-filter: none !important; }
+
+  /* Scale+transition on focus costs a compositor pass every time you move
+     the D-pad — on TV, use a cheap outline-only highlight instead so
+     navigation feels instant rather than slightly janky. */
+  body.tv-mode .poster-card, body.tv-mode .channel-card{ transition:none; }
+  body.tv-mode .poster-card:focus-visible, body.tv-mode .channel-card:focus-visible{
+    transform:none;
+  }
 </style>
 </head>
 <body>
@@ -1013,8 +1026,10 @@
     </div>`;
   }
 
+  let renderGen = 0;
   function renderCategory(cat){
     currentCat = cat;
+    const myGen = ++renderGen;
     const rowsContainer = document.getElementById('rowsContainer');
     const vivoView = document.getElementById('vivoView');
 
@@ -1032,12 +1047,32 @@
       rowsContainer.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">Tu proveedor no tiene contenido en esta categoría</div></div></section>`;
       return;
     }
-    rowsContainer.innerHTML = d.rows.map(row => `
-      <section class="row">
-        <div class="row-head"><h2>${row.title}</h2><span class="count mono">${row.items.length} ${d.type === 'channel' ? 'canales' : 'títulos'}</span></div>
-        <div class="row-scroll">${row.items.map(d.type === 'channel' ? channelCard : posterCard).join('')}</div>
-      </section>
-    `).join('');
+
+    // Build rows progressively across animation frames instead of one giant
+    // innerHTML write — with many categories this kept the main thread busy
+    // long enough to feel like a freeze, especially on weaker TV hardware.
+    rowsContainer.innerHTML = '';
+    const rows = d.rows;
+    const chunkSize = isTV() ? 2 : 5;
+    let i = 0;
+    function renderChunk(){
+      if(myGen !== renderGen) return; // a newer render started — abandon this one
+      const frag = document.createDocumentFragment();
+      const end = Math.min(i + chunkSize, rows.length);
+      for(; i < end; i++){
+        const row = rows[i];
+        const section = document.createElement('section');
+        section.className = 'row';
+        section.innerHTML = `
+          <div class="row-head"><h2>${row.title}</h2><span class="count mono">${row.items.length} ${d.type === 'channel' ? 'canales' : 'títulos'}</span></div>
+          <div class="row-scroll">${row.items.map(d.type === 'channel' ? channelCard : posterCard).join('')}</div>
+        `;
+        frag.appendChild(section);
+      }
+      rowsContainer.appendChild(frag);
+      if(i < rows.length) requestAnimationFrame(renderChunk);
+    }
+    requestAnimationFrame(renderChunk);
   }
 
   // ============================================================
@@ -1390,7 +1425,7 @@
     } finally { clearTimeout(timeout); }
   }
 
-  function groupByCategory(items, categories, maxItemsPerRow=(isTV() ? 12 : 20)){
+  function groupByCategory(items, categories, maxItemsPerRow=(isTV() ? 10 : 20)){
     const byCat = {};
     items.forEach(it => {
       const cid = it.category_id;
@@ -1407,7 +1442,7 @@
     return rows;
   }
 
-  function categoriesByKeyword(items, categories, regex, maxItemsPerRow=(isTV() ? 12 : 20)){
+  function categoriesByKeyword(items, categories, regex, maxItemsPerRow=(isTV() ? 10 : 20)){
     const matched = (categories||[]).filter(c => regex.test(c.category_name));
     return groupByCategory(items, matched, maxItemsPerRow);
   }
