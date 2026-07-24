@@ -612,15 +612,24 @@
   }
 
   window.toggleClientPause = async (code, currentlyPaused) => {
+    const nowPaused = !currentlyPaused;
     await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}/paused.json`, {
-      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(!currentlyPaused)
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(nowPaused)
+    });
+    // This is the path the client app actually checks to lock/unlock itself.
+    await fetch(`${FIREBASE_BASE}/status/${code}.json`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ paused: nowPaused })
     });
     loadAllLists();
   };
 
   window.toggleClientBlock = async (code, currentlyBlocked) => {
+    const nowBlocked = !currentlyBlocked;
     await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}/blocked.json`, {
-      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(!currentlyBlocked)
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(nowBlocked)
+    });
+    await fetch(`${FIREBASE_BASE}/status/${code}.json`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ blocked: nowBlocked })
     });
     loadAllLists();
   };
@@ -628,6 +637,10 @@
   window.deleteClient = async (code, name) => {
     if(!confirm(`¿Eliminar al cliente "${name || code}"? Esto no se puede deshacer.`)) return;
     await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, { method:'DELETE' });
+    // Lock the client's app out too, since their record no longer exists.
+    await fetch(`${FIREBASE_BASE}/status/${code}.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ blocked:true })
+    });
     loadAllLists();
   };
 
