@@ -77,6 +77,23 @@
   .client-actions{ display:flex; gap:8px; margin-top:12px; }
   #refreshBtn{ margin-bottom:14px; }
   #clientsEmpty{ color:var(--text-dim); font-size:13px; text-align:center; padding:20px; }
+
+  .tabs{
+    display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; margin-bottom:16px;
+  }
+  .tab{
+    flex:0 0 auto; background:var(--card); border:1px solid var(--line); color:var(--text-dim);
+    font-size:12.5px; font-weight:600; padding:10px 14px; border-radius:999px; cursor:pointer;
+    white-space:nowrap; width:auto; margin-top:0;
+  }
+  .tab.active{ background:var(--amber); color:#1A0E00; border-color:var(--amber); }
+  .tab-hint{ color:var(--text-dim); font-size:11.5px; margin:-8px 0 12px; }
+  .count-pill{
+    display:inline-block; background:rgba(255,138,61,.18); color:var(--amber);
+    font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; margin-left:6px;
+    text-transform:none; letter-spacing:0;
+  }
+  .empty-msg{ color:var(--text-dim); font-size:13px; text-align:center; padding:20px; }
 </style>
 </head>
 <body>
@@ -97,49 +114,90 @@
     <h1>Panel de administrador — NetGo</h1>
   </div>
 
-  <div class="card">
-    <h2 id="formTitle">Agregar / actualizar cliente</h2>
-    <label>Código del cliente</label>
-    <input id="fCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456">
-
-    <label>Nombre del cliente</label>
-    <input id="fName" type="text" placeholder="Juan Pérez">
-
-    <label>URL del servidor</label>
-    <input id="fServer" type="text" placeholder="http://proveedor.ejemplo.com:8080">
-
-    <div class="row2">
-      <div>
-        <label>Usuario</label>
-        <input id="fUser" type="text" placeholder="usuario">
-      </div>
-      <div>
-        <label>Contraseña</label>
-        <input id="fPass" type="text" placeholder="••••••••">
-      </div>
-    </div>
-
-    <div class="row2">
-      <div>
-        <label>Valor del plan</label>
-        <input id="fPlanValue" type="text" placeholder="$10.000">
-      </div>
-      <div>
-        <label>Fecha de vencimiento</label>
-        <input id="fExpiry" type="date">
-      </div>
-    </div>
-
-    <button id="btnSave">Guardar y enviar al cliente</button>
-    <button class="ghost" id="btnClear">Limpiar formulario</button>
-    <p class="msg" id="formMsg"></p>
+  <div class="tabs">
+    <button class="tab active" data-tab="activate">Activación x código</button>
+    <button class="tab" data-tab="new">Usuarios nuevos</button>
+    <button class="tab" data-tab="active">Usuarios activos</button>
+    <button class="tab" data-tab="expiring">Usuarios por vencer</button>
+    <button class="tab" data-tab="expired">Usuarios vencidos</button>
   </div>
 
-  <div class="card">
-    <h2>Clientes</h2>
-    <button class="ghost small" id="refreshBtn">🔄 Actualizar lista</button>
-    <div id="clientsList"></div>
-    <p id="clientsEmpty" style="display:none">Todavía no hay clientes guardados.</p>
+  <div class="tab-panel" id="tab-activate">
+    <div class="card">
+      <h2 id="formTitle">Agregar / actualizar cliente</h2>
+      <label>Código del cliente</label>
+      <input id="fCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456">
+
+      <label>Nombre del cliente</label>
+      <input id="fName" type="text" placeholder="Juan Pérez">
+
+      <label>URL del servidor</label>
+      <input id="fServer" type="text" placeholder="http://proveedor.ejemplo.com:8080">
+
+      <div class="row2">
+        <div>
+          <label>Usuario</label>
+          <input id="fUser" type="text" placeholder="usuario">
+        </div>
+        <div>
+          <label>Contraseña</label>
+          <input id="fPass" type="text" placeholder="••••••••">
+        </div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label>Valor del plan</label>
+          <input id="fPlanValue" type="text" placeholder="$10.000">
+        </div>
+        <div>
+          <label>Fecha de vencimiento</label>
+          <input id="fExpiry" type="date">
+        </div>
+      </div>
+
+      <button id="btnSave">Guardar y enviar al cliente</button>
+      <button class="ghost" id="btnClear">Limpiar formulario</button>
+      <p class="msg" id="formMsg"></p>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-new" style="display:none">
+    <div class="card">
+      <h2>Usuarios nuevos <span class="count-pill" id="countNew"></span></h2>
+      <p class="tab-hint">Creados en los últimos 7 días.</p>
+      <button class="ghost small" id="refreshBtnNew">🔄 Actualizar</button>
+      <div id="listNew"></div>
+      <p class="empty-msg" id="emptyNew" style="display:none">No hay usuarios nuevos.</p>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-active" style="display:none">
+    <div class="card">
+      <h2>Usuarios activos <span class="count-pill" id="countActive"></span></h2>
+      <button class="ghost small" id="refreshBtnActive">🔄 Actualizar</button>
+      <div id="listActive"></div>
+      <p class="empty-msg" id="emptyActive" style="display:none">No hay usuarios activos.</p>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-expiring" style="display:none">
+    <div class="card">
+      <h2>Usuarios por vencer <span class="count-pill" id="countExpiring"></span></h2>
+      <p class="tab-hint">Vencen dentro de los próximos 7 días.</p>
+      <button class="ghost small" id="refreshBtnExpiring">🔄 Actualizar</button>
+      <div id="listExpiring"></div>
+      <p class="empty-msg" id="emptyExpiring" style="display:none">No hay usuarios por vencer.</p>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-expired" style="display:none">
+    <div class="card">
+      <h2>Usuarios vencidos <span class="count-pill" id="countExpired"></span></h2>
+      <button class="ghost small" id="refreshBtnExpired">🔄 Actualizar</button>
+      <div id="listExpired"></div>
+      <p class="empty-msg" id="emptyExpired" style="display:none">No hay usuarios vencidos.</p>
+    </div>
   </div>
 </div>
 
@@ -152,7 +210,7 @@
     if(val === ADMIN_PASSWORD){
       document.getElementById('gate').style.display = 'none';
       document.getElementById('panel').style.display = 'block';
-      loadClients();
+      loadAllLists();
     } else {
       document.getElementById('gateMsg').style.display = 'block';
     }
@@ -193,7 +251,7 @@
       });
 
       showFormMsg('✓ Guardado y enviado al cliente.', 'ok');
-      loadClients();
+      loadAllLists();
     }catch(err){
       showFormMsg('Error: ' + err.message, 'err');
     }
@@ -211,26 +269,70 @@
     msg.className = 'msg ' + type;
   }
 
-  document.getElementById('refreshBtn').onclick = loadClients;
+  // ---------- Tabs ----------
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+      document.getElementById('tab-' + tab.dataset.tab).style.display = 'block';
+      if(tab.dataset.tab !== 'activate') loadAllLists();
+    };
+  });
+  function switchToActivateTab(){
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'activate'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+    document.getElementById('tab-activate').style.display = 'block';
+  }
 
-  async function loadClients(){
-    const list = document.getElementById('clientsList');
-    const empty = document.getElementById('clientsEmpty');
-    list.innerHTML = '<p class="msg info">Cargando…</p>';
+  ['refreshBtnNew','refreshBtnActive','refreshBtnExpiring','refreshBtnExpired'].forEach(id => {
+    document.getElementById(id).onclick = loadAllLists;
+  });
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  async function loadAllLists(){
     try{
       const res = await fetch(`${FIREBASE_BASE}/clients.json`);
-      const data = await res.json();
-      if(!data){
-        list.innerHTML = '';
-        empty.style.display = 'block';
-        return;
-      }
-      empty.style.display = 'none';
-      const codes = Object.keys(data).sort((a,b) => (data[b].updatedAt||0) - (data[a].updatedAt||0));
-      list.innerHTML = codes.map(code => clientCardHtml(code, data[code])).join('');
+      const data = await res.json() || {};
+      const codes = Object.keys(data);
+      const now = Date.now();
+      const today = new Date().toISOString().slice(0,10);
+      const in7days = new Date(now + 7*DAY_MS).toISOString().slice(0,10);
+      const sevenDaysAgo = now - 7*DAY_MS;
+
+      const newOnes = codes.filter(c => (data[c].createdAt||0) >= sevenDaysAgo)
+        .sort((a,b) => (data[b].createdAt||0) - (data[a].createdAt||0));
+      const active = codes.filter(c => data[c].expiry && data[c].expiry >= today)
+        .sort((a,b) => (data[a].expiry||'').localeCompare(data[b].expiry||''));
+      const expiring = codes.filter(c => data[c].expiry && data[c].expiry >= today && data[c].expiry <= in7days)
+        .sort((a,b) => (data[a].expiry||'').localeCompare(data[b].expiry||''));
+      const expired = codes.filter(c => data[c].expiry && data[c].expiry < today)
+        .sort((a,b) => (data[b].expiry||'').localeCompare(data[a].expiry||''));
+
+      renderList('New', newOnes, data);
+      renderList('Active', active, data);
+      renderList('Expiring', expiring, data);
+      renderList('Expired', expired, data);
     }catch(err){
-      list.innerHTML = `<p class="msg err">No se pudo cargar la lista: ${err.message}</p>`;
+      ['New','Active','Expiring','Expired'].forEach(k => {
+        document.getElementById('list' + k).innerHTML = `<p class="msg err">No se pudo cargar: ${err.message}</p>`;
+      });
     }
+  }
+
+  function renderList(key, codes, data){
+    const list = document.getElementById('list' + key);
+    const empty = document.getElementById('empty' + key);
+    const count = document.getElementById('count' + key);
+    count.textContent = codes.length;
+    if(!codes.length){
+      list.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    list.innerHTML = codes.map(code => clientCardHtml(code, data[code])).join('');
   }
 
   function statusBadge(expiry){
@@ -284,6 +386,7 @@
       document.getElementById('fPlanValue').value = c.planValue || '';
       document.getElementById('fExpiry').value = c.expiry || '';
       document.getElementById('formTitle').textContent = 'Editando: ' + (c.name || code);
+      switchToActivateTab();
       window.scrollTo({ top:0, behavior:'smooth' });
     }catch(err){}
   };
