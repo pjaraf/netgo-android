@@ -400,6 +400,21 @@
     loadAdminsList();
   };
 
+  async function fetchProviderInfo(server, username, password){
+    const base = server.replace(/\/+$/,'');
+    const url = `${base}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const info = data.user_info || {};
+    let expiry = '';
+    if(info.exp_date){
+      const d = new Date(parseInt(info.exp_date, 10) * 1000);
+      expiry = d.toISOString().slice(0,10); // YYYY-MM-DD, matches the date input
+    }
+    return { expiry, maxConnections: info.max_connections || '' };
+  }
+
   document.getElementById('btnSave').onclick = async () => {
     const code = document.getElementById('fCode').value.trim();
     const name = document.getElementById('fName').value.trim();
@@ -408,10 +423,24 @@
     const username = document.getElementById('fUser').value.trim();
     const password = document.getElementById('fPass').value.trim();
     const planValue = document.getElementById('fPlanValue').value.trim();
-    const expiry = document.getElementById('fExpiry').value;
+    let expiry = document.getElementById('fExpiry').value;
 
     if(!code || code.length < 4){ showFormMsg('Escribe el código del cliente.', 'err'); return; }
     if(!server || !username || !password){ showFormMsg('Completa URL, usuario y contraseña.', 'err'); return; }
+
+    showFormMsg('Consultando datos reales del proveedor…', 'info');
+    let maxConnections = '';
+    try{
+      const info = await fetchProviderInfo(server, username, password);
+      if(info.expiry){
+        expiry = info.expiry;
+        document.getElementById('fExpiry').value = expiry; // reflect the real date in the form too
+      }
+      maxConnections = info.maxConnections;
+    }catch(e){
+      // Couldn't reach the provider right now — fall back to whatever
+      // date was typed manually (if any) instead of blocking the save.
+    }
 
     showFormMsg('Guardando…', 'info');
     try{
@@ -422,7 +451,7 @@
         if(existing && existing.createdAt) createdAt = existing.createdAt;
       }catch(e){}
 
-      const record = { name, server, phone, username, password, planValue, expiry, createdAt, updatedAt: Date.now() };
+      const record = { name, server, phone, username, password, planValue, expiry, maxConnections, createdAt, updatedAt: Date.now() };
 
       await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, {
         method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(record)
@@ -445,11 +474,9 @@
           '',
           `📺 Usuario: ${username}`,
           `🔑 Contraseña: ${password}`,
-          `🌐 Servidor: ${server}`,
+          `🔢 Conexiones máximas: ${maxConnections || '—'}`,
+          `📅 Vence: ${expiry || '—'}`,
         ];
-        if(planValue) lines.push(`💳 Valor del plan: ${planValue}`);
-        if(expiry) lines.push(`📅 Vence: ${expiry}`);
-        lines.push('', '¡Gracias por tu confianza!');
         const waText = encodeURIComponent(lines.join('\n'));
         window.open(`https://wa.me/${digits}?text=${waText}`, '_blank');
       }
@@ -539,10 +566,12 @@
     list.innerHTML = codes.map(code => clientCardHtml(code, data[code])).join('');
   }
 
-  function statusBadge(expiry){
-    if(!expiry) return '<span class="badge unknown">Sin fecha</span>';
+  function statusBadge(c){
+    if(c.blocked) return '<span class="badge expired">Bloqueado</span>';
+    if(c.paused) return '<span class="badge unknown">Pausado</span>';
+    if(!c.expiry) return '<span class="badge unknown">Sin fecha</span>';
     const today = new Date().toISOString().slice(0,10);
-    return expiry >= today
+    return c.expiry >= today
       ? '<span class="badge active">Activo</span>'
       : '<span class="badge expired">Vencido</span>';
   }
@@ -560,23 +589,47 @@
             <div class="client-name">${c.name || '(sin nombre)'}</div>
             <div class="client-code">Código: ${code}</div>
           </div>
-          ${statusBadge(c.expiry)}
+          ${statusBadge(c)}
         </div>
         <div class="client-grid">
           <div><span>Teléfono</span><b>${c.phone || '—'}</b></div>
           <div><span>Usuario</span><b>${c.username || '—'}</b></div>
           <div><span>Contraseña</span><b>${c.password || '—'}</b></div>
+          <div><span>Conexiones máximas</span><b>${c.maxConnections || '—'}</b></div>
           <div><span>URL</span><b>${c.server || '—'}</b></div>
           <div><span>Valor del plan</span><b>${c.planValue || '—'}</b></div>
           <div><span>Creado</span><b>${fmtDate(c.createdAt)}</b></div>
           <div><span>Vence</span><b>${c.expiry || '—'}</b></div>
         </div>
-        <div class="client-actions">
+        <div class="client-actions" style="flex-wrap:wrap;">
           <button class="ghost small" onclick="editClient('${code}')">Editar</button>
+          <button class="ghost small" onclick="toggleClientPause('${code}', ${!!c.paused})">${c.paused ? 'Reactivar' : 'Pausar'}</button>
+          <button class="ghost small" onclick="toggleClientBlock('${code}', ${!!c.blocked})">${c.blocked ? 'Desbloquear' : 'Bloquear'}</button>
+          <button class="ghost small" style="color:var(--red); border-color:rgba(255,107,107,.4);" onclick="deleteClient('${code}', '${(c.name||'').replace(/'/g,"")}')">Eliminar cliente</button>
         </div>
       </div>
     `;
   }
+
+  window.toggleClientPause = async (code, currentlyPaused) => {
+    await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}/paused.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(!currentlyPaused)
+    });
+    loadAllLists();
+  };
+
+  window.toggleClientBlock = async (code, currentlyBlocked) => {
+    await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}/blocked.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(!currentlyBlocked)
+    });
+    loadAllLists();
+  };
+
+  window.deleteClient = async (code, name) => {
+    if(!confirm(`¿Eliminar al cliente "${name || code}"? Esto no se puede deshacer.`)) return;
+    await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, { method:'DELETE' });
+    loadAllLists();
+  };
 
   window.editClient = async (code) => {
     try{
