@@ -34,6 +34,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Use a fixed debug signing key (so updates install over old versions)
+        working-directory: .
+        run: |
+          mkdir -p ~/.android
+          cp mobile/keystore/debug.keystore ~/.android/debug.keystore
+
       - name: Stamp app version (for the in-app update checker)
         run: node scripts/patch-version.js
         env:
