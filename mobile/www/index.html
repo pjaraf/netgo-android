@@ -731,6 +731,10 @@
      of the screen — logo/status on top area instead, tabs+icons along
      the bottom edge. Phones are completely untouched. */
   body.tv-mode{ padding-left:0; padding-top:0; padding-bottom:96px; }
+  /* Bottom bar only shows on the TV home screen — hidden everywhere else,
+     with content reclaiming that space. Back button returns to home. */
+  body.tv-mode.tv-hide-navbar{ padding-bottom:0; }
+  body.tv-mode.tv-hide-navbar .cats{ display:none; }
   body.tv-mode .cats{
     left:0; right:0; top:auto; bottom:0; width:auto; height:96px;
     flex-direction:row; justify-content:flex-start; align-items:center;
@@ -1229,6 +1233,8 @@
     const myGen = ++renderGen;
     const rowsContainer = document.getElementById('rowsContainer');
     const vivoView = document.getElementById('vivoView');
+
+    if(isTV()) document.body.classList.toggle('tv-hide-navbar', cat !== 'vivo');
 
     if(cat === 'vivo'){
       rowsContainer.style.display = 'none';
@@ -2162,6 +2168,18 @@
   } else {
     renderCategory('peliculas');
   }
+
+  // Called from the native side when the remote's Back button is pressed —
+  // if we're anywhere other than the TV home screen, go back there instead
+  // of exiting the app. Returns true if it handled the press.
+  window.handleTVBack = function(){
+    if(isTV() && currentCat !== 'vivo'){
+      document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.toggle('active', c.dataset.cat === 'vivo'));
+      renderCategory('vivo');
+      return true;
+    }
+    return false;
+  };
 
   // ---------- Update checker ----------
   const UPDATE_INFO_URL = 'https://pjaraf.github.io/netgo-android/version.json';
