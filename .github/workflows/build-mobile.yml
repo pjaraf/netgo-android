@@ -57,6 +57,9 @@ jobs:
       - name: Set up direct in-app update installer (FileProvider)
         run: node scripts/patch-update-installer.js
 
+      - name: Split the build into one small APK per CPU architecture
+        run: node scripts/patch-abi-splits.js
+
       - name: Generate app icons and TV banner (all densities)
         run: node scripts/generate-icons.js
 
@@ -85,18 +88,22 @@ jobs:
         working-directory: mobile/android
         run: ./gradlew assembleDebug
 
-      - name: Upload APK (build artifact)
+      - name: Keep the stable "app-debug.apk" name pointing at the universal build
+        working-directory: mobile/android/app/build/outputs/apk/debug
+        run: cp app-universal-debug.apk app-debug.apk
+
+      - name: Upload APKs (build artifact)
         uses: actions/upload-artifact@v4
         with:
           name: netgo-mobile-debug-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
 
-      - name: Publish APK as a GitHub Release (stable public download link)
+      - name: Publish APKs as a GitHub Release (stable public download links)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
           name: NetGo build ${{ github.run_number }}
-          files: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          files: mobile/android/app/build/outputs/apk/debug/*.apk
           make_latest: true
 
       - name: Publish version.json (so the app can detect this update)
