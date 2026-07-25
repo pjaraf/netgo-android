@@ -49,4 +49,14 @@ public class MainActivity extends BridgeActivity {
             // Device without Google Play Services / Cast support — safe to ignore.
         }
     }
+
+    @Override
+    public void onBackPressed() {
+        // The inline video player has no visible close button anymore, so
+        // the phone's back button/gesture is now the only way to close it.
+        if (InlineVlcPlayerPlugin.handleBackPress()) {
+            return;
+        }
+        super.onBackPressed();
+    }
 }
