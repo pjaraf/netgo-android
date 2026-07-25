@@ -161,6 +161,14 @@
     padding:7px 14px; border-radius:7px; cursor:pointer;
   }
   .update-banner-close{ cursor:pointer; opacity:.7; padding:2px 4px; }
+  .update-progress-track{
+    width:70px; height:5px; border-radius:999px; background:rgba(26,14,0,0.25);
+    overflow:hidden; flex-shrink:0;
+  }
+  .update-progress-fill{
+    height:100%; width:0%; background:#1A0E00; border-radius:999px;
+    transition:width .15s linear;
+  }
 
   /* ---------- Search bar ---------- */
   .searchbar-wrap{ padding: 0 22px 16px; }
@@ -758,6 +766,9 @@
 
 <div id="updateBanner" class="update-banner" style="display:none">
   <span id="updateBannerText">Nueva versión disponible</span>
+  <div id="updateProgressTrack" class="update-progress-track" style="display:none">
+    <div id="updateProgressFill" class="update-progress-fill"></div>
+  </div>
   <button id="updateBannerBtn">Actualizar</button>
   <span id="updateBannerClose" class="update-banner-close">✕</span>
 </div>
@@ -1909,22 +1920,51 @@
   }
   document.getElementById('updateBannerBtn').onclick = async () => {
     const btn = document.getElementById('updateBannerBtn');
+    const track = document.getElementById('updateProgressTrack');
+    const fill = document.getElementById('updateProgressFill');
+    const text = document.getElementById('updateBannerText');
     const plugin = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.UpdateInstaller;
-    if(plugin){
-      btn.textContent = 'Descargando…';
-      btn.disabled = true;
-      try{
-        await plugin.downloadAndInstall({ url: UPDATE_APK_URL });
-      }catch(err){
-        // Fall back to the browser-based download if the direct install
-        // couldn't start (e.g. permission not yet granted).
-        window.open(UPDATE_APK_URL, '_system');
-      }
-      btn.textContent = 'Actualizar';
-      btn.disabled = false;
-    } else {
+
+    if(!plugin){
+      // Only devices without the native plugin (very old cached builds)
+      // fall back to a browser download — everything current downloads
+      // and installs silently in the background instead.
       window.open(UPDATE_APK_URL, '_system');
+      return;
     }
+
+    let progressListener = null;
+    try{
+      progressListener = await plugin.addListener('downloadProgress', (data) => {
+        if(data.percent >= 0){
+          fill.style.width = data.percent + '%';
+          text.textContent = `Descargando… ${data.percent}%`;
+        } else {
+          text.textContent = 'Descargando…';
+        }
+      });
+
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      track.style.display = 'block';
+      fill.style.width = '0%';
+      text.textContent = 'Descargando…';
+
+      await plugin.downloadAndInstall({ url: UPDATE_APK_URL });
+      text.textContent = 'Instalando…';
+    }catch(err){
+      if(err && err.message === 'PERMISSION_NEEDED'){
+        text.textContent = 'Activa el permiso de instalar y toca Actualizar de nuevo';
+      } else {
+        text.textContent = 'No se pudo descargar la actualización';
+        console.error('Update download error:', err);
+      }
+    }
+
+    if(progressListener) progressListener.remove();
+    track.style.display = 'none';
+    btn.disabled = false;
+    btn.style.opacity = '1';
   };
   document.getElementById('updateBannerClose').onclick = () => {
     document.getElementById('updateBanner').style.display = 'none';
