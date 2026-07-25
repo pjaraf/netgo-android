@@ -144,8 +144,8 @@ public class VlcPlayerActivity extends Activity {
         timeTotalView = findViewById(R.id.player_time_total);
         ccToggle = findViewById(R.id.player_cc_toggle);
         ccToggle.setOnClickListener(v -> toggleSubtitles());
-        ccToggle.setOnFocusChangeListener((v, hasFocus) ->
-                ccToggle.setBackgroundColor(hasFocus ? 0xFFFF8A3D : 0x66000000));
+        TextView expandToggle = findViewById(R.id.player_expand_toggle);
+        expandToggle.setOnClickListener(v -> cycleZoom());
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
                 if (fromUser) timeElapsedView.setText(formatTime(progress));
@@ -297,31 +297,10 @@ public class VlcPlayerActivity extends Activity {
             return true; // swallow other keys while browsing so they don't hit the player
         }
 
-        // While the CC button has focus, let it behave like a normal
-        // button: OK activates it, Down/Back leaves it and returns control
-        // to the player.
-        if (ccToggle != null && ccToggle.isFocused()) {
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                return super.onKeyDown(keyCode, event);
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_BACK) {
-                ccToggle.clearFocus();
-                return true;
-            }
-            return true;
-        }
-
-        // Movies/series: left/right seeks 10s, OK toggles play/pause, up
-        // reaches the CC button (only when there's a single item — for a
-        // series with an episode queue, Up already surfs episodes, so use
-        // the remote's dedicated subtitles key there instead).
+        // Movies/series: left/right seeks 10s, OK toggles play/pause.
         if (!isLive) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { seekBy(-10000); return true; }
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { seekBy(10000); return true; }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && urls.size() <= 1 && ccToggle != null) {
-                ccToggle.requestFocus();
-                return true;
-            }
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             togglePlayPause();
@@ -352,6 +331,19 @@ public class VlcPlayerActivity extends Activity {
         } else {
             mediaPlayer.play();
         }
+    }
+
+    // Manual zoom, since automatic "fill the screen" detection wasn't
+    // reliable on every TV — this gives direct control instead: tap to
+    // cycle through Original → Zoom 1 → Zoom 2, whichever looks right.
+    private final float[] zoomLevels = {0f, 1.33f, 1.78f};
+    private int zoomIndex = 0;
+    private void cycleZoom() {
+        if (mediaPlayer == null) return;
+        zoomIndex = (zoomIndex + 1) % zoomLevels.length;
+        mediaPlayer.setScale(zoomLevels[zoomIndex]);
+        String label = zoomIndex == 0 ? "Tamaño original" : "Estirado " + (int) (zoomLevels[zoomIndex] * 100) + "%";
+        android.widget.Toast.makeText(this, label, android.widget.Toast.LENGTH_SHORT).show();
     }
 
     private boolean subtitlesEnabled = true;
@@ -436,6 +428,8 @@ public class VlcPlayerActivity extends Activity {
         media.setHWDecoderEnabled(true, false);
         mediaPlayer.setMedia(media);
         media.release();
+        zoomIndex = 0;
+        mediaPlayer.setScale(0);
         mediaPlayer.play();
     }
 
