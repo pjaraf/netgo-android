@@ -63,6 +63,9 @@ jobs:
       - name: Generate app icons and TV banner (all densities)
         run: node scripts/generate-icons.js
 
+      - name: Replace the default splash screen with the NetGo logo
+        run: node scripts/patch-splash.js
+
       - name: Add Android TV home-screen launcher support
         run: node scripts/patch-tv-launcher.js
 
