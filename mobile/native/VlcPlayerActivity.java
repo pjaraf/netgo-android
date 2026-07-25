@@ -19,6 +19,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -108,6 +109,14 @@ public class VlcPlayerActivity extends Activity {
     private Runnable maintenanceRunnable;
     private static final long MAINTENANCE_TIMEOUT_MS = 10000;
 
+    // ---- Progress bar (movies/series only, not live TV) ----
+    private LinearLayout progressBarContainer;
+    private SeekBar seekBar;
+    private TextView timeElapsedView;
+    private TextView timeTotalView;
+    private Runnable progressTickRunnable;
+    private boolean userSeeking = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -118,7 +127,33 @@ public class VlcPlayerActivity extends Activity {
         titleView = findViewById(R.id.player_title);
         ImageButton closeBtn = findViewById(R.id.player_close);
         spinner = findViewById(R.id.player_spinner);
+        progressBarContainer = findViewById(R.id.player_progress_bar);
+        seekBar = findViewById(R.id.player_seekbar);
+        seekBar.setFocusable(false);
+        seekBar.setFocusableInTouchMode(false);
+        timeElapsedView = findViewById(R.id.player_time_elapsed);
+        timeTotalView = findViewById(R.id.player_time_total);
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+                if (fromUser) timeElapsedView.setText(formatTime(progress));
+            }
+            @Override public void onStartTrackingTouch(SeekBar sb) { userSeeking = true; }
+            @Override public void onStopTrackingTouch(SeekBar sb) {
+                userSeeking = false;
+                if (mediaPlayer != null) mediaPlayer.setTime(sb.getProgress());
+            }
+        });
         closeBtn.setOnClickListener(v -> finish());
+
+        // On TV, this ImageButton was the only focusable view on screen, so
+        // Android auto-focused it on load — pressing OK on the remote then
+        // triggered its click (closing the video) instead of doing nothing,
+        // which is what should happen during normal playback.
+        closeBtn.setFocusable(false);
+        closeBtn.setFocusableInTouchMode(false);
+        View rootView = findViewById(android.R.id.content);
+        rootView.setFocusableInTouchMode(true);
+        rootView.requestFocus();
 
         buildChannelBanner();
         buildMaintenanceView();
@@ -150,6 +185,7 @@ public class VlcPlayerActivity extends Activity {
                     spinner.setVisibility(View.GONE);
                     cancelMaintenanceTimer();
                     hideMaintenanceView();
+                    if (!isLive) startProgressTicker();
                 });
             } else if (event.type == MediaPlayer.Event.EncounteredError) {
                 runOnUiThread(() -> {
@@ -274,6 +310,11 @@ public class VlcPlayerActivity extends Activity {
         titleView.setText(titles.get(currentIndex));
         hideMaintenanceView();
         scheduleMaintenanceTimer();
+        stopProgressTicker();
+        if (progressBarContainer != null) {
+            progressBarContainer.setVisibility(View.GONE);
+            seekBar.setProgress(0);
+        }
         Media media = new Media(libVLC, Uri.parse(urls.get(currentIndex)));
         media.setHWDecoderEnabled(true, false);
         mediaPlayer.setMedia(media);
@@ -506,6 +547,38 @@ public class VlcPlayerActivity extends Activity {
         handler.postDelayed(hideBannerRunnable, 3800);
     }
 
+    // ---------- Progress bar (movies/series only — live TV has no fixed duration) ----------
+    private void startProgressTicker() {
+        progressBarContainer.setVisibility(View.VISIBLE);
+        stopProgressTicker();
+        progressTickRunnable = () -> {
+            if (mediaPlayer != null && !userSeeking) {
+                long length = mediaPlayer.getLength();
+                long time = mediaPlayer.getTime();
+                if (length > 0) {
+                    seekBar.setMax((int) length);
+                    seekBar.setProgress((int) time);
+                    timeTotalView.setText(formatTime((int) length));
+                    timeElapsedView.setText(formatTime((int) time));
+                }
+            }
+            handler.postDelayed(progressTickRunnable, 500);
+        };
+        handler.post(progressTickRunnable);
+    }
+
+    private void stopProgressTicker() {
+        if (progressTickRunnable != null) handler.removeCallbacks(progressTickRunnable);
+    }
+
+    private String formatTime(int ms) {
+        int totalSeconds = ms / 1000;
+        int h = totalSeconds / 3600;
+        int m = (totalSeconds % 3600) / 60;
+        int s = totalSeconds % 60;
+        return h > 0 ? String.format("%d:%02d:%02d", h, m, s) : String.format("%02d:%02d", m, s);
+    }
+
     // ---------- "Canal en mantenimiento" screen ----------
     private void buildMaintenanceView() {
         FrameLayout root = findViewById(android.R.id.content);
@@ -699,6 +772,7 @@ public class VlcPlayerActivity extends Activity {
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
         cancelMaintenanceTimer();
         cancelStatusCheck();
+        stopProgressTicker();
         if (mediaPlayer != null) mediaPlayer.release();
         if (libVLC != null) libVLC.release();
     }
