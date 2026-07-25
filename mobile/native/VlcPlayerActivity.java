@@ -121,6 +121,16 @@ public class VlcPlayerActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // True edge-to-edge fullscreen — without this, a lingering system bar
+        // can eat into the screen area, making 16:9 content look like it
+        // isn't actually filling the whole display.
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         setContentView(R.layout.activity_vlc_player);
 
         VLCVideoLayout videoLayout = findViewById(R.id.video_layout);
@@ -133,6 +143,10 @@ public class VlcPlayerActivity extends Activity {
         seekBar.setFocusableInTouchMode(false);
         timeElapsedView = findViewById(R.id.player_time_elapsed);
         timeTotalView = findViewById(R.id.player_time_total);
+        TextView ccToggle = findViewById(R.id.player_cc_toggle);
+        ccToggle.setFocusable(false);
+        ccToggle.setFocusableInTouchMode(false);
+        ccToggle.setOnClickListener(v -> toggleSubtitles());
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
                 if (fromUser) timeElapsedView.setText(formatTime(progress));
@@ -293,6 +307,10 @@ public class VlcPlayerActivity extends Activity {
             togglePlayPause();
             return true;
         }
+        if (keyCode == KeyEvent.KEYCODE_CAPTIONS) {
+            toggleSubtitles();
+            return true;
+        }
 
         if (urls.size() > 1) {
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
@@ -313,6 +331,29 @@ public class VlcPlayerActivity extends Activity {
             mediaPlayer.pause();
         } else {
             mediaPlayer.play();
+        }
+    }
+
+    private boolean subtitlesEnabled = true;
+    /** Turns subtitles on/off — bound to the remote's CC/Subtitles key. */
+    private void toggleSubtitles() {
+        if (mediaPlayer == null) return;
+        if (subtitlesEnabled) {
+            mediaPlayer.setSpuTrack(-1);
+            subtitlesEnabled = false;
+            android.widget.Toast.makeText(this, "Subtítulos desactivados", android.widget.Toast.LENGTH_SHORT).show();
+        } else {
+            try {
+                org.videolan.libvlc.MediaPlayer.TrackDescription[] tracks = mediaPlayer.getSpuTracks();
+                if (tracks != null && tracks.length > 0) {
+                    int trackId = tracks.length > 1 ? tracks[1].id : tracks[0].id;
+                    mediaPlayer.setSpuTrack(trackId);
+                    android.widget.Toast.makeText(this, "Subtítulos activados", android.widget.Toast.LENGTH_SHORT).show();
+                } else {
+                    android.widget.Toast.makeText(this, "Esta señal no tiene subtítulos disponibles", android.widget.Toast.LENGTH_SHORT).show();
+                }
+            } catch (Exception ignored) { }
+            subtitlesEnabled = true;
         }
     }
 
@@ -610,7 +651,6 @@ public class VlcPlayerActivity extends Activity {
 
     // ---------- Progress bar (movies/series only — live TV has no fixed duration) ----------
     private void startProgressTicker() {
-        progressBarContainer.setVisibility(View.VISIBLE);
         stopProgressTicker();
         progressTickRunnable = () -> {
             if (mediaPlayer != null && !userSeeking) {
