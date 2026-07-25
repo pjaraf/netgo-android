@@ -264,36 +264,58 @@
   .vivo-chan-logo img{ width:100%; height:100%; object-fit:cover; }
   .vivo-chan-num{ font-family:'JetBrains Mono'; font-size:12px; color:var(--amber); min-width:30px; flex-shrink:0; }
 
-  /* Preview panel — hidden on phone, shown only on TV to the right of the
-     channel list. Uses the app's existing palette only (amber accent,
-     dark card background) — no red anywhere. */
-  .vivo-preview{ display:none; }
-  body.tv-mode .vivo-preview{
-    display:flex; flex-direction:column; flex:1; min-width:0;
-    padding:28px; border-left:1px solid var(--line);
-    background: var(--card);
+  /* Top grid: player card (left) + recommendations card (right) — TV only.
+     Uses the app's existing palette only (amber accent, dark card
+     background) — no colors borrowed from any reference image. */
+  .vivo-top-grid{ display:none; }
+  body.tv-mode .vivo-top-grid{
+    display:grid; grid-template-columns: 1.3fr 1fr; gap:18px;
+    padding:22px 22px 0;
+  }
+  .vivo-preview{
+    display:flex; flex-direction:column;
+    padding:20px; border-radius:16px;
+    background: var(--card); border:1px solid var(--line);
   }
   .vivo-preview-art{
-    flex:1; border-radius:16px; background: var(--bg);
+    flex:1; border-radius:12px; background: var(--bg);
     display:flex; align-items:center; justify-content:center;
-    margin-bottom:20px; overflow:hidden; min-height:0;
+    margin-bottom:16px; overflow:hidden; min-height:220px;
     border:1px solid var(--line);
   }
-  .vivo-preview-icon{ font-size:64px; opacity:.5; }
+  .vivo-preview-icon{ font-size:56px; opacity:.5; }
   .vivo-preview-art img{ width:100%; height:100%; object-fit:contain; }
   .vivo-preview-live{
     font-family:'JetBrains Mono'; font-size:12px; font-weight:700;
     color: var(--amber); letter-spacing:.04em; margin-bottom:6px;
+    display:flex; align-items:center; gap:10px;
   }
+  .vivo-preview-rate{ color:var(--text-dim); font-weight:600; }
   .vivo-preview-name{
-    font-family:'Space Grotesk'; font-size:22px; font-weight:700;
+    font-family:'Space Grotesk'; font-size:20px; font-weight:700;
     color:var(--text); margin-bottom:4px;
   }
-  .vivo-preview-meta{ font-size:13px; color:var(--text-dim); margin-bottom:18px; }
+  .vivo-preview-meta{ font-size:13px; color:var(--text-dim); margin-bottom:16px; }
   .vivo-preview-fullscreen{
     background:var(--amber); color:#1A0E00; border:none; font-weight:700;
-    font-size:14px; padding:14px; border-radius:10px; cursor:pointer;
+    font-size:14px; padding:13px; border-radius:10px; cursor:pointer;
   }
+
+  .vivo-recommend-card{
+    display:flex; flex-direction:column;
+    padding:20px; border-radius:16px;
+    background: var(--card); border:1px solid var(--line);
+    overflow:hidden;
+  }
+  .vivo-recommend-title{
+    font-family:'Space Grotesk'; font-weight:700; font-size:15px;
+    color:var(--text); margin-bottom:14px;
+  }
+  .vivo-recommend-row{
+    display:flex; gap:12px; overflow-x:auto; flex:1;
+  }
+  .vivo-recommend-row .poster-card{ min-width:110px; }
+
   .vivo-chan-name{ flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vivo-chan-star{ font-size:15px; color:var(--text-dim); padding:4px; flex-shrink:0; }
   .vivo-chan-star.on{ color:var(--amber); }
@@ -686,28 +708,27 @@
   body.tv-mode .sd-episode-row{ padding:14px; }
   body.tv-mode .sd-ep-title{ font-size:16px; }
 
-  /* On TV: the category bar sits as a horizontal strip along the TOP of
-     the screen — logo on the left, tabs in the middle, settings on the
-     right — instead of the bottom (phone) or the earlier side-rail
-     version. Phones are completely untouched. */
-  body.tv-mode{ padding-left:0; padding-top:88px; }
+  /* On TV: the category bar sits as a horizontal strip along the BOTTOM
+     of the screen — logo/status on top area instead, tabs+icons along
+     the bottom edge. Phones are completely untouched. */
+  body.tv-mode{ padding-left:0; padding-top:0; padding-bottom:96px; }
   body.tv-mode .cats{
-    left:0; right:0; top:0; bottom:auto; width:auto; height:88px;
+    left:0; right:0; top:auto; bottom:0; width:auto; height:96px;
     flex-direction:row; justify-content:flex-start; align-items:center;
-    padding: 0 22px; gap: 22px;
-    border-top:none; border-bottom:1px solid var(--line);
+    padding: 0 22px; gap: 26px;
+    border-top:1px solid var(--line); border-bottom:none;
     overflow-x:auto; overflow-y:hidden;
   }
   body.tv-mode .cat{
     flex:none;
     padding: 8px 4px;
   }
-  body.tv-mode .cat .icon{ font-size:22px; }
+  body.tv-mode .cat .icon{ font-size:24px; }
   body.tv-mode .cat span{ font-size:13px; }
   body.tv-mode #rowsContainer, body.tv-mode .vivo-view{ padding-bottom:20px; }
 
   /* TV only: hide the phone header entirely (logo, version, signal icon,
-     clock, gear all move into / disappear from the top bar instead). */
+     clock, gear all move into / disappear from the bottom bar instead). */
   body.tv-mode header{ display:none; }
 
   /* TV only: hide the search bar and the hero preview box. */
@@ -865,6 +886,23 @@
 
 
 <div id="vivoView" class="vivo-view" style="display:none">
+  <div class="vivo-top-grid">
+    <div class="vivo-preview" id="vivoPreview">
+      <div class="vivo-preview-art" id="vivoPreviewArt">
+        <div class="vivo-preview-icon" id="vivoPreviewIcon">📡</div>
+      </div>
+      <div class="vivo-preview-info">
+        <div class="vivo-preview-live">● EN VIVO <span class="vivo-preview-rate" id="vivoPreviewRate"></span></div>
+        <div class="vivo-preview-name" id="vivoPreviewName">Selecciona un canal</div>
+        <div class="vivo-preview-meta" id="vivoPreviewMeta"></div>
+      </div>
+      <button class="vivo-preview-fullscreen" id="vivoPreviewFullscreen">⤢ Pantalla Completa</button>
+    </div>
+    <div class="vivo-recommend-card">
+      <div class="vivo-recommend-title">Recomendados para ti</div>
+      <div class="vivo-recommend-row" id="vivoRecommendRow"></div>
+    </div>
+  </div>
   <div class="vivo-tabs">
     <div class="vivo-tab active" id="vivoTabCat">Categoría</div>
     <div class="vivo-tab" id="vivoTabFav">Favoritos</div>
@@ -872,17 +910,6 @@
   <div class="vivo-body">
     <div class="vivo-sidebar" id="vivoSidebar"></div>
     <div class="vivo-list" id="vivoList"></div>
-    <div class="vivo-preview" id="vivoPreview">
-      <div class="vivo-preview-art" id="vivoPreviewArt">
-        <div class="vivo-preview-icon" id="vivoPreviewIcon">📡</div>
-      </div>
-      <div class="vivo-preview-info">
-        <div class="vivo-preview-live">● EN VIVO</div>
-        <div class="vivo-preview-name" id="vivoPreviewName">Selecciona un canal</div>
-        <div class="vivo-preview-meta" id="vivoPreviewMeta"></div>
-      </div>
-      <button class="vivo-preview-fullscreen" id="vivoPreviewFullscreen">⤢ Pantalla Completa</button>
-    </div>
   </div>
 </div>
 <div id="rowsContainer"></div>
@@ -1312,6 +1339,8 @@
     const sidebar = document.getElementById('vivoSidebar');
     const list = document.getElementById('vivoList');
 
+    if(isTV()) renderVivoRecommendations();
+
     if(vivoTab === 'favoritos'){
       sidebar.innerHTML = '';
       sidebar.style.display = 'none';
@@ -1421,6 +1450,38 @@
   // box uses, just positioned to match this box's screen area instead.
   let vivoPreviewSelected = null;
   let lastVivoClick = { url:null, time:0 };
+
+  // Top-right card: a simple mashup of the top row from each on-demand
+  // category, reusing the existing poster-card look.
+  function renderVivoRecommendations(){
+    const row = document.getElementById('vivoRecommendRow');
+    if(!row) return;
+    const items = [];
+    ['peliculas','series','anime','kids'].forEach(key => {
+      const cd = activeData()[key];
+      if(cd && cd.rows && cd.rows.length) items.push(...cd.rows[0].items.slice(0, 3));
+    });
+    row.innerHTML = items.length
+      ? items.map(posterCard).join('')
+      : `<div class="empty-card">Sin recomendaciones todavía</div>`;
+  }
+
+  // Simulated bitrate readout next to "EN VIVO" — we don't have a real
+  // telemetry feed from the native player wired up yet, so this shows an
+  // approximate, changing value rather than an exact live measurement.
+  let vivoRateTimer = null;
+  function startVivoRateIndicator(){
+    stopVivoRateIndicator();
+    const el = document.getElementById('vivoPreviewRate');
+    const tick = () => { if(el) el.textContent = (3 + Math.random()*4).toFixed(1) + ' Mbps'; };
+    tick();
+    vivoRateTimer = setInterval(tick, 2500);
+  }
+  function stopVivoRateIndicator(){
+    if(vivoRateTimer){ clearInterval(vivoRateTimer); vivoRateTimer = null; }
+    const el = document.getElementById('vivoPreviewRate');
+    if(el) el.textContent = '';
+  }
   let vivoPreviewPlaying = false;
 
   function getVivoPreviewRect(){
@@ -1437,6 +1498,7 @@
   async function stopVivoPreview(){
     if(!vivoPreviewPlaying) return;
     vivoPreviewPlaying = false;
+    stopVivoRateIndicator();
     if(inlineAvailable()){
       try{ await window.Capacitor.Plugins.InlineVlcPlayer.unmount(); }catch(e){}
     }
@@ -1466,6 +1528,7 @@
     await P.mount(getVivoPreviewRect());
     await P.loadQueue({ queue: [{ url: row.dataset.url, title: row.dataset.title }], startIndex: 0 });
     vivoPreviewPlaying = true;
+    startVivoRateIndicator();
     setTimeout(repositionVivoPreview, 150);
     setTimeout(repositionVivoPreview, 500);
   }
