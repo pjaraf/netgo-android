@@ -1837,8 +1837,24 @@
       }
     }catch(err){ /* offline, or not published yet — ignore silently */ }
   }
-  document.getElementById('updateBannerBtn').onclick = () => {
-    window.open(UPDATE_APK_URL, '_system');
+  document.getElementById('updateBannerBtn').onclick = async () => {
+    const btn = document.getElementById('updateBannerBtn');
+    const plugin = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.UpdateInstaller;
+    if(plugin){
+      btn.textContent = 'Descargando…';
+      btn.disabled = true;
+      try{
+        await plugin.downloadAndInstall({ url: UPDATE_APK_URL });
+      }catch(err){
+        // Fall back to the browser-based download if the direct install
+        // couldn't start (e.g. permission not yet granted).
+        window.open(UPDATE_APK_URL, '_system');
+      }
+      btn.textContent = 'Actualizar';
+      btn.disabled = false;
+    } else {
+      window.open(UPDATE_APK_URL, '_system');
+    }
   };
   document.getElementById('updateBannerClose').onclick = () => {
     document.getElementById('updateBanner').style.display = 'none';
