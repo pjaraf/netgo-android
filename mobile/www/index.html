@@ -1366,7 +1366,8 @@
       window.Capacitor.Plugins.VlcPlayer.playLive({
         categories,
         catIndex: vivoActiveCatIndex,
-        itemIndex
+        itemIndex,
+        deviceCode: getDeviceCode()
       }).catch(err => console.error('VlcPlayer playLive error:', err));
       return;
     }
@@ -1542,7 +1543,7 @@
   function playQueue(queue, startIndex, fallbackTitle, kind){
     if(!queue || !queue.length) return;
     if(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
-      window.Capacitor.Plugins.VlcPlayer.play({ queue, startIndex: startIndex || 0 })
+      window.Capacitor.Plugins.VlcPlayer.play({ queue, startIndex: startIndex || 0, deviceCode: getDeviceCode() })
         .catch(err => console.error('VlcPlayer error:', err));
       return;
     }
