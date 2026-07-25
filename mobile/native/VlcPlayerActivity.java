@@ -207,7 +207,9 @@ public class VlcPlayerActivity extends Activity {
         try {
             isLive = getIntent().getBooleanExtra("isLive", false);
             if (isLive) {
-                JSONArray cats = new JSONArray(getIntent().getStringExtra("categoriesJson"));
+                JSONArray cats = VlcPlayerPlugin.pendingCategories;
+                VlcPlayerPlugin.pendingCategories = null;
+                if (cats == null) return false;
                 for (int c = 0; c < cats.length(); c++) {
                     JSONObject cat = cats.getJSONObject(c);
                     catTitles.add(cat.optString("title", "Categoría"));
@@ -230,7 +232,9 @@ public class VlcPlayerActivity extends Activity {
                 if (currentIndex < 0 || currentIndex >= urls.size()) currentIndex = 0;
                 return !urls.isEmpty();
             } else {
-                JSONArray arr = new JSONArray(getIntent().getStringExtra("queueJson"));
+                JSONArray arr = VlcPlayerPlugin.pendingQueue;
+                VlcPlayerPlugin.pendingQueue = null;
+                if (arr == null) return false;
                 for (int i = 0; i < arr.length(); i++) {
                     JSONObject obj = arr.getJSONObject(i);
                     urls.add(obj.getString("url"));
