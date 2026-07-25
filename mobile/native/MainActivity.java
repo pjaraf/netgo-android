@@ -60,6 +60,20 @@ public class MainActivity extends BridgeActivity {
             return;
         }
 
+        // Let the web app try to handle this first — on TV, if we're
+        // anywhere other than the home screen, "back" should return there
+        // instead of exiting the app.
+        getBridge().getWebView().evaluateJavascript(
+                "(window.handleTVBack ? window.handleTVBack() : false)",
+                result -> {
+                    if (!"true".equals(result)) {
+                        handleAppExitBack();
+                    }
+                }
+        );
+    }
+
+    private void handleAppExitBack() {
         // Press back twice (within 2s) to exit — and, importantly, this
         // NEVER falls through to the default WebView back-navigation
         // behavior (super.onBackPressed()), which is what was likely
