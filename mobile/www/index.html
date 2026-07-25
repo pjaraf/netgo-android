@@ -345,7 +345,18 @@
   #rowsContainer, .vivo-view{ padding-bottom: 88px; }
 
   /* ---------- Section rows ---------- */
-  section.row{ padding: 0 22px 30px; }
+  section.row{
+    padding: 0 22px 30px;
+    /* Tells the browser to skip layout/paint work for rows that have
+       scrolled off screen — a free, native optimization layered on top of
+       our own row virtualization, huge on older/weaker devices. */
+    content-visibility: auto;
+    contain-intrinsic-size: 0 260px;
+  }
+  .poster-card, .channel-card{
+    content-visibility: auto;
+    contain-intrinsic-size: 128px 220px;
+  }
   .row-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px; }
   .row-head h2{ font-family:'Space Grotesk'; font-size:15px; font-weight:600; }
   .row-head .count{ font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); }
@@ -702,6 +713,12 @@
   body.tv-mode .poster-card:focus-visible, body.tv-mode .channel-card:focus-visible{
     transform:none;
   }
+
+  /* Same cheap-rendering treatment as TV mode, applied to detected
+     low-power/older phones: no blur, no tap-scale animation. */
+  body.lean-mode *{ backdrop-filter: none !important; }
+  body.lean-mode .poster-card, body.lean-mode .channel-card{ transition:none; }
+  body.lean-mode .poster-card:active, body.lean-mode .channel-card:active{ transform:none; }
 </style>
 </head>
 <body>
@@ -956,6 +973,18 @@
   }
   if(isTV()) document.body.classList.add('tv-mode');
 
+  // Old/weak phones benefit from the same "cheap rendering" mode we built
+  // for TV (no blur, no scale-on-tap animation) — detected via the
+  // Device Memory / CPU core count the browser exposes, when available.
+  // Devices that don't expose these (older WebViews) fall through safely
+  // and just keep the normal phone look.
+  function isLowPower(){
+    const mem = navigator.deviceMemory; // GB, Chromium-only
+    const cores = navigator.hardwareConcurrency;
+    return (typeof mem === 'number' && mem <= 2) || (typeof cores === 'number' && cores <= 4);
+  }
+  if(isLowPower()) document.body.classList.add('lean-mode');
+
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
@@ -1148,7 +1177,7 @@
       const idx = +section.dataset.rowIndex;
       const scrollEl = section.querySelector('.row-scroll');
       const items = rows[idx].items;
-      const BATCH = 24;
+      const BATCH = (isTV() || isLowPower()) ? 14 : 24;
       let loaded = 0;
       function loadMore(){
         if(loaded >= items.length) return;
@@ -1158,8 +1187,14 @@
       }
       loadMore();
       if(items.length > BATCH){
+        let ticking = false;
         scrollEl.addEventListener('scroll', () => {
-          if(scrollEl.scrollLeft + scrollEl.clientWidth > scrollEl.scrollWidth - 700) loadMore();
+          if(ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            if(scrollEl.scrollLeft + scrollEl.clientWidth > scrollEl.scrollWidth - 700) loadMore();
+            ticking = false;
+          });
         }, { passive:true });
       }
     }
@@ -1243,7 +1278,7 @@
   // bottom, instead of building potentially thousands of rows at once.
   function renderChannelListVirtualized(list, items){
     list.innerHTML = '';
-    const BATCH = 40;
+    const BATCH = (isTV() || isLowPower()) ? 22 : 40;
     let loaded = 0;
     function loadMore(){
       const old = list.querySelector('.vivo-sentinel');
