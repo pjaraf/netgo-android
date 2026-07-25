@@ -19,9 +19,20 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * A single movie or live channel is just a queue of length 1. A series is a
  * queue of all its episodes in order, so the native player can auto-advance
  * to the next episode (or close and return to the app when the queue ends).
+ *
+ * The queue/categories data is handed to VlcPlayerActivity through a static
+ * field (pendingQueue/pendingCategories) rather than an Intent extra —
+ * Android Intents go through Binder IPC, which has a hard ~1MB size limit
+ * ("TransactionTooLargeException"), and a provider with a few thousand live
+ * channels easily produces a JSON payload bigger than that, which was
+ * crashing the whole app on launch. A static field is just an in-memory
+ * reference within the same process, so there's no size limit at all.
  */
 @CapacitorPlugin(name = "VlcPlayer")
 public class VlcPlayerPlugin extends Plugin {
+
+    static JSArray pendingQueue;
+    static JSArray pendingCategories;
 
     @PluginMethod
     public void play(PluginCall call) {
@@ -34,8 +45,8 @@ public class VlcPlayerPlugin extends Plugin {
             return;
         }
 
+        pendingQueue = queue;
         Intent intent = new Intent(getContext(), VlcPlayerActivity.class);
-        intent.putExtra("queueJson", queue.toString());
         intent.putExtra("startIndex", startIndex);
         intent.putExtra("deviceCode", deviceCode);
         getActivity().startActivity(intent);
@@ -60,8 +71,8 @@ public class VlcPlayerPlugin extends Plugin {
             return;
         }
 
+        pendingCategories = categories;
         Intent intent = new Intent(getContext(), VlcPlayerActivity.class);
-        intent.putExtra("categoriesJson", categories.toString());
         intent.putExtra("catIndex", catIndex);
         intent.putExtra("startIndex", itemIndex);
         intent.putExtra("isLive", true);
