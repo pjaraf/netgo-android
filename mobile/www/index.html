@@ -1335,27 +1335,47 @@
         loaded += BATCH;
       }
       loadMore();
+      // Remove any listener from a previous populate cycle (this row may
+      // have been recycled and repopulated) before attaching a fresh one —
+      // otherwise stale listeners referencing an old, disconnected
+      // "loaded" counter would pile up and double-load cards.
+      if(scrollEl._scrollHandler){
+        scrollEl.removeEventListener('scroll', scrollEl._scrollHandler);
+        scrollEl._scrollHandler = null;
+      }
       if(items.length > BATCH){
         let ticking = false;
-        scrollEl.addEventListener('scroll', () => {
+        const handler = () => {
           if(ticking) return;
           ticking = true;
           requestAnimationFrame(() => {
             if(scrollEl.scrollLeft + scrollEl.clientWidth > scrollEl.scrollWidth - 700) loadMore();
             ticking = false;
           });
-        }, { passive:true });
+        };
+        scrollEl.addEventListener('scroll', handler, { passive:true });
+        scrollEl._scrollHandler = handler;
       }
     }
 
     rowObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
-        if(!entry.isIntersecting) return;
         const section = entry.target;
-        if(section.dataset.populated) return;
-        section.dataset.populated = '1';
-        populateRow(section);
-        rowObserver.unobserve(section);
+        if(entry.isIntersecting){
+          if(!section.dataset.populated){
+            section.dataset.populated = '1';
+            populateRow(section);
+          }
+        } else if(section.dataset.populated){
+          // Recycle it: clear the cards out once it's well off-screen, so
+          // a long scrolling/browsing session doesn't keep accumulating
+          // hundreds of off-screen cards — which was what made D-pad
+          // navigation get slower and slower over time (every arrow-key
+          // press has to measure every candidate card's position).
+          const scrollEl = section.querySelector('.row-scroll');
+          if(scrollEl) scrollEl.innerHTML = '';
+          delete section.dataset.populated;
+        }
       });
     }, { root:null, rootMargin: (isTV() || isLowPower()) ? '300px 0px' : '600px 0px' });
 
