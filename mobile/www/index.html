@@ -1353,6 +1353,24 @@
     activeChannelUrl = url;
     document.querySelectorAll('.vivo-chan-row').forEach(r => r.classList.toggle('active', r.dataset.url === url));
 
+    if(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer && window.Capacitor.Plugins.VlcPlayer.playLive){
+      // Send every category + its channels so the fullscreen player can let
+      // you browse channels (and switch categories) with the remote,
+      // without having to back out to the app.
+      const d = activeData().vivo;
+      const categories = d.rows.map(row => ({
+        title: row.title,
+        items: row.items.map(c => ({ url: c.url, title: c.t, num: c.num || '' }))
+      }));
+      const itemIndex = Math.max(0, d.rows[vivoActiveCatIndex].items.findIndex(c => c.url === url));
+      window.Capacitor.Plugins.VlcPlayer.playLive({
+        categories,
+        catIndex: vivoActiveCatIndex,
+        itemIndex
+      }).catch(err => console.error('VlcPlayer playLive error:', err));
+      return;
+    }
+
     // Build the queue from every channel row currently visible in the list,
     // so swiping left/right in the native player moves between real siblings.
     const rows = Array.from(document.querySelectorAll('#vivoList .vivo-chan-row'));
