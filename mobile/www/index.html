@@ -620,6 +620,8 @@
   .qr-btn:focus-visible,
   .gear:focus-visible,
   .start-manual-btn:focus-visible,
+  #updateBannerBtn:focus-visible,
+  #updateBannerClose:focus-visible,
   #channelSearch:focus-visible{
     outline: 3px solid var(--amber);
     outline-offset: 2px;
@@ -770,7 +772,7 @@
     <div id="updateProgressFill" class="update-progress-fill"></div>
   </div>
   <button id="updateBannerBtn">Actualizar</button>
-  <span id="updateBannerClose" class="update-banner-close">✕</span>
+  <span id="updateBannerClose" class="update-banner-close" tabindex="0">✕</span>
 </div>
 
 <div class="searchbar-wrap">
@@ -999,7 +1001,7 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose';
 
   function focusableEls(){
     return Array.from(document.querySelectorAll(NAV_SELECTOR)).filter(el => {
