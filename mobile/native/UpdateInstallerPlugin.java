@@ -45,8 +45,9 @@ public class UpdateInstallerPlugin extends Plugin {
                 conn.setInstanceFollowRedirects(true);
                 conn.connect();
 
-                if (conn.getResponseCode() != HttpURLConnection.HTTP_OK) {
-                    activity.runOnUiThread(() -> call.reject("HTTP " + conn.getResponseCode()));
+                int responseCode = conn.getResponseCode();
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    activity.runOnUiThread(() -> call.reject("HTTP " + responseCode));
                     return;
                 }
 
