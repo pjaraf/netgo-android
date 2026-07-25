@@ -1094,6 +1094,7 @@
   }
 
   let renderGen = 0;
+  let rowObserver = null;
   function renderCategory(cat){
     currentCat = cat;
     const myGen = ++renderGen;
@@ -1109,37 +1110,72 @@
     vivoView.style.display = 'none';
     rowsContainer.style.display = 'block';
 
+    if(rowObserver){ rowObserver.disconnect(); rowObserver = null; }
+
     const d = activeData()[cat];
     if(!d || !d.rows.length){
       rowsContainer.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">Tu proveedor no tiene contenido en esta categoría</div></div></section>`;
       return;
     }
 
-    // Build rows progressively across animation frames instead of one giant
-    // innerHTML write — with many categories this kept the main thread busy
-    // long enough to feel like a freeze, especially on weaker TV hardware.
+    // ---- Real virtualization ----
+    // 1) Rows only get their cards built the moment they're about to become
+    //    visible (IntersectionObserver) — a category with 50 rows only ever
+    //    builds the ~3 near the viewport, not all 50 at once.
+    // 2) Inside a long row, cards load in batches of 24 as you scroll that
+    //    row sideways, instead of building thousands of cards up front.
+    // This is what makes an unlimited-length catalog stay smooth.
     rowsContainer.innerHTML = '';
     const rows = d.rows;
-    const chunkSize = isTV() ? 2 : 5;
-    let i = 0;
-    function renderChunk(){
-      if(myGen !== renderGen) return; // a newer render started — abandon this one
-      const frag = document.createDocumentFragment();
-      const end = Math.min(i + chunkSize, rows.length);
-      for(; i < end; i++){
-        const row = rows[i];
-        const section = document.createElement('section');
-        section.className = 'row';
-        section.innerHTML = `
-          <div class="row-head"><h2>${row.title}</h2><span class="count mono">${row.items.length} ${d.type === 'channel' ? 'canales' : 'títulos'}</span></div>
-          <div class="row-scroll">${row.items.map(d.type === 'channel' ? channelCard : posterCard).join('')}</div>
-        `;
-        frag.appendChild(section);
+    const cardFn = d.type === 'channel' ? channelCard : posterCard;
+    const placeholderHeight = d.type === 'channel' ? '158px' : '198px';
+
+    const frag = document.createDocumentFragment();
+    rows.forEach((row, idx) => {
+      const section = document.createElement('section');
+      section.className = 'row';
+      section.dataset.rowIndex = idx;
+      section.innerHTML = `
+        <div class="row-head"><h2>${row.title}</h2><span class="count mono">${row.items.length} ${d.type === 'channel' ? 'canales' : 'títulos'}</span></div>
+        <div class="row-scroll" style="min-height:${placeholderHeight}"></div>
+      `;
+      frag.appendChild(section);
+    });
+    rowsContainer.appendChild(frag);
+
+    function populateRow(section){
+      if(myGen !== renderGen) return;
+      const idx = +section.dataset.rowIndex;
+      const scrollEl = section.querySelector('.row-scroll');
+      const items = rows[idx].items;
+      const BATCH = 24;
+      let loaded = 0;
+      function loadMore(){
+        if(loaded >= items.length) return;
+        const next = items.slice(loaded, loaded + BATCH);
+        scrollEl.insertAdjacentHTML('beforeend', next.map(cardFn).join(''));
+        loaded += BATCH;
       }
-      rowsContainer.appendChild(frag);
-      if(i < rows.length) requestAnimationFrame(renderChunk);
+      loadMore();
+      if(items.length > BATCH){
+        scrollEl.addEventListener('scroll', () => {
+          if(scrollEl.scrollLeft + scrollEl.clientWidth > scrollEl.scrollWidth - 700) loadMore();
+        }, { passive:true });
+      }
     }
-    requestAnimationFrame(renderChunk);
+
+    rowObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if(!entry.isIntersecting) return;
+        const section = entry.target;
+        if(section.dataset.populated) return;
+        section.dataset.populated = '1';
+        populateRow(section);
+        rowObserver.unobserve(section);
+      });
+    }, { root:null, rootMargin: '600px 0px' });
+
+    rowsContainer.querySelectorAll('.row').forEach(section => rowObserver.observe(section));
   }
 
   // ============================================================
@@ -1200,7 +1236,35 @@
     `).join('');
 
     const activeRow = d.rows[vivoActiveCatIndex];
-    list.innerHTML = activeRow.items.map(channelRowHtml).join('');
+    renderChannelListVirtualized(list, activeRow.items);
+  }
+
+  // Loads a long channel list in batches as the user scrolls near the
+  // bottom, instead of building potentially thousands of rows at once.
+  function renderChannelListVirtualized(list, items){
+    list.innerHTML = '';
+    const BATCH = 40;
+    let loaded = 0;
+    function loadMore(){
+      const old = list.querySelector('.vivo-sentinel');
+      if(old) old.remove();
+      const next = items.slice(loaded, loaded + BATCH);
+      list.insertAdjacentHTML('beforeend', next.map(channelRowHtml).join(''));
+      loaded += next.length;
+      if(loaded < items.length){
+        const sentinel = document.createElement('div');
+        sentinel.className = 'vivo-sentinel';
+        list.appendChild(sentinel);
+        const obs = new IntersectionObserver((entries) => {
+          if(entries[0].isIntersecting){
+            obs.disconnect();
+            loadMore();
+          }
+        }, { root:null, rootMargin:'500px 0px' });
+        obs.observe(sentinel);
+      }
+    }
+    loadMore();
   }
 
   // ---------- Channel search (searches across every category) ----------
