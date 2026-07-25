@@ -263,6 +263,37 @@
   }
   .vivo-chan-logo img{ width:100%; height:100%; object-fit:cover; }
   .vivo-chan-num{ font-family:'JetBrains Mono'; font-size:12px; color:var(--amber); min-width:30px; flex-shrink:0; }
+
+  /* Preview panel — hidden on phone, shown only on TV to the right of the
+     channel list. Uses the app's existing palette only (amber accent,
+     dark card background) — no red anywhere. */
+  .vivo-preview{ display:none; }
+  body.tv-mode .vivo-preview{
+    display:flex; flex-direction:column; flex:1; min-width:0;
+    padding:28px; border-left:1px solid var(--line);
+    background: var(--card);
+  }
+  .vivo-preview-art{
+    flex:1; border-radius:16px; background: var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:20px; overflow:hidden; min-height:0;
+    border:1px solid var(--line);
+  }
+  .vivo-preview-icon{ font-size:64px; opacity:.5; }
+  .vivo-preview-art img{ width:100%; height:100%; object-fit:contain; }
+  .vivo-preview-live{
+    font-family:'JetBrains Mono'; font-size:12px; font-weight:700;
+    color: var(--amber); letter-spacing:.04em; margin-bottom:6px;
+  }
+  .vivo-preview-name{
+    font-family:'Space Grotesk'; font-size:22px; font-weight:700;
+    color:var(--text); margin-bottom:4px;
+  }
+  .vivo-preview-meta{ font-size:13px; color:var(--text-dim); margin-bottom:18px; }
+  .vivo-preview-fullscreen{
+    background:var(--amber); color:#1A0E00; border:none; font-weight:700;
+    font-size:14px; padding:14px; border-radius:10px; cursor:pointer;
+  }
   .vivo-chan-name{ flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vivo-chan-star{ font-size:15px; color:var(--text-dim); padding:4px; flex-shrink:0; }
   .vivo-chan-star.on{ color:var(--amber); }
@@ -655,32 +686,28 @@
   body.tv-mode .sd-episode-row{ padding:14px; }
   body.tv-mode .sd-ep-title{ font-size:16px; }
 
-  /* On TV: move the category bar from the bottom (phone style) to a
-     left-side rail (TV style) — phones are completely untouched.
-     Every size below uses clamp() tied to viewport height (vh), so the
-     whole rail compresses proportionally on shorter TV screens (720p)
-     and stays comfortable on taller ones (1080p/4K) — nothing gets
-     pushed off-screen. overflow-y:auto is kept as a last-resort safety
-     net in case some resolution still doesn't fit. */
-  body.tv-mode{ padding-left:126px; }
+  /* On TV: the category bar sits as a horizontal strip along the TOP of
+     the screen — logo on the left, tabs in the middle, settings on the
+     right — instead of the bottom (phone) or the earlier side-rail
+     version. Phones are completely untouched. */
+  body.tv-mode{ padding-left:0; padding-top:88px; }
   body.tv-mode .cats{
-    left:0; right:auto; top:0; bottom:0; width:126px;
-    flex-direction:column; justify-content:flex-start; align-items:stretch;
-    padding: clamp(10px, 3vh, 28px) 10px clamp(8px, 2vh, 20px);
-    gap: clamp(2px, 1.2vh, 8px);
-    border-top:none; border-right:1px solid var(--line);
-    overflow-y:auto;
+    left:0; right:0; top:0; bottom:auto; width:auto; height:88px;
+    flex-direction:row; justify-content:flex-start; align-items:center;
+    padding: 0 22px; gap: 22px;
+    border-top:none; border-bottom:1px solid var(--line);
+    overflow-x:auto; overflow-y:hidden;
   }
   body.tv-mode .cat{
     flex:none;
-    padding: clamp(5px, 1.6vh, 12px) 4px;
+    padding: 8px 4px;
   }
-  body.tv-mode .cat .icon{ font-size: clamp(15px, 2.6vh, 25px); }
-  body.tv-mode .cat span{ font-size: clamp(10px, 1.6vh, 14px); }
+  body.tv-mode .cat .icon{ font-size:22px; }
+  body.tv-mode .cat span{ font-size:13px; }
   body.tv-mode #rowsContainer, body.tv-mode .vivo-view{ padding-bottom:20px; }
 
   /* TV only: hide the phone header entirely (logo, version, signal icon,
-     clock, gear all move into / disappear from the side rail instead). */
+     clock, gear all move into / disappear from the top bar instead). */
   body.tv-mode header{ display:none; }
 
   /* TV only: hide the search bar and the hero preview box. */
@@ -690,25 +717,23 @@
   .tv-sidebar-brand{ display:none; }
   .tv-sidebar-gear{ display:none; }
   body.tv-mode .tv-sidebar-brand{
-    display:flex; flex-direction:column; align-items:center;
-    gap: clamp(3px, 0.8vh, 8px);
-    margin-bottom: clamp(8px, 2.4vh, 26px);
-    flex-shrink:0;
+    display:flex; flex-direction:row; align-items:center;
+    gap:10px; margin-right:12px; flex-shrink:0;
   }
   body.tv-mode .tv-sidebar-brand .mark{
-    width: clamp(30px, 5vh, 50px); height: clamp(30px, 5vh, 50px);
-    border-radius:13px;
+    width:42px; height:42px;
+    border-radius:11px;
     background:linear-gradient(135deg, var(--amber), #FFB870);
     display:flex; align-items:center; justify-content:center;
     font-family:'Space Grotesk'; font-weight:700; color:#0B1B26;
-    font-size: clamp(14px, 2.4vh, 24px);
+    font-size:19px;
   }
   body.tv-mode .tv-sidebar-brand .name{
     font-family:'Space Grotesk'; font-weight:700;
-    font-size: clamp(11px, 1.6vh, 15px); color:var(--text);
+    font-size:16px; color:var(--text);
   }
   body.tv-mode .tv-sidebar-gear{
-    display:flex; margin-top:auto; flex-shrink:0;
+    display:flex; margin-top:0; margin-left:auto; flex-shrink:0;
   }
 
   /* Blur (backdrop-filter) is very GPU-expensive on weak TV hardware —
@@ -824,7 +849,8 @@
     <div class="mark">N</div>
     <div class="name">NetGo</div>
   </div>
-  <div class="cat" tabindex="0" data-cat="vivo"><div class="icon">📡</div><span>Vivo</span></div>
+  <div class="cat" tabindex="0" data-cat="vivo"><div class="icon">📡</div><span>TV</span></div>
+  <div class="cat" tabindex="0" data-cat="destacados"><div class="icon">⭐</div><span>Destacados</span></div>
   <div class="cat" tabindex="0" data-cat="series"><div class="icon">📺</div><span>Series</span></div>
   <div class="cat active" tabindex="0" data-cat="peliculas"><div class="icon">🎬</div><span>Películas</span></div>
   <div class="cat" tabindex="0" data-cat="anime"><div class="icon">🎌</div><span>Anime</span></div>
@@ -846,6 +872,17 @@
   <div class="vivo-body">
     <div class="vivo-sidebar" id="vivoSidebar"></div>
     <div class="vivo-list" id="vivoList"></div>
+    <div class="vivo-preview" id="vivoPreview">
+      <div class="vivo-preview-art" id="vivoPreviewArt">
+        <div class="vivo-preview-icon" id="vivoPreviewIcon">📡</div>
+      </div>
+      <div class="vivo-preview-info">
+        <div class="vivo-preview-live">● EN VIVO</div>
+        <div class="vivo-preview-name" id="vivoPreviewName">Selecciona un canal</div>
+        <div class="vivo-preview-meta" id="vivoPreviewMeta"></div>
+      </div>
+      <button class="vivo-preview-fullscreen" id="vivoPreviewFullscreen">⤢ Pantalla Completa</button>
+    </div>
   </div>
 </div>
 <div id="rowsContainer"></div>
@@ -1001,7 +1038,7 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, #vivoPreviewFullscreen';
 
   function focusableEls(){
     return Array.from(document.querySelectorAll(NAV_SELECTOR)).filter(el => {
@@ -1154,7 +1191,19 @@
 
     if(rowObserver){ rowObserver.disconnect(); rowObserver = null; }
 
-    const d = activeData()[cat];
+    let d;
+    if(cat === 'destacados'){
+      // A simple, honest "featured" mashup: the first (usually top/newest)
+      // row from each on-demand category, combined into one view.
+      const rows = [];
+      ['peliculas','series','anime','kids'].forEach(key => {
+        const cd = activeData()[key];
+        if(cd && cd.rows && cd.rows.length) rows.push(cd.rows[0]);
+      });
+      d = { rows, type:'movie' };
+    } else {
+      d = activeData()[cat];
+    }
     if(!d || !d.rows.length){
       rowsContainer.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">Tu proveedor no tiene contenido en esta categoría</div></div></section>`;
       return;
@@ -1285,6 +1334,19 @@
 
     const activeRow = d.rows[vivoActiveCatIndex];
     renderChannelListVirtualized(list, activeRow.items);
+
+    if(isTV() && activeRow.items.length){
+      const first = activeRow.items[0];
+      vivoPreviewSelected = { url: first.url, title: first.t, num: first.num || '' };
+      const artBox = document.getElementById('vivoPreviewArt');
+      if(artBox){
+        artBox.innerHTML = first.img
+          ? `<img src="${first.img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
+          : `<div class="vivo-preview-icon">📡</div>`;
+        document.getElementById('vivoPreviewName').textContent = first.t;
+        document.getElementById('vivoPreviewMeta').textContent = first.num ? `Canal ${first.num}` : '';
+      }
+    }
   }
 
   // Loads a long channel list in batches as the user scrolls near the
@@ -1353,6 +1415,42 @@
     renderVivoView();
   });
 
+  // TV only: updates the big preview panel with the selected channel's
+  // logo/name/number, without starting playback yet.
+  let vivoPreviewSelected = null;
+  function updateVivoPreview(row){
+    vivoPreviewSelected = {
+      url: row.dataset.url,
+      title: row.dataset.title,
+      num: row.dataset.num || ''
+    };
+    const artBox = document.getElementById('vivoPreviewArt');
+    const img = row.dataset.img;
+    artBox.innerHTML = img
+      ? `<img src="${img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
+      : `<div class="vivo-preview-icon">📡</div>`;
+    document.getElementById('vivoPreviewName').textContent = row.dataset.title;
+    document.getElementById('vivoPreviewMeta').textContent = row.dataset.num ? `Canal ${row.dataset.num}` : '';
+  }
+
+  function launchTVLivePlayback(){
+    if(!vivoPreviewSelected) return;
+    if(!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer && window.Capacitor.Plugins.VlcPlayer.playLive)) return;
+    const d = activeData().vivo;
+    const categories = d.rows.map(row => ({
+      title: row.title,
+      items: row.items.map(c => ({ url: c.url, title: c.t, num: c.num || '' }))
+    }));
+    const itemIndex = Math.max(0, d.rows[vivoActiveCatIndex].items.findIndex(c => c.url === vivoPreviewSelected.url));
+    window.Capacitor.Plugins.VlcPlayer.playLive({
+      categories,
+      catIndex: vivoActiveCatIndex,
+      itemIndex,
+      deviceCode: getDeviceCode()
+    }).catch(err => console.error('VlcPlayer playLive error:', err));
+  }
+  document.getElementById('vivoPreviewFullscreen').onclick = launchTVLivePlayback;
+
   document.getElementById('vivoList').addEventListener('click', (e) => {
     const row = e.target.closest('.vivo-chan-row');
     if(!row) return;
@@ -1366,22 +1464,11 @@
     activeChannelUrl = url;
     document.querySelectorAll('.vivo-chan-row').forEach(r => r.classList.toggle('active', r.dataset.url === url));
 
-    if(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer && window.Capacitor.Plugins.VlcPlayer.playLive){
-      // Send every category + its channels so the fullscreen player can let
-      // you browse channels (and switch categories) with the remote,
-      // without having to back out to the app.
-      const d = activeData().vivo;
-      const categories = d.rows.map(row => ({
-        title: row.title,
-        items: row.items.map(c => ({ url: c.url, title: c.t, num: c.num || '' }))
-      }));
-      const itemIndex = Math.max(0, d.rows[vivoActiveCatIndex].items.findIndex(c => c.url === url));
-      window.Capacitor.Plugins.VlcPlayer.playLive({
-        categories,
-        catIndex: vivoActiveCatIndex,
-        itemIndex,
-        deviceCode: getDeviceCode()
-      }).catch(err => console.error('VlcPlayer playLive error:', err));
+    if(isTV()){
+      // On TV, selecting a channel updates the big preview panel instead
+      // of jumping straight into fullscreen — "Pantalla Completa" is what
+      // actually starts playback.
+      updateVivoPreview(row);
       return;
     }
 
