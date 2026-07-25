@@ -60,6 +60,30 @@ import java.util.Locale;
 @CapacitorPlugin(name = "InlineVlcPlayer")
 public class InlineVlcPlayerPlugin extends Plugin {
 
+    private static InlineVlcPlayerPlugin currentInstance;
+
+    @Override
+    public void load() {
+        currentInstance = this;
+    }
+
+    /** Called from MainActivity's back button handling — closes the video
+     *  if one is open, returning true if it handled the press. */
+    public static boolean handleBackPress() {
+        if (currentInstance == null) return false;
+        return currentInstance.closeIfOpen();
+    }
+
+    private boolean closeIfOpen() {
+        if (container != null && container.getVisibility() == View.VISIBLE) {
+            if (isFullscreen) exitFullscreen(getActivity());
+            container.setVisibility(View.GONE);
+            notifyListeners("ended", new JSObject());
+            return true;
+        }
+        return false;
+    }
+
     private LibVLC libVLC;
     private MediaPlayer mediaPlayer;
     private VLCVideoLayout videoLayout;
@@ -321,7 +345,8 @@ public class InlineVlcPlayerPlugin extends Plugin {
         titleView.setTextColor(Color.WHITE);
         titleView.setTextSize(13);
         titleView.setMaxLines(1);
-        topBar.addView(titleView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        // Kept as a field (other code sets its text when a new item loads)
+        // but no longer shown — the top bar UI was removed per request.
 
         // Cast button (only added if Google Cast is actually available on this device)
         if (castContext == null) {
@@ -346,16 +371,6 @@ public class InlineVlcPlayerPlugin extends Plugin {
         fullscreenBtn.setPadding(pad, 0, pad, 0);
         fullscreenBtn.setOnClickListener(v -> { toggleFullscreen(activity); scheduleAutoHide(); });
         topBar.addView(fullscreenBtn, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 36)));
-
-        ImageButton closeBtn = new ImageButton(activity);
-        closeBtn.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
-        closeBtn.setBackgroundColor(Color.TRANSPARENT);
-        closeBtn.setOnClickListener(v -> {
-            if (isFullscreen) exitFullscreen(activity);
-            container.setVisibility(View.GONE);
-            notifyListeners("ended", new JSObject());
-        });
-        topBar.addView(closeBtn, new LinearLayout.LayoutParams(dp(activity, 36), dp(activity, 36)));
 
         FrameLayout.LayoutParams topLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
