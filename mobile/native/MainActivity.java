@@ -66,6 +66,16 @@ public class MainActivity extends BridgeActivity {
         // ending up opening "Downloader" on some Android TV boxes.
         long now = System.currentTimeMillis();
         if (now - lastBackPressTime < 2000) {
+            // Explicitly go to the system home screen (where all the other
+            // apps are) instead of just finishing — finishing alone let
+            // Android decide what to show next, which was landing on
+            // "Downloader" (likely still sitting in the task history from
+            // when it was used to install this app) instead of the home
+            // screen.
+            android.content.Intent homeIntent = new android.content.Intent(android.content.Intent.ACTION_MAIN);
+            homeIntent.addCategory(android.content.Intent.CATEGORY_HOME);
+            homeIntent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(homeIntent);
             finishAffinity();
         } else {
             lastBackPressTime = now;
