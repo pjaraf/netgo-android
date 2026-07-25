@@ -297,10 +297,13 @@ public class VlcPlayerActivity extends Activity {
             return true; // swallow other keys while browsing so they don't hit the player
         }
 
-        // Movies/series: left/right seeks 10s, OK toggles play/pause.
+        // Movies/series: left/right seeks 10s, OK toggles play/pause. Up
+        // cycles the manual zoom — only when it's free (a single item; for
+        // a series with an episode queue, Up already surfs episodes there).
         if (!isLive) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { seekBy(-10000); return true; }
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { seekBy(10000); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && urls.size() <= 1) { cycleZoom(); return true; }
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             togglePlayPause();
