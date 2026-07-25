@@ -266,21 +266,26 @@
 
   /* Top grid: player card (left) + recommendations card (right) — TV only.
      Uses the app's existing palette only (amber accent, dark card
-     background) — no colors borrowed from any reference image. */
+     background) — no colors borrowed from any reference image.
+     Sized to fit fully within the screen (viewport height minus the
+     bottom nav bar), so nothing overflows or gets clipped. */
   .vivo-top-grid{ display:none; }
+  body.tv-mode .vivo-view{
+    height: calc(100vh - 96px); box-sizing:border-box; overflow:hidden;
+  }
   body.tv-mode .vivo-top-grid{
     display:grid; grid-template-columns: 1.3fr 1fr; gap:18px;
-    padding:22px 22px 0;
+    padding:22px; height:100%; box-sizing:border-box;
   }
   .vivo-preview{
-    display:flex; flex-direction:column;
+    display:flex; flex-direction:column; min-height:0;
     padding:20px; border-radius:16px;
     background: var(--card); border:1px solid var(--line);
   }
   .vivo-preview-art{
     flex:1; border-radius:12px; background: var(--bg);
     display:flex; align-items:center; justify-content:center;
-    margin-bottom:16px; overflow:hidden; min-height:220px;
+    margin-bottom:16px; overflow:hidden; min-height:0;
     border:1px solid var(--line);
   }
   .vivo-preview-icon{ font-size:56px; opacity:.5; }
@@ -288,7 +293,7 @@
   .vivo-preview-live{
     font-family:'JetBrains Mono'; font-size:12px; font-weight:700;
     color: var(--amber); letter-spacing:.04em; margin-bottom:6px;
-    display:flex; align-items:center; gap:10px;
+    display:flex; align-items:center; gap:10px; flex-shrink:0;
   }
   .vivo-preview-rate{ color:var(--text-dim); font-weight:600; }
   .vivo-preview-name{
@@ -302,7 +307,7 @@
   }
 
   .vivo-recommend-card{
-    display:flex; flex-direction:column;
+    display:flex; flex-direction:column; min-height:0;
     padding:20px; border-radius:16px;
     background: var(--card); border:1px solid var(--line);
     overflow:hidden;
@@ -312,9 +317,30 @@
     color:var(--text); margin-bottom:14px;
   }
   .vivo-recommend-row{
-    display:flex; gap:12px; overflow-x:auto; flex:1;
+    position:relative; flex:1; border-radius:12px; overflow:hidden;
+    background:var(--bg); border:1px solid var(--line); min-height:0;
   }
-  .vivo-recommend-row .poster-card{ min-width:110px; }
+  .vivo-recommend-slide{
+    position:absolute; inset:0; opacity:0; transition:opacity .7s ease;
+    display:flex; align-items:flex-end; background-size:cover; background-position:center top;
+    background-color:var(--bg);
+  }
+  .vivo-recommend-slide.active{ opacity:1; }
+  .vivo-recommend-slide-info{
+    padding:16px; width:100%;
+    background:linear-gradient(180deg, transparent, rgba(11,27,38,0.94) 82%);
+  }
+  .vivo-recommend-slide-title{
+    font-family:'Space Grotesk'; font-weight:700; font-size:17px; color:var(--text);
+  }
+  .vivo-recommend-slide-meta{ font-size:12.5px; color:var(--text-dim); margin-top:2px; }
+  .vivo-recommend-dots{
+    position:absolute; bottom:10px; right:14px; display:flex; gap:6px;
+  }
+  .vivo-recommend-dot{
+    width:6px; height:6px; border-radius:50%; background:rgba(234,242,245,0.35);
+  }
+  .vivo-recommend-dot.active{ background:var(--amber); }
 
   .vivo-chan-name{ flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vivo-chan-star{ font-size:15px; color:var(--text-dim); padding:4px; flex-shrink:0; }
@@ -726,6 +752,10 @@
   body.tv-mode .cat .icon{ font-size:24px; }
   body.tv-mode .cat span{ font-size:13px; }
   body.tv-mode #rowsContainer, body.tv-mode .vivo-view{ padding-bottom:20px; }
+  /* TV only: the main screen shows just the player + recommendations —
+     no category/favorites tabs or channel list. Phone's Vivo tab keeps
+     these exactly as before. */
+  body.tv-mode .vivo-tabs, body.tv-mode .vivo-body{ display:none; }
 
   /* TV only: hide the phone header entirely (logo, version, signal icon,
      clock, gear all move into / disappear from the bottom bar instead). */
@@ -1365,17 +1395,10 @@
     const activeRow = d.rows[vivoActiveCatIndex];
     renderChannelListVirtualized(list, activeRow.items);
 
-    if(isTV() && activeRow.items.length){
-      const first = activeRow.items[0];
-      vivoPreviewSelected = { url: first.url, title: first.t, num: first.num || '' };
-      const artBox = document.getElementById('vivoPreviewArt');
-      if(artBox){
-        artBox.innerHTML = first.img
-          ? `<img src="${first.img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
-          : `<div class="vivo-preview-icon">📡</div>`;
-        document.getElementById('vivoPreviewName').textContent = first.t;
-        document.getElementById('vivoPreviewMeta').textContent = first.num ? `Canal ${first.num}` : '';
-      }
+    if(isTV() && activeRow.items.length && !vivoPreviewPlaying){
+      // Auto-play a default channel the moment the app opens, so the main
+      // screen never sits empty waiting for a selection.
+      playVivoChannelData(activeRow.items[0]);
     }
   }
 
@@ -1453,17 +1476,49 @@
 
   // Top-right card: a simple mashup of the top row from each on-demand
   // category, reusing the existing poster-card look.
+  let recommendCarouselTimer = null;
+  let recommendCarouselIndex = 0;
+
   function renderVivoRecommendations(){
     const row = document.getElementById('vivoRecommendRow');
     if(!row) return;
+    if(recommendCarouselTimer){ clearInterval(recommendCarouselTimer); recommendCarouselTimer = null; }
+
     const items = [];
     ['peliculas','series','anime','kids'].forEach(key => {
       const cd = activeData()[key];
-      if(cd && cd.rows && cd.rows.length) items.push(...cd.rows[0].items.slice(0, 3));
+      if(cd && cd.rows && cd.rows.length) items.push(...cd.rows[0].items.slice(0, 5));
     });
-    row.innerHTML = items.length
-      ? items.map(posterCard).join('')
-      : `<div class="empty-card">Sin recomendaciones todavía</div>`;
+
+    if(!items.length){
+      row.innerHTML = `<div class="empty-card">Sin recomendaciones todavía</div>`;
+      return;
+    }
+
+    row.innerHTML = items.map((it, i) => `
+      <div class="vivo-recommend-slide${i === 0 ? ' active' : ''}" data-idx="${i}"
+           style="background-image:url('${it.img || ''}')">
+        <div class="vivo-recommend-slide-info">
+          <div class="vivo-recommend-slide-title">${it.t}</div>
+          <div class="vivo-recommend-slide-meta">${it.meta || ''}</div>
+        </div>
+      </div>
+    `).join('') + `
+      <div class="vivo-recommend-dots">
+        ${items.map((_, i) => `<div class="vivo-recommend-dot${i === 0 ? ' active' : ''}"></div>`).join('')}
+      </div>
+    `;
+
+    recommendCarouselIndex = 0;
+    if(items.length > 1){
+      recommendCarouselTimer = setInterval(() => {
+        recommendCarouselIndex = (recommendCarouselIndex + 1) % items.length;
+        row.querySelectorAll('.vivo-recommend-slide').forEach((el, i) =>
+          el.classList.toggle('active', i === recommendCarouselIndex));
+        row.querySelectorAll('.vivo-recommend-dot').forEach((el, i) =>
+          el.classList.toggle('active', i === recommendCarouselIndex));
+      }, 5000);
+    }
   }
 
   // Simulated bitrate readout next to "EN VIVO" — we don't have a real
@@ -1504,21 +1559,15 @@
     }
   }
 
-  async function updateVivoPreview(row){
-    vivoPreviewSelected = {
-      url: row.dataset.url,
-      title: row.dataset.title,
-      num: row.dataset.num || ''
-    };
-    document.getElementById('vivoPreviewName').textContent = row.dataset.title;
-    document.getElementById('vivoPreviewMeta').textContent = row.dataset.num ? `Canal ${row.dataset.num}` : '';
+  async function playVivoChannelData(item){
+    vivoPreviewSelected = { url:item.url, title:item.t, num:item.num || '' };
+    document.getElementById('vivoPreviewName').textContent = item.t;
+    document.getElementById('vivoPreviewMeta').textContent = item.num ? `Canal ${item.num}` : '';
 
     if(!inlineAvailable()){
-      // No native player available (e.g. desktop preview) — just show the logo.
       const artBox = document.getElementById('vivoPreviewArt');
-      const img = row.dataset.img;
-      artBox.innerHTML = img
-        ? `<img src="${img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
+      artBox.innerHTML = item.img
+        ? `<img src="${item.img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
         : `<div class="vivo-preview-icon">📡</div>`;
       return;
     }
@@ -1526,11 +1575,20 @@
     document.getElementById('vivoPreviewArt').innerHTML = ''; // native video renders on top of this box
     const P = window.Capacitor.Plugins.InlineVlcPlayer;
     await P.mount(getVivoPreviewRect());
-    await P.loadQueue({ queue: [{ url: row.dataset.url, title: row.dataset.title }], startIndex: 0 });
+    await P.loadQueue({ queue: [{ url:item.url, title:item.t }], startIndex: 0 });
     vivoPreviewPlaying = true;
     startVivoRateIndicator();
     setTimeout(repositionVivoPreview, 150);
     setTimeout(repositionVivoPreview, 500);
+  }
+
+  async function updateVivoPreview(row){
+    await playVivoChannelData({
+      url: row.dataset.url,
+      t: row.dataset.title,
+      num: row.dataset.num || '',
+      img: row.dataset.img || ''
+    });
   }
 
   async function launchTVLivePlayback(){
@@ -1593,6 +1651,14 @@
       const now = Date.now();
       if(now - lastCatClick < 150) return; // ignore rapid double-taps/clicks
       lastCatClick = now;
+
+      // On TV, "TV" is a shortcut to fullscreen whatever's already playing
+      // in the main-screen preview — not a view to switch into.
+      if(isTV() && cat.dataset.cat === 'vivo' && vivoPreviewPlaying){
+        launchTVLivePlayback();
+        return;
+      }
+
       document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.remove('active'));
       cat.classList.add('active');
       renderCategory(cat.dataset.cat);
@@ -2096,7 +2162,12 @@
     el.classList.add('show');
   }
 
-  renderCategory('peliculas');
+  if(isTV()){
+    document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.toggle('active', c.dataset.cat === 'vivo'));
+    renderCategory('vivo');
+  } else {
+    renderCategory('peliculas');
+  }
 
   // ---------- Update checker ----------
   const UPDATE_INFO_URL = 'https://pjaraf.github.io/netgo-android/version.json';
