@@ -82,6 +82,17 @@
             android:text="00:00"
             android:textColor="#FFFFFF"
             android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/player_cc_toggle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="CC"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            android:padding="4dp" />
     </LinearLayout>
 
 </RelativeLayout>
