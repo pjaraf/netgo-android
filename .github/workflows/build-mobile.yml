@@ -48,6 +48,9 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Increase Gradle memory allocation (fixes OutOfMemoryError packaging multiple APKs)
+        run: node scripts/patch-gradle-memory.js
+
       - name: Pin the debug signing key inside the Android project
         run: node scripts/patch-signing.js
 
