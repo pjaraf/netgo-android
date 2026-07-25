@@ -328,6 +328,11 @@ public class VlcPlayerActivity extends Activity {
         media.setHWDecoderEnabled(true, false);
         mediaPlayer.setMedia(media);
         media.release();
+        // Force 16:9 so the video fills the whole TV screen — without this,
+        // content whose reported aspect ratio doesn't exactly match the
+        // screen shows with black bars instead of covering it edge to edge.
+        mediaPlayer.setAspectRatio("16:9");
+        mediaPlayer.setScale(0);
         mediaPlayer.play();
     }
 
