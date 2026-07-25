@@ -114,6 +114,7 @@ public class VlcPlayerActivity extends Activity {
     private SeekBar seekBar;
     private TextView timeElapsedView;
     private TextView timeTotalView;
+    private TextView ccToggle;
     private Runnable progressTickRunnable;
     private boolean userSeeking = false;
 
@@ -143,10 +144,10 @@ public class VlcPlayerActivity extends Activity {
         seekBar.setFocusableInTouchMode(false);
         timeElapsedView = findViewById(R.id.player_time_elapsed);
         timeTotalView = findViewById(R.id.player_time_total);
-        TextView ccToggle = findViewById(R.id.player_cc_toggle);
-        ccToggle.setFocusable(false);
-        ccToggle.setFocusableInTouchMode(false);
+        ccToggle = findViewById(R.id.player_cc_toggle);
         ccToggle.setOnClickListener(v -> toggleSubtitles());
+        ccToggle.setOnFocusChangeListener((v, hasFocus) ->
+                ccToggle.setBackgroundColor(hasFocus ? 0xFFFF8A3D : 0x66000000));
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
                 if (fromUser) timeElapsedView.setText(formatTime(progress));
@@ -191,7 +192,7 @@ public class VlcPlayerActivity extends Activity {
 
         libVLC = new LibVLC(this, options);
         mediaPlayer = new MediaPlayer(libVLC);
-        mediaPlayer.attachViews(videoLayout, null, false, false);
+        mediaPlayer.attachViews(videoLayout, null, false, true);
 
         mediaPlayer.setEventListener(event -> {
             if (event.type == MediaPlayer.Event.Playing) {
@@ -298,10 +299,31 @@ public class VlcPlayerActivity extends Activity {
             return true; // swallow other keys while browsing so they don't hit the player
         }
 
-        // Movies/series: left/right seeks 10s, OK toggles play/pause.
+        // While the CC button has focus, let it behave like a normal
+        // button: OK activates it, Down/Back leaves it and returns control
+        // to the player.
+        if (ccToggle != null && ccToggle.isFocused()) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                return super.onKeyDown(keyCode, event);
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_BACK) {
+                ccToggle.clearFocus();
+                return true;
+            }
+            return true;
+        }
+
+        // Movies/series: left/right seeks 10s, OK toggles play/pause, up
+        // reaches the CC button (only when there's a single item — for a
+        // series with an episode queue, Up already surfs episodes, so use
+        // the remote's dedicated subtitles key there instead).
         if (!isLive) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { seekBy(-10000); return true; }
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { seekBy(10000); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && urls.size() <= 1 && ccToggle != null) {
+                ccToggle.requestFocus();
+                return true;
+            }
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             togglePlayPause();
@@ -416,11 +438,6 @@ public class VlcPlayerActivity extends Activity {
         media.setHWDecoderEnabled(true, false);
         mediaPlayer.setMedia(media);
         media.release();
-        // Force 16:9 so the video fills the whole TV screen — without this,
-        // content whose reported aspect ratio doesn't exactly match the
-        // screen shows with black bars instead of covering it edge to edge.
-        mediaPlayer.setAspectRatio("16:9");
-        mediaPlayer.setScale(0);
         mediaPlayer.play();
     }
 
