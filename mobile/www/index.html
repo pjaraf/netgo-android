@@ -1677,23 +1677,30 @@
     const overlay = document.getElementById('seriesDetailOverlay');
     overlay.style.display = 'block';
     overlay.scrollTop = 0;
-    document.getElementById('sdTitle').textContent = fallbackTitle || 'Cargando…';
-    document.getElementById('sdEpisodeList').innerHTML = '';
-    document.getElementById('sdSeasonTabs').innerHTML = '';
-    document.getElementById('sdTags').innerHTML = '';
-    document.getElementById('sdPlot').textContent = '';
-    document.getElementById('sdBackdrop').style.backgroundImage = '';
-    document.getElementById('sdCoverImg').style.visibility = 'visible';
-    document.getElementById('sdCoverImg').src = '';
+    try{
+      document.getElementById('sdTitle').textContent = fallbackTitle || 'Cargando…';
+      document.getElementById('sdEpisodeList').innerHTML = '';
+      document.getElementById('sdSeasonTabs').innerHTML = '';
+      document.getElementById('sdTags').innerHTML = '';
+      document.getElementById('sdPlot').textContent = '';
+      document.getElementById('sdBackdrop').style.backgroundImage = '';
+      document.getElementById('sdCoverImg').style.visibility = 'visible';
+      document.getElementById('sdCoverImg').src = '';
 
-    const favBtn = document.getElementById('sdFav');
-    favBtn.classList.toggle('active', isSeriesFav(seriesId));
-    favBtn.textContent = isSeriesFav(seriesId) ? '♥' : '♡';
-    favBtn.onclick = () => {
-      toggleSeriesFav(seriesId);
-      favBtn.classList.toggle('active');
-      favBtn.textContent = favBtn.classList.contains('active') ? '♥' : '♡';
-    };
+      const favBtn = document.getElementById('sdFav');
+      favBtn.classList.toggle('active', isSeriesFav(seriesId));
+      favBtn.textContent = isSeriesFav(seriesId) ? '♥' : '♡';
+      favBtn.onclick = () => {
+        toggleSeriesFav(seriesId);
+        favBtn.classList.toggle('active');
+        favBtn.textContent = favBtn.classList.contains('active') ? '♥' : '♡';
+      };
+    }catch(err){
+      console.error('openSeriesDetail setup error:', err);
+      document.getElementById('sdTitle').textContent = 'No se pudo abrir la serie';
+      document.getElementById('sdPlot').textContent = err.message || '';
+      return;
+    }
 
     try{
       const info = await xtreamFetch(xtreamState.conn, 'get_series_info', `&series_id=${seriesId}`);
