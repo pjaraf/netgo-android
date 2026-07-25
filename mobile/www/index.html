@@ -2144,10 +2144,97 @@
     renderCategory(currentCat);
   }
 
+  // ---------- M3U / OTT list support ----------
+  // Parses a standard M3U playlist: each channel/movie is an #EXTINF line
+  // (with optional tvg-logo and group-title) followed by its stream URL.
+  function parseM3U(text){
+    const lines = text.split(/\r?\n/);
+    const entries = [];
+    let pending = null;
+    for(let i = 0; i < lines.length; i++){
+      const line = lines[i].trim();
+      if(!line) continue;
+      if(line.startsWith('#EXTINF')){
+        const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+        const groupMatch = line.match(/group-title="([^"]*)"/i);
+        const nameMatch = line.match(/,(.*)$/);
+        pending = {
+          logo: logoMatch ? logoMatch[1] : '',
+          group: groupMatch ? groupMatch[1].trim() : 'General',
+          name: nameMatch ? nameMatch[1].trim() : 'Sin nombre'
+        };
+      } else if(!line.startsWith('#') && pending){
+        entries.push({ ...pending, url: line });
+        pending = null;
+      }
+    }
+    return entries;
+  }
+
+  // M3U/OTT lists don't cleanly separate live channels from movies/series
+  // the way Xtream does — this sorts each group into our existing tabs by
+  // its name, defaulting to "Vivo" (the most common M3U content type).
+  function classifyM3UGroup(group){
+    const g = (group || '').toLowerCase();
+    if(/pelicul|movie|vod|film/.test(g)) return 'peliculas';
+    if(/serie|show/.test(g)) return 'series';
+    if(/anime/.test(g)) return 'anime';
+    if(/kids|infantil|ni[ñn]os|cartoon|toon|disney/.test(g)) return 'kids';
+    return 'vivo';
+  }
+
+  async function connectM3U(conn){
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 25000);
+    let text;
+    try{
+      const res = await fetch(conn.server, { signal: ctrl.signal });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      text = await res.text();
+    } finally { clearTimeout(timeout); }
+
+    const entries = parseM3U(text);
+    if(!entries.length) throw new Error('La lista no tiene canales válidos');
+
+    const buckets = { vivo:{}, peliculas:{}, series:{}, anime:{}, kids:{} };
+    entries.forEach(e => {
+      const cat = classifyM3UGroup(e.group);
+      if(!buckets[cat][e.group]) buckets[cat][e.group] = [];
+      buckets[cat][e.group].push(e);
+    });
+
+    function bucketToRows(bucket, isChannel){
+      return Object.keys(bucket).map(groupName => ({
+        title: groupName,
+        items: bucket[groupName].map(e => isChannel ? ({
+          t: e.name, program:'', num:'', img: e.logo, url: e.url
+        } ) : ({
+          t: e.name, meta:'', badge:'HD', r:'—', img: e.logo, kind:'vod', url: e.url
+        }))
+      }));
+    }
+
+    liveData = {
+      vivo: { rows: bucketToRows(buckets.vivo, true), type:'channel' },
+      peliculas: { rows: bucketToRows(buckets.peliculas, false), type:'poster' },
+      series: { rows: bucketToRows(buckets.series, false), type:'poster' },
+      anime: { rows: bucketToRows(buckets.anime, false), type:'poster' },
+      kids: { rows: bucketToRows(buckets.kids, false), type:'poster' },
+    };
+    xtreamState = { conn }; // minimal — enough for the account panel to know we're connected
+
+    document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
+    document.getElementById('heroTitle').textContent = 'Todo listo';
+    document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${entries.length}</b> elementos (lista M3U)</span></div>`;
+    document.getElementById('heroConnect').textContent = 'Actualizar catálogo';
+    renderCategory(currentCat);
+  }
+
   async function tryConnect(conn, { silent } = {}){
     if(!silent) showStatus('Conectando…', false);
     try{
-      await connectXtream(conn);
+      if(conn.type === 'm3u') await connectM3U(conn);
+      else await connectXtream(conn);
       if(!silent) showStatus('✓ Conectado. Cargando tu catálogo…', false);
       overlay.classList.remove('open');
     }catch(err){
@@ -2284,7 +2371,7 @@
   window.addEventListener('load', async () => {
     await initDeviceCode();
     const conn = getConn();
-    if(conn && conn.type === 'xtream'){
+    if(conn && (conn.type === 'xtream' || conn.type === 'm3u')){
       document.getElementById('startScreen').style.display = 'none';
       tryConnect(conn, { silent:true });
       startStatusPolling();
@@ -2315,8 +2402,14 @@
     overlay.style.display = 'flex';
 
     const conn = getConn();
-    if(!conn || conn.type !== 'xtream'){
+    if(!conn){
       userEl.textContent = 'Sin proveedor conectado';
+      return;
+    }
+    if(conn.type === 'm3u'){
+      userEl.textContent = 'Lista M3U';
+      maxConnEl.textContent = '—';
+      expiryEl.textContent = 'No disponible para listas M3U';
       return;
     }
     try{
@@ -2587,11 +2680,16 @@
         const res = await fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`);
         if(!res.ok) return;
         const data = await res.json();
-        if(data && data.server && data.username && data.password){
+        let conn = null;
+        if(data && data.connType === 'm3u' && data.m3uUrl){
+          conn = { type:'m3u', server:data.m3uUrl };
+        } else if(data && data.server && data.username && data.password){
+          conn = { type:'xtream', server:data.server, username:data.username, password:data.password };
+        }
+        if(conn){
           fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`, { method:'DELETE' }).catch(()=>{});
           stopStartScreenPolling();
           document.getElementById('startScreen').style.display = 'none';
-          const conn = { type:'xtream', server:data.server, username:data.username, password:data.password };
           saveConn(conn);
           tryConnect(conn);
         }
