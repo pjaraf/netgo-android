@@ -170,9 +170,9 @@ public class VlcPlayerActivity extends Activity {
         options.add("--no-drop-late-frames");
         options.add("--no-skip-frames");
         options.add("--rtsp-tcp");
-        options.add("--network-caching=2500");
-        options.add("--live-caching=2500");
-        options.add("--file-caching=1000");
+        options.add("--network-caching=1200");
+        options.add("--live-caching=1200");
+        options.add("--file-caching=600");
         options.add("--http-reconnect");
 
         libVLC = new LibVLC(this, options);
@@ -190,8 +190,12 @@ public class VlcPlayerActivity extends Activity {
             } else if (event.type == MediaPlayer.Event.EncounteredError) {
                 runOnUiThread(() -> {
                     spinner.setVisibility(View.GONE);
-                    titleView.setText("No se pudo reproducir esta señal");
                     cancelMaintenanceTimer();
+                    if (isLive) {
+                        showMaintenanceThenAdvance();
+                    } else {
+                        showMaintenanceNow();
+                    }
                 });
             } else if (event.type == MediaPlayer.Event.EndReached) {
                 runOnUiThread(this::advanceOrFinish);
@@ -314,6 +318,7 @@ public class VlcPlayerActivity extends Activity {
         titleView.setText(titles.get(currentIndex));
         hideMaintenanceView();
         scheduleMaintenanceTimer();
+        if (autoAdvanceRunnable != null) { handler.removeCallbacks(autoAdvanceRunnable); autoAdvanceRunnable = null; }
         stopProgressTicker();
         if (progressBarContainer != null) {
             progressBarContainer.setVisibility(View.GONE);
@@ -649,6 +654,26 @@ public class VlcPlayerActivity extends Activity {
         if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
     }
 
+    /** Shows "Canal en mantenimiento" right away (used on a real playback error). */
+    private void showMaintenanceNow() {
+        spinner.setVisibility(View.GONE);
+        maintenanceView.setAlpha(0f);
+        maintenanceView.setVisibility(View.VISIBLE);
+        maintenanceView.animate().alpha(1f).setDuration(200).start();
+    }
+
+    /** For live TV: shows the maintenance message, then automatically moves
+     *  to the next channel after a few seconds instead of getting stuck —
+     *  the person never has to back out to the home screen. */
+    private Runnable autoAdvanceRunnable;
+    private void showMaintenanceThenAdvance() {
+        showMaintenanceNow();
+        if (autoAdvanceRunnable != null) handler.removeCallbacks(autoAdvanceRunnable);
+        if (urls.size() <= 1) return; // nothing to advance to
+        autoAdvanceRunnable = () -> goToChannel(currentIndex + 1 >= urls.size() ? 0 : currentIndex + 1);
+        handler.postDelayed(autoAdvanceRunnable, 3000);
+    }
+
     // ---------- Remote lock: checked directly by this screen ----------
     private void scheduleStatusCheck() {
         if (deviceCode == null || deviceCode.isEmpty()) return;
@@ -774,6 +799,7 @@ public class VlcPlayerActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
+        if (autoAdvanceRunnable != null) handler.removeCallbacks(autoAdvanceRunnable);
         cancelMaintenanceTimer();
         cancelStatusCheck();
         stopProgressTicker();
