@@ -360,7 +360,7 @@
   .row-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px; }
   .row-head h2{ font-family:'Space Grotesk'; font-size:15px; font-weight:600; }
   .row-head .count{ font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); }
-  .row-scroll{ display:flex; gap:12px; overflow-x:auto; padding-bottom:4px; }
+  .row-scroll{ display:flex; gap:12px; overflow-x:auto; padding-bottom:4px; contain:content; }
   .row-scroll::-webkit-scrollbar{ display:none; }
   .empty-card{
     flex: 0 0 150px; height:96px;
@@ -1177,7 +1177,7 @@
       const idx = +section.dataset.rowIndex;
       const scrollEl = section.querySelector('.row-scroll');
       const items = rows[idx].items;
-      const BATCH = (isTV() || isLowPower()) ? 14 : 24;
+      const BATCH = (isTV() || isLowPower()) ? 10 : 24;
       let loaded = 0;
       function loadMore(){
         if(loaded >= items.length) return;
@@ -1208,7 +1208,7 @@
         populateRow(section);
         rowObserver.unobserve(section);
       });
-    }, { root:null, rootMargin: '600px 0px' });
+    }, { root:null, rootMargin: (isTV() || isLowPower()) ? '300px 0px' : '600px 0px' });
 
     rowsContainer.querySelectorAll('.row').forEach(section => rowObserver.observe(section));
   }
@@ -1380,8 +1380,12 @@
     playQueue(queue, startIndex, title, 'channel');
   });
 
+  let lastCatClick = 0;
   document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(cat => {
     cat.onclick = () => {
+      const now = Date.now();
+      if(now - lastCatClick < 150) return; // ignore rapid double-taps/clicks
+      lastCatClick = now;
       document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.remove('active'));
       cat.classList.add('active');
       renderCategory(cat.dataset.cat);
