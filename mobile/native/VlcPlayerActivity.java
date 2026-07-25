@@ -284,6 +284,16 @@ public class VlcPlayerActivity extends Activity {
             return true; // swallow other keys while browsing so they don't hit the player
         }
 
+        // Movies/series: left/right seeks 10s, OK toggles play/pause.
+        if (!isLive) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { seekBy(-10000); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { seekBy(10000); return true; }
+        }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            togglePlayPause();
+            return true;
+        }
+
         if (urls.size() > 1) {
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                 goToChannel(currentIndex - 1 < 0 ? urls.size() - 1 : currentIndex - 1);
@@ -295,6 +305,43 @@ public class VlcPlayerActivity extends Activity {
             }
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    private void togglePlayPause() {
+        if (mediaPlayer == null) return;
+        if (mediaPlayer.isPlaying()) {
+            mediaPlayer.pause();
+        } else {
+            mediaPlayer.play();
+        }
+    }
+
+    /** Seeks by deltaMs (negative = backward) and briefly shows the progress bar. */
+    private void seekBy(int deltaMs) {
+        if (mediaPlayer == null) return;
+        long length = mediaPlayer.getLength();
+        long newTime = mediaPlayer.getTime() + deltaMs;
+        if (newTime < 0) newTime = 0;
+        if (length > 0 && newTime > length) newTime = length;
+        mediaPlayer.setTime(newTime);
+        if (seekBar != null) {
+            if (length > 0) seekBar.setMax((int) length);
+            seekBar.setProgress((int) newTime);
+        }
+        if (timeElapsedView != null) timeElapsedView.setText(formatTime((int) newTime));
+        if (timeTotalView != null && length > 0) timeTotalView.setText(formatTime((int) length));
+        showProgressBarTemporarily();
+    }
+
+    /** Shows the progress bar for a few seconds (used when seeking), then
+     *  auto-hides it again — it no longer stays on screen all the time. */
+    private Runnable hideProgressBarRunnable;
+    private void showProgressBarTemporarily() {
+        if (progressBarContainer == null) return;
+        progressBarContainer.setVisibility(View.VISIBLE);
+        if (hideProgressBarRunnable != null) handler.removeCallbacks(hideProgressBarRunnable);
+        hideProgressBarRunnable = () -> progressBarContainer.setVisibility(View.GONE);
+        handler.postDelayed(hideProgressBarRunnable, 2500);
     }
 
     private void goToChannel(int index) {
