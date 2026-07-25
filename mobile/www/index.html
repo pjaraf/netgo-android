@@ -1946,7 +1946,8 @@
 
   // Auto-connect on load if credentials were saved previously; otherwise
   // show the startup QR pairing screen.
-  window.addEventListener('load', () => {
+  window.addEventListener('load', async () => {
+    await initDeviceCode();
     const conn = getConn();
     if(conn && conn.type === 'xtream'){
       document.getElementById('startScreen').style.display = 'none';
@@ -2200,18 +2201,40 @@
   let startPollTimer = null;
 
   // ---------- Persistent per-device code ----------
-  // Generated once the first time the app ever opens, then stored on-device
-  // forever (until the app is uninstalled/reinstalled) — so every install
-  // has its own fixed, unique code the admin can use to identify it, even
-  // across app restarts.
+  // Derived from the device's Android ID — unlike a random code, this
+  // survives the app being uninstalled and reinstalled on the same
+  // device (as long as it keeps the same signing key, which ours is
+  // pinned to). Falls back to a random locally-stored code if the native
+  // plugin isn't available (e.g. testing in a plain desktop browser).
   const DEVICE_CODE_KEY = 'netgo_device_code';
-  function getDeviceCode(){
+  let deviceCodeCache = null;
+
+  function hashToSixDigits(str){
+    let hash = 0;
+    for(let i = 0; i < str.length; i++){
+      hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0; // 32-bit rolling hash
+    }
+    return String(Math.abs(hash) % 1000000).padStart(6, '0');
+  }
+
+  async function initDeviceCode(){
     let code = localStorage.getItem(DEVICE_CODE_KEY);
     if(!code){
-      code = randomPairCode();
+      try{
+        if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceId){
+          const res = await window.Capacitor.Plugins.DeviceId.getId();
+          if(res && res.id) code = hashToSixDigits(res.id);
+        }
+      }catch(err){ /* fall back below */ }
+      if(!code) code = randomPairCode();
       localStorage.setItem(DEVICE_CODE_KEY, code);
     }
+    deviceCodeCache = code;
     return code;
+  }
+
+  function getDeviceCode(){
+    return deviceCodeCache || localStorage.getItem(DEVICE_CODE_KEY) || '';
   }
 
   function showStartScreenPairing(){
