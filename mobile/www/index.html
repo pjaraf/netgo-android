@@ -1188,6 +1188,7 @@
     }
     vivoView.style.display = 'none';
     rowsContainer.style.display = 'block';
+    if(typeof stopVivoPreview === 'function') stopVivoPreview();
 
     if(rowObserver){ rowObserver.disconnect(); rowObserver = null; }
 
@@ -1415,27 +1416,64 @@
     renderVivoView();
   });
 
-  // TV only: updates the big preview panel with the selected channel's
-  // logo/name/number, without starting playback yet.
+  // TV only: plays the selected channel live, right inside the preview
+  // box — using the same native inline-video mechanism the phone's hero
+  // box uses, just positioned to match this box's screen area instead.
   let vivoPreviewSelected = null;
-  function updateVivoPreview(row){
+  let lastVivoClick = { url:null, time:0 };
+  let vivoPreviewPlaying = false;
+
+  function getVivoPreviewRect(){
+    const r = document.getElementById('vivoPreviewArt').getBoundingClientRect();
+    return { x:r.left, y:r.top, width:r.width, height:r.height };
+  }
+
+  function repositionVivoPreview(){
+    if(!vivoPreviewPlaying || !inlineAvailable()) return;
+    window.Capacitor.Plugins.InlineVlcPlayer.updateRect(getVivoPreviewRect()).catch(()=>{});
+  }
+  window.addEventListener('resize', () => { if(vivoPreviewPlaying) repositionVivoPreview(); });
+
+  async function stopVivoPreview(){
+    if(!vivoPreviewPlaying) return;
+    vivoPreviewPlaying = false;
+    if(inlineAvailable()){
+      try{ await window.Capacitor.Plugins.InlineVlcPlayer.unmount(); }catch(e){}
+    }
+  }
+
+  async function updateVivoPreview(row){
     vivoPreviewSelected = {
       url: row.dataset.url,
       title: row.dataset.title,
       num: row.dataset.num || ''
     };
-    const artBox = document.getElementById('vivoPreviewArt');
-    const img = row.dataset.img;
-    artBox.innerHTML = img
-      ? `<img src="${img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
-      : `<div class="vivo-preview-icon">📡</div>`;
     document.getElementById('vivoPreviewName').textContent = row.dataset.title;
     document.getElementById('vivoPreviewMeta').textContent = row.dataset.num ? `Canal ${row.dataset.num}` : '';
+
+    if(!inlineAvailable()){
+      // No native player available (e.g. desktop preview) — just show the logo.
+      const artBox = document.getElementById('vivoPreviewArt');
+      const img = row.dataset.img;
+      artBox.innerHTML = img
+        ? `<img src="${img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
+        : `<div class="vivo-preview-icon">📡</div>`;
+      return;
+    }
+
+    document.getElementById('vivoPreviewArt').innerHTML = ''; // native video renders on top of this box
+    const P = window.Capacitor.Plugins.InlineVlcPlayer;
+    await P.mount(getVivoPreviewRect());
+    await P.loadQueue({ queue: [{ url: row.dataset.url, title: row.dataset.title }], startIndex: 0 });
+    vivoPreviewPlaying = true;
+    setTimeout(repositionVivoPreview, 150);
+    setTimeout(repositionVivoPreview, 500);
   }
 
-  function launchTVLivePlayback(){
+  async function launchTVLivePlayback(){
     if(!vivoPreviewSelected) return;
     if(!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer && window.Capacitor.Plugins.VlcPlayer.playLive)) return;
+    await stopVivoPreview(); // hand off from the small inline preview to true fullscreen
     const d = activeData().vivo;
     const categories = d.rows.map(row => ({
       title: row.title,
@@ -1465,9 +1503,15 @@
     document.querySelectorAll('.vivo-chan-row').forEach(r => r.classList.toggle('active', r.dataset.url === url));
 
     if(isTV()){
-      // On TV, selecting a channel updates the big preview panel instead
-      // of jumping straight into fullscreen — "Pantalla Completa" is what
-      // actually starts playback.
+      // On TV: one selection plays it live in the preview box; a second
+      // tap on the same channel within half a second expands to fullscreen.
+      const now = Date.now();
+      if(lastVivoClick.url === url && now - lastVivoClick.time < 500){
+        lastVivoClick = { url:null, time:0 };
+        launchTVLivePlayback();
+        return;
+      }
+      lastVivoClick = { url, time: now };
       updateVivoPreview(row);
       return;
     }
