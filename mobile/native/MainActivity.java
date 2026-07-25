@@ -50,6 +50,8 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    private long lastBackPressTime = 0;
+
     @Override
     public void onBackPressed() {
         // The inline video player has no visible close button anymore, so
@@ -57,6 +59,17 @@ public class MainActivity extends BridgeActivity {
         if (InlineVlcPlayerPlugin.handleBackPress()) {
             return;
         }
-        super.onBackPressed();
+
+        // Press back twice (within 2s) to exit — and, importantly, this
+        // NEVER falls through to the default WebView back-navigation
+        // behavior (super.onBackPressed()), which is what was likely
+        // ending up opening "Downloader" on some Android TV boxes.
+        long now = System.currentTimeMillis();
+        if (now - lastBackPressTime < 2000) {
+            finishAffinity();
+        } else {
+            lastBackPressTime = now;
+            android.widget.Toast.makeText(this, "Presiona atrás de nuevo para salir", android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
 }
