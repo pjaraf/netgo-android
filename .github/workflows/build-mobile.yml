@@ -54,6 +54,9 @@ jobs:
       - name: Install native libVLC player plugin (full codec support)
         run: node scripts/patch-vlc-plugin.js
 
+      - name: Set up direct in-app update installer (FileProvider)
+        run: node scripts/patch-update-installer.js
+
       - name: Generate app icons and TV banner (all densities)
         run: node scripts/generate-icons.js
 
