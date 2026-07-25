@@ -28,6 +28,10 @@ import org.videolan.libvlc.Media;
 import org.videolan.libvlc.MediaPlayer;
 import org.videolan.libvlc.util.VLCVideoLayout;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -85,6 +89,18 @@ public class VlcPlayerActivity extends Activity {
     private TextView bannerName;
     private TextView bannerCount;
     private final Handler handler = new Handler(Looper.getMainLooper());
+
+    // ---- Remote lock (paused/blocked by the admin) — checked directly by
+    // this screen, since it stays open independently of the main app's
+    // WebView (which gets backgrounded and stops checking while a video
+    // plays fullscreen). ----
+    private String deviceCode = "";
+    private static final String FIREBASE_BASE = "https://netgo-pairing-default-rtdb.firebaseio.com";
+    private static final long STATUS_CHECK_INTERVAL_MS = 20000;
+    private Runnable statusCheckRunnable;
+    private FrameLayout lockoutView;
+    private TextView lockoutTitleView;
+    private TextView lockoutMsgView;
     private Runnable hideBannerRunnable;
 
     // ---- "Canal en mantenimiento" (stuck-loading) screen ----
@@ -107,11 +123,13 @@ public class VlcPlayerActivity extends Activity {
         buildChannelBanner();
         buildMaintenanceView();
         buildBrowsePanels();
+        buildLockoutView();
 
         if (!parseIntentData()) {
             finish();
             return;
         }
+        deviceCode = getIntent().getStringExtra("deviceCode");
 
         ArrayList<String> options = new ArrayList<>();
         options.add("--no-drop-late-frames");
@@ -146,6 +164,7 @@ public class VlcPlayerActivity extends Activity {
 
         loadCurrent();
         showChannelBanner();
+        scheduleStatusCheck();
     }
 
     private boolean parseIntentData() {
@@ -553,6 +572,113 @@ public class VlcPlayerActivity extends Activity {
         if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
     }
 
+    // ---------- Remote lock: checked directly by this screen ----------
+    private void scheduleStatusCheck() {
+        if (deviceCode == null || deviceCode.isEmpty()) return;
+        statusCheckRunnable = () -> {
+            checkRemoteStatusOnce();
+            handler.postDelayed(statusCheckRunnable, STATUS_CHECK_INTERVAL_MS);
+        };
+        handler.postDelayed(statusCheckRunnable, STATUS_CHECK_INTERVAL_MS);
+    }
+
+    private void cancelStatusCheck() {
+        if (statusCheckRunnable != null) handler.removeCallbacks(statusCheckRunnable);
+    }
+
+    private void checkRemoteStatusOnce() {
+        new Thread(() -> {
+            try {
+                URL u = new URL(FIREBASE_BASE + "/status/" + deviceCode + ".json");
+                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.connect();
+                if (conn.getResponseCode() != 200) return;
+
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try (InputStream in = conn.getInputStream()) {
+                    byte[] buf = new byte[1024];
+                    int n;
+                    while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+                }
+                String text = bos.toString("UTF-8").trim();
+                if (text.isEmpty() || "null".equals(text)) return;
+
+                JSONObject obj = new JSONObject(text);
+                boolean blocked = obj.optBoolean("blocked", false);
+                boolean paused = obj.optBoolean("paused", false);
+                if (blocked || paused) {
+                    runOnUiThread(() -> showLockout(blocked));
+                }
+            } catch (Exception ignored) {
+                // Offline or Firebase unreachable — don't lock the player
+                // out just because of a network hiccup.
+            }
+        }).start();
+    }
+
+    private void buildLockoutView() {
+        FrameLayout root = findViewById(android.R.id.content);
+        lockoutView = new FrameLayout(this);
+        lockoutView.setBackgroundColor(0xFF0B1B26);
+        lockoutView.setVisibility(View.GONE);
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER);
+
+        TextView icon = new TextView(this);
+        icon.setText("🔒");
+        icon.setTextSize(40);
+        icon.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        iconLp.bottomMargin = dp(16);
+        col.addView(icon, iconLp);
+
+        lockoutTitleView = new TextView(this);
+        lockoutTitleView.setTextColor(Color.WHITE);
+        lockoutTitleView.setTextSize(22);
+        lockoutTitleView.setTypeface(lockoutTitleView.getTypeface(), android.graphics.Typeface.BOLD);
+        lockoutTitleView.setGravity(Gravity.CENTER);
+        col.addView(lockoutTitleView);
+
+        lockoutMsgView = new TextView(this);
+        lockoutMsgView.setTextColor(0xFF9FB6C4);
+        lockoutMsgView.setTextSize(14);
+        lockoutMsgView.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams msgLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        msgLp.topMargin = dp(8);
+        col.addView(lockoutMsgView, msgLp);
+
+        FrameLayout.LayoutParams colLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        colLp.gravity = Gravity.CENTER;
+        lockoutView.addView(col, colLp);
+
+        root.addView(lockoutView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    private void showLockout(boolean blocked) {
+        cancelStatusCheck();
+        cancelMaintenanceTimer();
+        if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
+        if (mediaPlayer != null) mediaPlayer.stop();
+
+        lockoutTitleView.setText(blocked ? "Cuenta bloqueada" : "Cuenta pausada");
+        lockoutMsgView.setText(blocked
+                ? "El administrador bloqueó tu acceso. Contáctalo para más información."
+                : "El administrador pausó tu acceso. Contáctalo para reactivarlo.");
+        bannerRoot.setVisibility(View.GONE);
+        channelPanel.setVisibility(View.GONE);
+        categoryPanel.setVisibility(View.GONE);
+        spinner.setVisibility(View.GONE);
+        lockoutView.setVisibility(View.VISIBLE);
+    }
+
     private int dp(int value) {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         return (int) (value * dm.density);
@@ -572,6 +698,7 @@ public class VlcPlayerActivity extends Activity {
         super.onDestroy();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
         cancelMaintenanceTimer();
+        cancelStatusCheck();
         if (mediaPlayer != null) mediaPlayer.release();
         if (libVLC != null) libVLC.release();
     }
