@@ -18,6 +18,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(VlcPlayerPlugin.class);
         registerPlugin(InlineVlcPlayerPlugin.class);
         registerPlugin(UpdateInstallerPlugin.class);
+        registerPlugin(DeviceIdPlugin.class);
         super.onCreate(savedInstanceState);
         getBridge().getWebView().getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
