@@ -18,6 +18,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -31,18 +32,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Fullscreen native video player using libVLC (bundles its own decoders —
- * H.264, H.265/HEVC, MPEG-2, AC-3, E-AC-3, DTS, AAC, MKV, TS — regardless of
- * what the Android WebView/Chromium supports).
+ * Fullscreen native video player using libVLC.
  *
- * Plays a queue of one or more items:
- *  - Movies: queue of length 1 — when it ends, the activity closes.
- *  - Live channels: queue of every channel in that category — the remote's
- *    Channel Up/Down (or D-pad Up/Down as a fallback) moves between them,
- *    showing an on-screen "now playing" banner each time. If a channel
- *    hasn't started playing after 10 seconds, a "Canal en mantenimiento"
- *    screen (with the app logo) appears instead of a stuck spinner.
- *  - Series: queue of every episode in order, auto-advancing.
+ * Two ways to launch it:
+ *  - play(queue, startIndex): a flat queue (movies, series episodes, or a
+ *    single live channel's sibling list). Channel Up/Down / D-pad Up/Down
+ *    surf through it.
+ *  - playLive(categories, catIndex, startIndex): live TV with EVERY
+ *    category's channels included, so pressing the remote's Right button
+ *    opens a channel list (browse/pick any channel in the current
+ *    category), and pressing Right again opens a category list next to it
+ *    (switch category without leaving fullscreen).
  */
 public class VlcPlayerActivity extends Activity {
 
@@ -51,10 +51,33 @@ public class VlcPlayerActivity extends Activity {
     private TextView titleView;
     private ProgressBar spinner;
 
+    // ---- Flat-queue mode (movies / series / single channel list) ----
     private final List<String> urls = new ArrayList<>();
     private final List<String> titles = new ArrayList<>();
     private final List<String> nums = new ArrayList<>();
     private int currentIndex = 0;
+
+    // ---- Live TV mode (categories + browsing) ----
+    private boolean isLive = false;
+    private final List<String> catTitles = new ArrayList<>();
+    private final List<List<String>> catUrls = new ArrayList<>();
+    private final List<List<String>> catTitlesPerItem = new ArrayList<>();
+    private final List<List<String>> catNums = new ArrayList<>();
+    private int currentCatIndex = 0;
+
+    private static final int BROWSE_NONE = 0;
+    private static final int BROWSE_CHANNELS = 1;
+    private static final int BROWSE_CATEGORIES = 2;
+    private int browseState = BROWSE_NONE;
+    private int browseChannelIndex = 0;
+    private int browseCatIndex = 0;
+
+    private FrameLayout channelPanel;
+    private LinearLayout channelListCol;
+    private ScrollView channelScroll;
+    private FrameLayout categoryPanel;
+    private LinearLayout categoryListCol;
+    private ScrollView categoryScroll;
 
     // ---- Channel change banner ----
     private FrameLayout bannerRoot;
@@ -83,8 +106,9 @@ public class VlcPlayerActivity extends Activity {
 
         buildChannelBanner();
         buildMaintenanceView();
+        buildBrowsePanels();
 
-        if (!parseQueueFromIntent()) {
+        if (!parseIntentData()) {
             finish();
             return;
         }
@@ -124,29 +148,79 @@ public class VlcPlayerActivity extends Activity {
         showChannelBanner();
     }
 
-    private boolean parseQueueFromIntent() {
+    private boolean parseIntentData() {
         try {
-            String queueJson = getIntent().getStringExtra("queueJson");
-            JSONArray arr = new JSONArray(queueJson);
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                urls.add(obj.getString("url"));
-                titles.add(obj.optString("title", "Reproduciendo"));
-                nums.add(obj.optString("num", ""));
+            isLive = getIntent().getBooleanExtra("isLive", false);
+            if (isLive) {
+                JSONArray cats = new JSONArray(getIntent().getStringExtra("categoriesJson"));
+                for (int c = 0; c < cats.length(); c++) {
+                    JSONObject cat = cats.getJSONObject(c);
+                    catTitles.add(cat.optString("title", "Categoría"));
+                    JSONArray items = cat.getJSONArray("items");
+                    List<String> u = new ArrayList<>(), t = new ArrayList<>(), n = new ArrayList<>();
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject it = items.getJSONObject(i);
+                        u.add(it.getString("url"));
+                        t.add(it.optString("title", "Canal"));
+                        n.add(it.optString("num", ""));
+                    }
+                    catUrls.add(u);
+                    catTitlesPerItem.add(t);
+                    catNums.add(n);
+                }
+                currentCatIndex = getIntent().getIntExtra("catIndex", 0);
+                if (currentCatIndex < 0 || currentCatIndex >= catTitles.size()) currentCatIndex = 0;
+                currentIndex = getIntent().getIntExtra("startIndex", 0);
+                loadActiveCategoryIntoFlatLists();
+                if (currentIndex < 0 || currentIndex >= urls.size()) currentIndex = 0;
+                return !urls.isEmpty();
+            } else {
+                JSONArray arr = new JSONArray(getIntent().getStringExtra("queueJson"));
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject obj = arr.getJSONObject(i);
+                    urls.add(obj.getString("url"));
+                    titles.add(obj.optString("title", "Reproduciendo"));
+                    nums.add(obj.optString("num", ""));
+                }
+                currentIndex = getIntent().getIntExtra("startIndex", 0);
+                if (currentIndex < 0 || currentIndex >= urls.size()) currentIndex = 0;
+                return !urls.isEmpty();
             }
-            currentIndex = getIntent().getIntExtra("startIndex", 0);
-            if (currentIndex < 0 || currentIndex >= urls.size()) currentIndex = 0;
-            return !urls.isEmpty();
         } catch (Exception e) {
             return false;
         }
     }
 
-    // ---------- Remote control: Channel Up/Down (and D-pad Up/Down as a
-    // fallback, since many Android TV remotes don't have dedicated channel
-    // keys) surf through the current queue of channels. ----------
+    /** Copies the current category's channels into the flat urls/titles/nums lists used for playback. */
+    private void loadActiveCategoryIntoFlatLists() {
+        urls.clear(); titles.clear(); nums.clear();
+        urls.addAll(catUrls.get(currentCatIndex));
+        titles.addAll(catTitlesPerItem.get(currentCatIndex));
+        nums.addAll(catNums.get(currentCatIndex));
+    }
+
+    // ---------- Remote control ----------
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (isLive && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (browseState == BROWSE_NONE) { openChannelBrowse(); return true; }
+            if (browseState == BROWSE_CHANNELS) { openCategoryBrowse(); return true; }
+            return true;
+        }
+        if (isLive && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            if (browseState == BROWSE_CATEGORIES) { closeCategoryBrowse(); return true; }
+            if (browseState == BROWSE_CHANNELS) { closeAllBrowse(); return true; }
+        }
+        if (isLive && browseState != BROWSE_NONE) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) { moveBrowseSelection(-1); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) { moveBrowseSelection(1); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                confirmBrowseSelection();
+                return true;
+            }
+            return true; // swallow other keys while browsing so they don't hit the player
+        }
+
         if (urls.size() > 1) {
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                 goToChannel(currentIndex - 1 < 0 ? urls.size() - 1 : currentIndex - 1);
@@ -166,7 +240,6 @@ public class VlcPlayerActivity extends Activity {
         showChannelBanner();
     }
 
-    /** Called when one item in the queue finishes: play the next one, or close. */
     private void advanceOrFinish() {
         if (currentIndex + 1 < urls.size()) {
             currentIndex++;
@@ -189,70 +262,136 @@ public class VlcPlayerActivity extends Activity {
         mediaPlayer.play();
     }
 
-    // ---------- "Canal en mantenimiento" screen ----------
-    private void buildMaintenanceView() {
+    // ================= Browse panels (channel list + category list) =================
+    private void buildBrowsePanels() {
         FrameLayout root = findViewById(android.R.id.content);
-        maintenanceView = new FrameLayout(this);
-        maintenanceView.setBackgroundColor(0xFF0B1B26);
-        maintenanceView.setVisibility(View.GONE);
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        int channelWidth = (int) (dm.widthPixels * 0.30f);
+        int categoryWidth = (int) (dm.widthPixels * 0.26f);
 
+        channelPanel = buildListPanel();
+        channelScroll = (ScrollView) channelPanel.getChildAt(0);
+        channelListCol = (LinearLayout) channelScroll.getChildAt(0);
+        FrameLayout.LayoutParams chLp = new FrameLayout.LayoutParams(channelWidth, ViewGroup.LayoutParams.MATCH_PARENT);
+        chLp.gravity = Gravity.END | Gravity.TOP;
+        root.addView(channelPanel, chLp);
+
+        categoryPanel = buildListPanel();
+        categoryScroll = (ScrollView) categoryPanel.getChildAt(0);
+        categoryListCol = (LinearLayout) categoryScroll.getChildAt(0);
+        FrameLayout.LayoutParams catLp = new FrameLayout.LayoutParams(categoryWidth, ViewGroup.LayoutParams.MATCH_PARENT);
+        catLp.gravity = Gravity.END | Gravity.TOP;
+        catLp.rightMargin = channelWidth;
+        root.addView(categoryPanel, catLp);
+    }
+
+    private FrameLayout buildListPanel() {
+        FrameLayout panel = new FrameLayout(this);
+        panel.setBackgroundColor(0xE60B1B26);
+        panel.setVisibility(View.GONE);
+
+        ScrollView scroll = new ScrollView(this);
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setGravity(Gravity.CENTER);
-
-        ImageView logo = new ImageView(this);
-        int logoSize = dp(84);
-        try {
-            logo.setImageResource(getResources().getIdentifier("ic_launcher_foreground", "mipmap", getPackageName()));
-        } catch (Exception ignored) { }
-        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(logoSize, logoSize);
-        logoLp.bottomMargin = dp(20);
-        col.addView(logo, logoLp);
-
-        TextView msg = new TextView(this);
-        msg.setText("Canal en mantenimiento");
-        msg.setTextColor(Color.WHITE);
-        msg.setTextSize(20);
-        msg.setTypeface(msg.getTypeface(), android.graphics.Typeface.BOLD);
-        msg.setGravity(Gravity.CENTER);
-        col.addView(msg);
-
-        TextView sub = new TextView(this);
-        sub.setText("No pudimos cargar esta señal. Prueba otro canal.");
-        sub.setTextColor(0xFF9FB6C4);
-        sub.setTextSize(13);
-        sub.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        subLp.topMargin = dp(8);
-        col.addView(sub, subLp);
-
-        FrameLayout.LayoutParams colLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        colLp.gravity = Gravity.CENTER;
-        maintenanceView.addView(col, colLp);
-
-        root.addView(maintenanceView, new FrameLayout.LayoutParams(
+        int pad = dp(14);
+        col.setPadding(pad, dp(24), pad, pad);
+        scroll.addView(col, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        panel.addView(scroll, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        return panel;
     }
 
-    private void scheduleMaintenanceTimer() {
-        cancelMaintenanceTimer();
-        maintenanceRunnable = () -> {
-            spinner.setVisibility(View.GONE);
-            maintenanceView.setAlpha(0f);
-            maintenanceView.setVisibility(View.VISIBLE);
-            maintenanceView.animate().alpha(1f).setDuration(200).start();
-        };
-        handler.postDelayed(maintenanceRunnable, MAINTENANCE_TIMEOUT_MS);
+    private void openChannelBrowse() {
+        browseState = BROWSE_CHANNELS;
+        browseChannelIndex = currentIndex;
+        populateChannelList();
+        channelPanel.setVisibility(View.VISIBLE);
     }
 
-    private void cancelMaintenanceTimer() {
-        if (maintenanceRunnable != null) handler.removeCallbacks(maintenanceRunnable);
+    private void openCategoryBrowse() {
+        browseState = BROWSE_CATEGORIES;
+        browseCatIndex = currentCatIndex;
+        populateCategoryList();
+        categoryPanel.setVisibility(View.VISIBLE);
     }
 
-    private void hideMaintenanceView() {
-        if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
+    private void closeCategoryBrowse() {
+        browseState = BROWSE_CHANNELS;
+        categoryPanel.setVisibility(View.GONE);
+    }
+
+    private void closeAllBrowse() {
+        browseState = BROWSE_NONE;
+        channelPanel.setVisibility(View.GONE);
+        categoryPanel.setVisibility(View.GONE);
+    }
+
+    private void populateChannelList() {
+        channelListCol.removeAllViews();
+        List<String> names = catTitlesPerItem.get(currentCatIndex);
+        for (int i = 0; i < names.size(); i++) {
+            channelListCol.addView(buildListRow(names.get(i), i == browseChannelIndex));
+        }
+        scrollToSelected(channelScroll, channelListCol, browseChannelIndex);
+    }
+
+    private void populateCategoryList() {
+        categoryListCol.removeAllViews();
+        for (int i = 0; i < catTitles.size(); i++) {
+            categoryListCol.addView(buildListRow(catTitles.get(i), i == browseCatIndex));
+        }
+        scrollToSelected(categoryScroll, categoryListCol, browseCatIndex);
+    }
+
+    private TextView buildListRow(String text, boolean selected) {
+        TextView row = new TextView(this);
+        row.setText(text);
+        row.setTextSize(15);
+        row.setPadding(dp(10), dp(11), dp(10), dp(11));
+        row.setMaxLines(1);
+        if (selected) {
+            row.setTextColor(0xFF1A0E00);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(0xFFFF8A3D);
+            bg.setCornerRadius(dp(8));
+            row.setBackground(bg);
+            row.setTypeface(row.getTypeface(), android.graphics.Typeface.BOLD);
+        } else {
+            row.setTextColor(0xFFEAF2F5);
+        }
+        return row;
+    }
+
+    private void moveBrowseSelection(int delta) {
+        if (browseState == BROWSE_CHANNELS) {
+            int max = catTitlesPerItem.get(currentCatIndex).size();
+            browseChannelIndex = ((browseChannelIndex + delta) % max + max) % max;
+            populateChannelList();
+        } else if (browseState == BROWSE_CATEGORIES) {
+            int max = catTitles.size();
+            browseCatIndex = ((browseCatIndex + delta) % max + max) % max;
+            populateCategoryList();
+        }
+    }
+
+    private void confirmBrowseSelection() {
+        if (browseState == BROWSE_CHANNELS) {
+            closeAllBrowse();
+            goToChannel(browseChannelIndex);
+        } else if (browseState == BROWSE_CATEGORIES) {
+            currentCatIndex = browseCatIndex;
+            loadActiveCategoryIntoFlatLists();
+            browseChannelIndex = 0;
+            closeAllBrowse();
+            goToChannel(0);
+        }
+    }
+
+    private void scrollToSelected(ScrollView scroll, LinearLayout col, int index) {
+        if (index < 0 || index >= col.getChildCount()) return;
+        View target = col.getChildAt(index);
+        scroll.post(() -> scroll.smoothScrollTo(0, Math.max(0, target.getTop() - scroll.getHeight() / 2)));
     }
 
     // ---------- Channel change banner (native, attractive, auto-hides) ----------
@@ -276,7 +415,6 @@ public class VlcPlayerActivity extends Activity {
         bg.setStroke(dp(1), 0x33FFFFFF);
         card.setBackground(bg);
 
-        // Amber circular channel-number badge
         FrameLayout badge = new FrameLayout(this);
         GradientDrawable badgeBg = new GradientDrawable();
         badgeBg.setShape(GradientDrawable.OVAL);
@@ -349,6 +487,72 @@ public class VlcPlayerActivity extends Activity {
         handler.postDelayed(hideBannerRunnable, 3800);
     }
 
+    // ---------- "Canal en mantenimiento" screen ----------
+    private void buildMaintenanceView() {
+        FrameLayout root = findViewById(android.R.id.content);
+        maintenanceView = new FrameLayout(this);
+        maintenanceView.setBackgroundColor(0xFF0B1B26);
+        maintenanceView.setVisibility(View.GONE);
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER);
+
+        ImageView logo = new ImageView(this);
+        int logoSize = dp(84);
+        try {
+            logo.setImageResource(getResources().getIdentifier("ic_launcher_foreground", "mipmap", getPackageName()));
+        } catch (Exception ignored) { }
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(logoSize, logoSize);
+        logoLp.bottomMargin = dp(20);
+        col.addView(logo, logoLp);
+
+        TextView msg = new TextView(this);
+        msg.setText("Canal en mantenimiento");
+        msg.setTextColor(Color.WHITE);
+        msg.setTextSize(20);
+        msg.setTypeface(msg.getTypeface(), android.graphics.Typeface.BOLD);
+        msg.setGravity(Gravity.CENTER);
+        col.addView(msg);
+
+        TextView sub = new TextView(this);
+        sub.setText("No pudimos cargar esta señal. Prueba otro canal.");
+        sub.setTextColor(0xFF9FB6C4);
+        sub.setTextSize(13);
+        sub.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        subLp.topMargin = dp(8);
+        col.addView(sub, subLp);
+
+        FrameLayout.LayoutParams colLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        colLp.gravity = Gravity.CENTER;
+        maintenanceView.addView(col, colLp);
+
+        root.addView(maintenanceView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    private void scheduleMaintenanceTimer() {
+        cancelMaintenanceTimer();
+        maintenanceRunnable = () -> {
+            spinner.setVisibility(View.GONE);
+            maintenanceView.setAlpha(0f);
+            maintenanceView.setVisibility(View.VISIBLE);
+            maintenanceView.animate().alpha(1f).setDuration(200).start();
+        };
+        handler.postDelayed(maintenanceRunnable, MAINTENANCE_TIMEOUT_MS);
+    }
+
+    private void cancelMaintenanceTimer() {
+        if (maintenanceRunnable != null) handler.removeCallbacks(maintenanceRunnable);
+    }
+
+    private void hideMaintenanceView() {
+        if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
+    }
+
     private int dp(int value) {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         return (int) (value * dm.density);
@@ -374,6 +578,10 @@ public class VlcPlayerActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (isLive && browseState != BROWSE_NONE) {
+            closeAllBrowse();
+            return;
+        }
         finish();
     }
 }
