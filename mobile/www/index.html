@@ -1737,6 +1737,11 @@
     const seasons = sdCurrentInfo.episodes || {};
     const eps = (seasons[sdCurrentSeasonKey] || []).slice().sort((a,b) => Number(a.episode_num) - Number(b.episode_num));
     document.getElementById('sdEpisodesLabel').textContent = `Episodios · ${eps.length}`;
+    if(!eps.length){
+      console.warn('No episodes found for season', sdCurrentSeasonKey, 'available seasons:', Object.keys(seasons), 'raw episodes object:', seasons);
+      document.getElementById('sdEpisodeList').innerHTML = `<div class="empty-card">Tu proveedor no devolvió episodios para esta temporada.</div>`;
+      return;
+    }
     const cover = (sdCurrentInfo.info && sdCurrentInfo.info.cover) || '';
     document.getElementById('sdEpisodeList').innerHTML = eps.map((ep, i) => `
       <div class="sd-episode-row" data-idx="${i}">
