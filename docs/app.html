@@ -1,0 +1,2251 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetGo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="version.js"></script>
+<style>
+  :root{
+    --bg: #0B1B26;
+    --bg-raise: #12283A;
+    --card: #16334A;
+    --card-hover: #1C3F5A;
+    --line: rgba(234,242,245,0.08);
+    --text: #EAF2F5;
+    --text-dim: #9FB6C4;
+    --amber: #FF8A3D;
+    --amber-dim: rgba(255,138,61,0.15);
+    --violet: #8B7CF6;
+    --green: #3DDC84;
+    --radius: 14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:
+      radial-gradient(85% 55% at 50% 100%, rgba(5,10,15,0.75), transparent),
+      radial-gradient(950px 680px at 8% -10%, rgba(155,110,255,0.42), transparent 62%),
+      radial-gradient(820px 620px at 100% 2%, rgba(255,120,40,0.40), transparent 58%),
+      radial-gradient(760px 560px at 20% 105%, rgba(50,225,150,0.22), transparent 60%),
+      radial-gradient(680px 540px at 92% 88%, rgba(60,190,255,0.22), transparent 55%),
+      radial-gradient(600px 460px at 55% 45%, rgba(255,70,150,0.14), transparent 60%),
+      var(--bg);
+    background-size: 130% 130%;
+    animation: drift 30s ease-in-out infinite alternate;
+    color: var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+    position:relative;
+  }
+  @keyframes drift{
+    0%{ background-position: 0% 0%; }
+    100%{ background-position: 10% 6%; }
+  }
+  body::before{
+    content:'';
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    opacity:.06; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  header, .hero, .cats, section.row{ position:relative; z-index:1; }
+  .mono{ font-family:'JetBrains Mono', monospace; }
+  .display{ font-family:'Space Grotesk', sans-serif; }
+
+  /* ---------- Top bar ---------- */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 22px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand .mark{
+    width:34px; height:34px; border-radius:9px;
+    background: linear-gradient(135deg, var(--amber), #FFB870);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk'; font-weight:700; color:#0B1B26; font-size:16px;
+  }
+  .brand .name{ font-family:'Space Grotesk'; font-weight:700; font-size:19px; letter-spacing:-0.02em; }
+  .brand .ver{ font-family:'JetBrains Mono'; font-size:10px; color:var(--text-dim); margin-left:2px; }
+
+  .top-status{ display:flex; align-items:center; gap:18px; color:var(--text-dim); font-size:13px; }
+  .top-status .clock{ color:var(--text); font-family:'JetBrains Mono'; font-size:14px; }
+  .gear{
+    width:34px; height:34px; border-radius:50%;
+    background: var(--card); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    transition: background .2s;
+  }
+  .gear:hover{ background: var(--card-hover); }
+  .gear svg{ width:17px; height:17px; }
+
+  /* ---------- Hero / signal state ---------- */
+  .hero{
+    margin: 6px 22px 26px;
+    border-radius: var(--radius);
+    border:1px solid var(--line);
+    background: var(--bg-raise);
+    overflow:hidden;
+    position:relative;
+    aspect-ratio: 16/7;
+  }
+  .hero::before{
+    content:'';
+    position:absolute; left:50%; top:-10%; width:220%; height:160%;
+    transform: translateX(-50%);
+    background: repeating-conic-gradient(from 0deg at 50% 0%,
+      rgba(255,138,61,0.10) 0deg 4deg, transparent 4deg 14deg);
+    animation: rotateBeam 40s linear infinite;
+    pointer-events:none;
+  }
+  @keyframes rotateBeam{ to{ transform: translateX(-50%) rotate(360deg); } }
+  .hero-inner{
+    aspect-ratio: 16/7;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 3px);
+    position:relative; z-index:1;
+  }
+  .pulse-wrap{ position:relative; width:64px; height:64px; }
+  .pulse-ring{
+    position:absolute; inset:0; border-radius:50%;
+    border:2px solid var(--amber);
+    animation: pulse 2.2s ease-out infinite;
+    opacity:0;
+  }
+  .pulse-ring:nth-child(2){ animation-delay: .7s; }
+  .pulse-ring:nth-child(3){ animation-delay: 1.4s; }
+  @keyframes pulse{
+    0%{ transform:scale(0.5); opacity:.9; }
+    100%{ transform:scale(2.2); opacity:0; }
+  }
+  .pulse-core{
+    position:absolute; inset:20px; border-radius:50%;
+    background: var(--amber);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pulse-core svg{ width:16px; height:16px; fill:#0B1B26; }
+  .hero-title{ font-family:'Space Grotesk'; font-weight:600; font-size:17px; }
+  .hero-sub{ color:var(--text-dim); font-size:13.5px; max-width:360px; text-align:center; line-height:1.5; }
+  .hero-cta{
+    margin-top:6px;
+    background: var(--amber); color:#1A0E00; border:none;
+    font-family:'Inter'; font-weight:600; font-size:13.5px;
+    padding:10px 18px; border-radius:9px; cursor:pointer;
+    transition: transform .15s, filter .15s;
+  }
+  .hero-cta:hover{ filter:brightness(1.08); transform:translateY(-1px); }
+  .hero-badge{
+    position:absolute; top:14px; left:14px;
+    display:flex; align-items:center; gap:6px;
+    background: rgba(11,27,38,0.7); border:1px solid var(--line);
+    padding:5px 10px; border-radius:999px; font-size:11px; color:var(--text-dim);
+    backdrop-filter: blur(6px);
+  }
+  .dot-off{ width:6px; height:6px; border-radius:50%; background:#6B7C88; }
+
+  /* ---------- Update available banner ---------- */
+  .update-banner{
+    display:flex; align-items:center; gap:10px;
+    background: linear-gradient(90deg, #FF8A3D, #FFB870);
+    color:#1A0E00; padding:10px 18px; font-size:12.5px; font-weight:600;
+  }
+  .update-banner span#updateBannerText{ flex:1; }
+  .update-banner button{
+    background:#1A0E00; color:#fff; border:none; font-size:11.5px; font-weight:700;
+    padding:7px 14px; border-radius:7px; cursor:pointer;
+  }
+  .update-banner-close{ cursor:pointer; opacity:.7; padding:2px 4px; }
+
+  /* ---------- Search bar ---------- */
+  .searchbar-wrap{ padding: 0 22px 16px; }
+  .searchbar{
+    display:flex; align-items:center; gap:10px;
+    background: var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:11px 14px;
+  }
+  .searchbar-icon{ font-size:15px; opacity:.7; }
+  .searchbar input{
+    flex:1; background:transparent; border:none; outline:none;
+    color: var(--text); font-size:14px; font-family:'Inter';
+  }
+  .searchbar input::placeholder{ color: var(--text-dim); }
+
+  /* ---------- Inline embedded player (native video shows through here) ---------- */
+  .hero-player{
+    position:absolute; inset:0; z-index:5;
+    display:none; flex-direction:column; justify-content:space-between;
+    background: transparent;
+  }
+  .hero.playing .hero-inner,
+  .hero.playing::before{ display:none; }
+  .hero.playing{ background: transparent; border-color: rgba(234,242,245,0.14); }
+  .hero.playing .hero-player{ display:flex; }
+
+  .hp-top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; background:linear-gradient(180deg, rgba(6,14,20,.75), transparent);
+  }
+  .hp-title{ color:#fff; font-size:12.5px; font-weight:600; max-width:80%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hp-close{
+    width:28px; height:28px; border-radius:50%; background:rgba(6,14,20,.6);
+    color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; cursor:pointer;
+  }
+  .hp-spinner-wrap{ flex:1; display:flex; align-items:center; justify-content:center; }
+  .hp-spinner{
+    width:26px; height:26px; border-radius:50%; border:3px solid rgba(255,255,255,.25);
+    border-top-color: var(--amber); animation: spin 1s linear infinite; display:none;
+  }
+  .hp-spinner-wrap.loading .hp-spinner{ display:block; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .hp-bottom{ padding:10px 14px 14px; background:linear-gradient(0deg, rgba(6,14,20,.8), transparent); }
+  .hp-controls{ display:flex; align-items:center; justify-content:center; gap:22px; margin-bottom:10px; }
+  .hp-btn{
+    background:rgba(6,14,20,.55); border:1px solid rgba(255,255,255,.15); color:#fff;
+    font-family:'JetBrains Mono'; font-size:11px; border-radius:999px; padding:8px 12px; cursor:pointer;
+  }
+  .hp-btn-main{
+    width:44px; height:44px; border-radius:50%; font-size:16px; padding:0;
+    background: var(--amber); border:none; color:#1A0E00; display:flex; align-items:center; justify-content:center;
+  }
+  .hp-progress{ display:flex; align-items:center; gap:8px; }
+  .hp-progress .mono{ color:#fff; font-size:10px; min-width:34px; }
+  .hp-progress input[type=range]{
+    flex:1; height:3px; -webkit-appearance:none; background: rgba(255,255,255,.3); border-radius:2px; outline:none;
+  }
+  .hp-progress input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:13px; height:13px; border-radius:50%; background: var(--amber); cursor:pointer;
+  }
+  .hp-live-badge{ text-align:center; color:#FF6B6B; font-size:11px; font-weight:600; }
+
+  /* ---------- Vivo: category sidebar + channel list (EPG style) ---------- */
+  .vivo-view{ margin: 0 0 26px; }
+  .vivo-tabs{ display:flex; gap:22px; padding: 4px 22px 14px; border-bottom:1px solid var(--line); }
+  .vivo-tab{ font-size:13.5px; font-weight:600; color:var(--text-dim); padding-bottom:10px; cursor:pointer; position:relative; }
+  .vivo-tab.active{ color:var(--amber); }
+  .vivo-tab.active::after{ content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--amber); border-radius:2px; }
+
+  .vivo-body{ display:flex; height:56vh; min-height:380px; }
+  .vivo-sidebar{
+    width:118px; flex-shrink:0; overflow-y:auto; border-right:1px solid var(--line);
+    background: rgba(255,255,255,0.015);
+  }
+  .vivo-cat-item{
+    padding:14px 12px; font-size:12.5px; color:var(--text-dim); border-left:3px solid transparent;
+    cursor:pointer; line-height:1.3;
+  }
+  .vivo-cat-item.active{ color:var(--amber); font-weight:600; border-left-color:var(--amber); background:var(--amber-dim); }
+
+  .vivo-list{ flex:1; overflow-y:auto; }
+  .vivo-chan-row{
+    display:flex; align-items:center; gap:12px; padding:11px 14px;
+    border-bottom:1px solid var(--line); cursor:pointer;
+  }
+  .vivo-chan-row.active{ background: var(--amber-dim); }
+  .vivo-chan-logo{
+    width:34px; height:34px; border-radius:7px; flex-shrink:0; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+    background: var(--card);
+  }
+  .vivo-chan-logo img{ width:100%; height:100%; object-fit:cover; }
+  .vivo-chan-num{ font-family:'JetBrains Mono'; font-size:12px; color:var(--amber); min-width:30px; flex-shrink:0; }
+  .vivo-chan-name{ flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vivo-chan-star{ font-size:15px; color:var(--text-dim); padding:4px; flex-shrink:0; }
+  .vivo-chan-star.on{ color:var(--amber); }
+  .vivo-chan-arrow{ color:var(--text-dim); flex-shrink:0; }
+  .vivo-empty{ padding:30px 20px; text-align:center; color:var(--text-dim); font-size:12.5px; }
+
+  /* ---------- Series detail screen ---------- */
+  .series-detail-overlay{
+    position:fixed; inset:0; z-index:60; background:var(--bg); overflow-y:auto;
+  }
+  .sd-backdrop{
+    position:relative; height:34vh; min-height:220px;
+    background-size:cover; background-position:center top;
+    display:flex; align-items:flex-end; justify-content:center;
+    background-color: var(--bg-raise);
+  }
+  .sd-backdrop::after{
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(180deg, rgba(6,14,20,.35) 0%, rgba(11,27,38,.55) 60%, var(--bg) 100%);
+  }
+  .sd-topbar{
+    position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between;
+    padding:14px 16px; z-index:2;
+  }
+  .sd-back, .sd-fav{
+    width:38px; height:38px; border-radius:50%; background:rgba(6,14,20,.55);
+    display:flex; align-items:center; justify-content:center; font-size:18px; color:#fff; cursor:pointer;
+  }
+  .sd-fav.active{ color:var(--amber); }
+  .sd-cover-circle{
+    width:112px; height:112px; border-radius:50%; object-fit:cover;
+    border:4px solid var(--bg); margin-bottom:-56px; position:relative; z-index:1;
+    background: var(--card);
+  }
+  .sd-body{ padding:68px 22px 110px; position:relative; z-index:1; }
+  .sd-title{ font-family:'Space Grotesk'; font-size:20px; font-weight:700; margin-bottom:10px; text-align:center; }
+  .sd-tags{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:16px; }
+  .sd-tag{ background:var(--card); border:1px solid var(--line); padding:5px 12px; border-radius:999px; font-size:12px; color:var(--text-dim); }
+  .sd-plot{ font-size:13.5px; line-height:1.6; color:var(--text-dim); margin-bottom:26px; }
+  .sd-seasons-label, .sd-episodes-label{
+    font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); margin-bottom:10px;
+  }
+  .sd-season-tabs{ display:flex; gap:8px; overflow-x:auto; margin-bottom:24px; padding-bottom:4px; }
+  .sd-season-tab{
+    flex:0 0 auto; padding:9px 16px; border-radius:999px; background:var(--card); border:1px solid var(--line);
+    font-size:13px; font-weight:600; color:var(--text-dim); cursor:pointer; white-space:nowrap;
+  }
+  .sd-season-tab.active{ background:#fff; color:#111; border-color:#fff; }
+  .sd-episode-list{ display:flex; flex-direction:column; gap:10px; }
+  .sd-episode-row{
+    display:flex; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:10px; align-items:center; cursor:pointer;
+  }
+  .sd-ep-thumb{ width:96px; height:64px; border-radius:8px; background:var(--bg-raise); flex-shrink:0; object-fit:cover; }
+  .sd-ep-info{ flex:1; min-width:0; }
+  .sd-ep-num{ color:var(--amber); font-size:11px; font-family:'JetBrains Mono'; margin-bottom:2px; }
+  .sd-ep-title{ font-size:13.5px; font-weight:600; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sd-ep-dur{ font-size:11px; color:var(--text-dim); }
+  .sd-ep-play{
+    width:36px; height:36px; border-radius:50%; background:var(--amber); display:flex;
+    align-items:center; justify-content:center; flex-shrink:0; color:#1A0E00; font-size:13px;
+  }
+
+  /* ---------- Category rail ---------- */
+  .cats{
+    position:fixed; left:0; right:0; bottom:0; z-index:40;
+    display:flex; justify-content:space-around; align-items:center;
+    gap:2px; padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: rgba(11,27,38,0.94);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+  }
+  .cat{
+    flex:1; min-width:0;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:7px 2px; border-radius:11px; border:1px solid transparent;
+    background: transparent;
+    cursor:pointer;
+    transition: background .2s, border-color .2s;
+  }
+  .cat:hover{ background: var(--card-hover); }
+  .cat.active{ border-color: var(--amber); background: var(--amber-dim); }
+  .cat .icon{ font-size:19px; }
+  .cat span{ font-size:10.5px; font-weight:500; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .cat.active span{ color:var(--text); }
+
+  /* Leave room at the bottom of the page so content isn't hidden behind the fixed nav bar */
+  #rowsContainer, .vivo-view{ padding-bottom: 88px; }
+
+  /* ---------- Section rows ---------- */
+  section.row{
+    padding: 0 22px 30px;
+    /* Tells the browser to skip layout/paint work for rows that have
+       scrolled off screen — a free, native optimization layered on top of
+       our own row virtualization, huge on older/weaker devices. */
+    content-visibility: auto;
+    contain-intrinsic-size: 0 260px;
+  }
+  .poster-card, .channel-card{
+    content-visibility: auto;
+    contain-intrinsic-size: 128px 220px;
+  }
+  .row-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px; }
+  .row-head h2{ font-family:'Space Grotesk'; font-size:15px; font-weight:600; }
+  .row-head .count{ font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); }
+  .row-scroll{ display:flex; gap:12px; overflow-x:auto; padding-bottom:4px; }
+  .row-scroll::-webkit-scrollbar{ display:none; }
+  .empty-card{
+    flex: 0 0 150px; height:96px;
+    border-radius:11px; border:1px dashed var(--line);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text-dim); font-size:11.5px; text-align:center; padding:10px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  }
+
+  /* ---------- Poster cards (movies) ---------- */
+  .poster-card{
+    flex: 0 0 128px; aspect-ratio: 2/3;
+    border-radius:12px; overflow:hidden; position:relative;
+    cursor:pointer; transition: transform .15s;
+    border:1px solid var(--line);
+  }
+  .poster-card:active{ transform: scale(0.97); }
+  .poster-art{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:30px; opacity:.55;
+  }
+  .poster-scrim{
+    position:absolute; left:0; right:0; bottom:0; height:62%;
+    background: linear-gradient(180deg, transparent, rgba(6,14,20,0.92) 78%);
+  }
+  .poster-meta{ position:absolute; left:9px; right:9px; bottom:9px; }
+  .poster-meta .t{ font-size:12px; font-weight:600; line-height:1.25; margin-bottom:3px; }
+  .poster-meta .s{ display:flex; align-items:center; gap:5px; font-size:10px; color:var(--text-dim); }
+  .poster-badge{
+    position:absolute; top:8px; left:8px;
+    background: rgba(6,14,20,0.75); border:1px solid var(--line);
+    padding:2px 6px; border-radius:5px; font-size:9px; font-weight:600;
+    font-family:'JetBrains Mono'; letter-spacing:.03em;
+  }
+  .poster-rating{
+    position:absolute; top:8px; right:8px;
+    background: rgba(6,14,20,0.75); padding:2px 6px; border-radius:5px;
+    font-size:9.5px; font-family:'JetBrains Mono'; color:#FFC978;
+  }
+
+  /* ---------- Live channel cards (Vivo) — different shape on purpose ---------- */
+  .channel-card{
+    flex: 0 0 178px; border-radius:12px; overflow:hidden; cursor:pointer;
+    border:1px solid var(--line); background: var(--card);
+    transition: transform .15s;
+  }
+  .channel-card:active{ transform: scale(0.97); }
+  .channel-thumb{
+    aspect-ratio: 16/9; position:relative;
+    display:flex; align-items:center; justify-content:center; font-size:26px;
+  }
+  .channel-live{
+    position:absolute; top:7px; left:7px; display:flex; align-items:center; gap:5px;
+    background: rgba(6,14,20,0.75); padding:3px 7px; border-radius:5px; font-size:9px; font-weight:600;
+  }
+  .live-dot{ width:6px; height:6px; border-radius:50%; background:#FF4D4D; box-shadow:0 0 0 2px rgba(255,77,77,.25); }
+  .channel-num{
+    position:absolute; top:7px; right:7px;
+    background: rgba(6,14,20,0.75); padding:2px 6px; border-radius:5px;
+    font-size:9.5px; font-family:'JetBrains Mono'; color:var(--text-dim);
+  }
+  .channel-info{ padding:9px 10px 11px; }
+  .channel-info .name{ font-size:12.5px; font-weight:600; margin-bottom:2px; }
+  .channel-info .program{ font-size:10.5px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .poster-art img, .channel-thumb img{ width:100%; height:100%; object-fit:contain; background:#0B1B26; position:absolute; inset:0; }
+  .poster-cover-img{
+    width:100%; height:100%; object-fit:contain; background:#0B1B26;
+    position:absolute; inset:0;
+  }
+  .channel-cover-img{
+    width:100%; height:100%; object-fit:contain; background:#0B1B26;
+  }
+
+  /* ---------- Connected hero state ---------- */
+  .dot-on{ width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 0 2px rgba(61,220,132,.25); }
+  .hero-stats{ display:flex; gap:16px; font-family:'JetBrains Mono'; font-size:11.5px; color:var(--text-dim); }
+  .hero-stats b{ color:var(--text); }
+
+  /* ---------- Fullscreen video player ---------- */
+  .player-overlay{
+    position:fixed; inset:0; background:#000; z-index:100;
+    display:none; flex-direction:column;
+  }
+  .player-overlay.open{ display:flex; }
+  .player-top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px; color:#fff; font-size:14px; font-weight:600;
+    background:linear-gradient(180deg, rgba(0,0,0,.6), transparent);
+    position:absolute; top:0; left:0; right:0; z-index:2;
+  }
+  .player-top .close{ font-size:20px; cursor:pointer; padding:4px 8px; }
+  .player-overlay video{ flex:1; width:100%; height:100%; background:#000; }
+  .player-msg{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--text-dim); font-size:13px; text-align:center; padding:0 30px; flex-direction:column; gap:10px;
+  }
+  .spinner{ width:26px; height:26px; border-radius:50%; border:3px solid rgba(255,255,255,.2); border-top-color:var(--amber); animation:spin 1s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  /* ---------- Bottom-sheet settings ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(5,12,17,0.6);
+    display:none; align-items:flex-end; justify-content:center;
+    backdrop-filter: blur(3px); z-index:50;
+  }
+  .overlay.open{ display:flex; }
+  .sheet{
+    width:100%; max-width:480px;
+    background: var(--bg-raise); border:1px solid var(--line);
+    border-radius:20px 20px 0 0;
+    padding:22px; max-height:82vh; overflow-y:auto;
+  }
+  .sheet h3{ font-family:'Space Grotesk'; font-size:17px; margin-bottom:4px; }
+  .sheet p.help{ color:var(--text-dim); font-size:12.5px; margin-bottom:18px; line-height:1.5; }
+  .conn-types{ display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+  .chip{
+    padding:7px 12px; border-radius:999px; border:1px solid var(--line);
+    font-size:12px; color:var(--text-dim); cursor:pointer; background:var(--card);
+  }
+  .chip.active{ border-color:var(--amber); color:var(--text); background:var(--amber-dim); }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:6px; }
+  .field input{
+    width:100%; background:var(--card); border:1px solid var(--line); color:var(--text);
+    padding:11px 12px; border-radius:9px; font-size:13.5px; font-family:'JetBrains Mono';
+  }
+  .field input::placeholder{ color:#5A7284; }
+  .save-btn{
+    width:100%; background:var(--amber); color:#1A0E00; border:none;
+    font-weight:600; padding:13px; border-radius:10px; font-size:14px; cursor:pointer; margin-top:6px;
+  }
+  .close-x{ position:absolute; top:16px; right:18px; color:var(--text-dim); cursor:pointer; font-size:20px; }
+  .sheet-pos{ position:relative; }
+  .status-line{ margin-top:14px; font-size:11.5px; color:var(--green); display:none; }
+  .status-line.show{ display:block; }
+
+  /* ---------- QR login ---------- */
+  .qr-actions{ display:flex; gap:10px; margin-top:4px; margin-bottom:6px; }
+  .qr-btn-wide{ flex:1; }
+
+  /* ---------- Startup screen (logo + auto QR) ---------- */
+  .start-screen{
+    position:fixed; inset:0; z-index:200;
+    background:
+      radial-gradient(900px 620px at 15% -8%, rgba(139,124,246,0.30), transparent 60%),
+      radial-gradient(760px 560px at 96% 4%, rgba(255,138,61,0.30), transparent 55%),
+      var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:32px 26px; text-align:center;
+  }
+  #lockoutScreen{ z-index:9999; }
+  .start-logo{
+    width:60px; height:60px; border-radius:16px;
+    background: linear-gradient(135deg, var(--amber), #FFB870);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk'; font-weight:700; color:#0B1B26; font-size:26px;
+    margin-bottom:14px;
+  }
+  .start-title{ font-family:'Space Grotesk'; font-size:22px; font-weight:700; margin:0 0 10px; }
+  .start-sub{ color:var(--text-dim); font-size:13px; line-height:1.55; max-width:320px; margin:0 0 22px; }
+  .start-generate-btn{
+    background:var(--amber); color:#1A0E00; border:none; font-weight:700; font-size:15px;
+    padding:15px 36px; border-radius:12px; cursor:pointer; margin-bottom:18px;
+  }
+  .start-code-box{
+    background: var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:22px 28px; margin-bottom:18px; text-align:center;
+  }
+  .start-code-digits{
+    font-family:'JetBrains Mono', monospace; font-size:38px; font-weight:700;
+    letter-spacing:10px; color:var(--amber); margin-bottom:10px;
+  }
+  .start-status{ color:var(--amber); font-size:12.5px; margin:0; min-height:16px; }
+  .start-manual-btn{
+    background:transparent; border:1px solid var(--line); color:var(--text-dim);
+    font-size:12.5px; padding:10px 18px; border-radius:9px; cursor:pointer;
+  }
+  .pin-input{
+    width:150px; text-align:center; font-size:24px; letter-spacing:12px;
+    padding:12px 10px 12px 22px; border-radius:10px; border:1px solid var(--line);
+    background:#0F2536; color:var(--text); margin:6px 0 4px;
+  }
+  .qr-close-btn-ghost{
+    background:transparent; color:var(--text-dim); border:1px solid var(--line);
+    margin-top:8px;
+  }
+  #pinOverlay{ z-index:210; }
+
+  .account-icon{ font-size:34px; margin-bottom:6px; }
+  .account-title{ color:#0B1B26; font-size:16px; margin:0 0 16px; }
+  .account-rows{ width:100%; display:flex; flex-direction:column; gap:12px; margin-bottom:18px; }
+  .account-row{
+    display:flex; justify-content:space-between; align-items:center; gap:12px;
+    padding-bottom:10px; border-bottom:1px solid rgba(11,27,38,0.1);
+  }
+  .account-row span{ color:#5A6B78; font-size:12.5px; }
+  .account-row b{ color:#0B1B26; font-size:13.5px; text-align:right; }
+  .qr-close-btn-danger{
+    background:transparent; color:#D64545; border:1px solid rgba(214,69,69,0.4);
+    margin-top:10px;
+  }
+  .qr-btn{
+    flex:1; background:var(--card); border:1px solid var(--line); color:var(--text);
+    font-family:'Inter'; font-weight:600; font-size:12.5px; padding:11px 8px; border-radius:9px;
+    cursor:pointer;
+  }
+  .qr-overlay{
+    position:fixed; inset:0; z-index:90; background:rgba(5,12,17,0.92); backdrop-filter:blur(4px);
+    display:flex; align-items:center; justify-content:center; flex-direction:column; padding:24px;
+  }
+  .qr-card{
+    background:#fff; border-radius:18px; padding:26px; display:flex; flex-direction:column;
+    align-items:center; gap:16px; max-width:300px;
+  }
+  .qr-card #qrCodeCanvas{ display:flex; align-items:center; justify-content:center; }
+  .qr-hint{ color:#334; font-size:12.5px; text-align:center; line-height:1.5; }
+  .qr-close-btn{
+    background:var(--amber); border:none; color:#1A0E00; font-weight:600; font-size:13px;
+    padding:11px 22px; border-radius:9px; cursor:pointer;
+  }
+  .qr-scan-overlay{ background:#000; padding:0; }
+  .qr-scan-overlay video{
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+  }
+  .qr-scan-frame{
+    width:220px; height:220px; border:3px solid var(--amber); border-radius:16px;
+    position:relative; z-index:1; box-shadow:0 0 0 2000px rgba(0,0,0,0.55);
+  }
+  .qr-scan-hint{
+    position:relative; z-index:1; color:#fff; font-size:13px; margin-top:18px; text-align:center;
+  }
+  .qr-scan-overlay .qr-close-btn{ position:relative; z-index:1; margin-top:22px; }
+
+  /* ============================================================
+     TV MODE — applied automatically when the app detects it's
+     running on a TV (no touchscreen). Bigger everything, and a
+     visible focus ring for remote-control (D-pad) navigation.
+     ============================================================ */
+
+  /* Works everywhere, phone or TV: only shows when navigating with a
+     keyboard/remote (not on a touch tap), so it's harmless on phones. */
+  .poster-card:focus-visible,
+  .channel-card:focus-visible,
+  .cat:focus-visible,
+  .vivo-cat-item:focus-visible,
+  .vivo-chan-row:focus-visible,
+  .save-btn:focus-visible,
+  .qr-btn:focus-visible,
+  .gear:focus-visible,
+  .start-manual-btn:focus-visible,
+  #channelSearch:focus-visible{
+    outline: 3px solid var(--amber);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px rgba(255,138,61,0.25);
+  }
+  .poster-card:focus-visible, .channel-card:focus-visible{
+    transform: scale(1.06);
+    z-index: 3;
+  }
+
+  body.tv-mode{ font-size:17px; }
+  body.tv-mode .cats{ padding-bottom:14px; }
+  body.tv-mode .cat{ padding:11px 3px; }
+  body.tv-mode .cat .icon{ font-size:25px; }
+  body.tv-mode .cat span{ font-size:14px; }
+  body.tv-mode .row-head h2{ font-size:20px; }
+  body.tv-mode .row-head .count{ font-size:14px; }
+  body.tv-mode .poster-card{ flex-basis:130px; min-width:130px; }
+  body.tv-mode .poster-meta .t{ font-size:13px; }
+  body.tv-mode .poster-meta .s{ font-size:11px; }
+  body.tv-mode .channel-card{ min-width:220px; }
+  body.tv-mode .hero-title, body.tv-mode #heroTitle{ font-size:26px; }
+  body.tv-mode #heroSub{ font-size:15px; }
+  body.tv-mode .searchbar input{ font-size:17px; }
+  body.tv-mode .searchbar{ padding:15px 16px; }
+  body.tv-mode .vivo-cat-item{ font-size:15px; padding:14px 12px; }
+  body.tv-mode .vivo-chan-row .name{ font-size:16px; }
+  body.tv-mode .vivo-chan-row{ padding:14px 16px; }
+  body.tv-mode .brand span{ font-size:20px; }
+  body.tv-mode .sd-title{ font-size:26px; }
+  body.tv-mode .sd-episode-row{ padding:14px; }
+  body.tv-mode .sd-ep-title{ font-size:16px; }
+
+  /* On TV: move the category bar from the bottom (phone style) to a
+     left-side rail (TV style) — phones are completely untouched.
+     Every size below uses clamp() tied to viewport height (vh), so the
+     whole rail compresses proportionally on shorter TV screens (720p)
+     and stays comfortable on taller ones (1080p/4K) — nothing gets
+     pushed off-screen. overflow-y:auto is kept as a last-resort safety
+     net in case some resolution still doesn't fit. */
+  body.tv-mode{ padding-left:126px; }
+  body.tv-mode .cats{
+    left:0; right:auto; top:0; bottom:0; width:126px;
+    flex-direction:column; justify-content:flex-start; align-items:stretch;
+    padding: clamp(10px, 3vh, 28px) 10px clamp(8px, 2vh, 20px);
+    gap: clamp(2px, 1.2vh, 8px);
+    border-top:none; border-right:1px solid var(--line);
+    overflow-y:auto;
+  }
+  body.tv-mode .cat{
+    flex:none;
+    padding: clamp(5px, 1.6vh, 12px) 4px;
+  }
+  body.tv-mode .cat .icon{ font-size: clamp(15px, 2.6vh, 25px); }
+  body.tv-mode .cat span{ font-size: clamp(10px, 1.6vh, 14px); }
+  body.tv-mode #rowsContainer, body.tv-mode .vivo-view{ padding-bottom:20px; }
+
+  /* TV only: hide the phone header entirely (logo, version, signal icon,
+     clock, gear all move into / disappear from the side rail instead). */
+  body.tv-mode header{ display:none; }
+
+  /* TV only: hide the search bar and the hero preview box. */
+  body.tv-mode .searchbar-wrap{ display:none; }
+  body.tv-mode .hero{ display:none; }
+
+  .tv-sidebar-brand{ display:none; }
+  .tv-sidebar-gear{ display:none; }
+  body.tv-mode .tv-sidebar-brand{
+    display:flex; flex-direction:column; align-items:center;
+    gap: clamp(3px, 0.8vh, 8px);
+    margin-bottom: clamp(8px, 2.4vh, 26px);
+    flex-shrink:0;
+  }
+  body.tv-mode .tv-sidebar-brand .mark{
+    width: clamp(30px, 5vh, 50px); height: clamp(30px, 5vh, 50px);
+    border-radius:13px;
+    background:linear-gradient(135deg, var(--amber), #FFB870);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk'; font-weight:700; color:#0B1B26;
+    font-size: clamp(14px, 2.4vh, 24px);
+  }
+  body.tv-mode .tv-sidebar-brand .name{
+    font-family:'Space Grotesk'; font-weight:700;
+    font-size: clamp(11px, 1.6vh, 15px); color:var(--text);
+  }
+  body.tv-mode .tv-sidebar-gear{
+    display:flex; margin-top:auto; flex-shrink:0;
+  }
+
+  /* Blur (backdrop-filter) is very GPU-expensive on weak TV hardware —
+     disable it in TV mode; the semi-opaque backgrounds still read fine
+     without it, just slightly less "glassy". */
+  body.tv-mode *{ backdrop-filter: none !important; }
+
+  /* Scale+transition on focus costs a compositor pass every time you move
+     the D-pad — on TV, use a cheap outline-only highlight instead so
+     navigation feels instant rather than slightly janky. */
+  body.tv-mode .poster-card, body.tv-mode .channel-card{ transition:none; }
+  body.tv-mode .poster-card:focus-visible, body.tv-mode .channel-card:focus-visible{
+    transform:none;
+  }
+
+  /* Same cheap-rendering treatment as TV mode, applied to detected
+     low-power/older phones: no blur, no tap-scale animation. */
+  body.lean-mode *{ backdrop-filter: none !important; }
+  body.lean-mode .poster-card, body.lean-mode .channel-card{ transition:none; }
+  body.lean-mode .poster-card:active, body.lean-mode .channel-card:active{ transform:none; }
+</style>
+</head>
+<body>
+
+<!-- Startup screen: shown before the app if no provider is connected yet -->
+<div id="startScreen" class="start-screen">
+  <div class="start-logo">N</div>
+  <h1 class="start-title">NetGo</h1>
+  <p class="start-sub">Envía este código al administrador para activar tu cuenta.</p>
+
+  <div id="startCodeBox" class="start-code-box">
+    <div class="start-code-digits" id="startCodeDigits">------</div>
+    <p class="start-status" id="startStatus">Esperando que el administrador active tu cuenta…</p>
+  </div>
+</div>
+
+<div id="lockoutScreen" class="start-screen" style="display:none">
+  <div class="start-logo" style="background:linear-gradient(135deg, #FF6B6B, #D64545);">🔒</div>
+  <h1 class="start-title" id="lockoutTitle">Cuenta pausada</h1>
+  <p class="start-sub" id="lockoutMsg">El administrador pausó tu acceso. Contáctalo para reactivarlo.</p>
+</div>
+
+<header>
+  <div class="brand">
+    <div class="mark">N</div>
+    <div class="name">NetGo</div>
+    <div class="ver mono">1.0</div>
+  </div>
+  <div class="top-status">
+    <span>📶</span>
+    <span class="clock" id="clock">--:--</span>
+    <div class="gear" id="openSettings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#EAF2F5" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </div>
+  </div>
+</header>
+
+<div id="updateBanner" class="update-banner" style="display:none">
+  <span id="updateBannerText">Nueva versión disponible</span>
+  <button id="updateBannerBtn">Actualizar</button>
+  <span id="updateBannerClose" class="update-banner-close">✕</span>
+</div>
+
+<div class="searchbar-wrap">
+  <div class="searchbar">
+    <span class="searchbar-icon">🔎</span>
+    <input type="text" id="channelSearch" placeholder="Búsqueda por canal">
+  </div>
+</div>
+
+<div class="hero" id="heroBox">
+  <div class="hero-inner" id="heroInner">
+    <div class="hero-badge" id="heroBadge"><span class="dot-off"></span> Sin proveedor conectado</div>
+    <div class="pulse-wrap">
+      <div class="pulse-ring"></div>
+      <div class="pulse-ring"></div>
+      <div class="pulse-ring"></div>
+      <div class="pulse-core"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+    </div>
+    <div class="hero-title display" id="heroTitle">Aún no hay señal</div>
+    <div class="hero-sub" id="heroSub">Conecta tu proveedor de streaming con licencia (Xtream Codes o lista M3U) para empezar a ver canales, series y películas.</div>
+    <button class="hero-cta" id="heroConnect">Conectar proveedor</button>
+  </div>
+
+  <!-- Inline native video renders through here (this stays transparent while playing) -->
+  <div class="hero-player" id="heroPlayer">
+    <div class="hp-top">
+      <span class="hp-title mono" id="hpTitle">—</span>
+      <span class="hp-close" id="hpClose">✕</span>
+    </div>
+    <div class="hp-spinner-wrap" id="hpSpinnerWrap"><div class="hp-spinner"></div></div>
+    <div class="hp-bottom">
+      <div class="hp-controls">
+        <button class="hp-btn" id="hpSeekBack">⏪ 10</button>
+        <button class="hp-btn hp-btn-main" id="hpPlayPause">⏸</button>
+        <button class="hp-btn" id="hpSeekFwd">10 ⏩</button>
+      </div>
+      <div class="hp-progress" id="hpProgress">
+        <span class="mono" id="hpTimeCur">00:00</span>
+        <input type="range" id="hpSeekbar" min="0" max="1000" value="0">
+        <span class="mono" id="hpTimeDur">00:00</span>
+      </div>
+      <div class="hp-live-badge mono" id="hpLiveBadge" style="display:none">● EN VIVO</div>
+    </div>
+  </div>
+</div>
+
+<div class="cats">
+  <div class="tv-sidebar-brand">
+    <div class="mark">N</div>
+    <div class="name">NetGo</div>
+  </div>
+  <div class="cat" tabindex="0" data-cat="vivo"><div class="icon">📡</div><span>Vivo</span></div>
+  <div class="cat" tabindex="0" data-cat="series"><div class="icon">📺</div><span>Series</span></div>
+  <div class="cat active" tabindex="0" data-cat="peliculas"><div class="icon">🎬</div><span>Películas</span></div>
+  <div class="cat" tabindex="0" data-cat="anime"><div class="icon">🎌</div><span>Anime</span></div>
+  <div class="cat" tabindex="0" data-cat="kids"><div class="icon">🧒</div><span>Kids</span></div>
+  <div class="cat tv-sidebar-gear" tabindex="0" id="openSettingsTV">
+    <div class="icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#EAF2F5" stroke-width="1.6" width="19" height="19"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </div>
+    <span>Ajustes</span>
+  </div>
+</div>
+
+
+<div id="vivoView" class="vivo-view" style="display:none">
+  <div class="vivo-tabs">
+    <div class="vivo-tab active" id="vivoTabCat">Categoría</div>
+    <div class="vivo-tab" id="vivoTabFav">Favoritos</div>
+  </div>
+  <div class="vivo-body">
+    <div class="vivo-sidebar" id="vivoSidebar"></div>
+    <div class="vivo-list" id="vivoList"></div>
+  </div>
+</div>
+<div id="rowsContainer"></div>
+
+<div id="seriesDetailOverlay" class="series-detail-overlay" style="display:none">
+  <div class="sd-backdrop" id="sdBackdrop">
+    <div class="sd-topbar">
+      <span class="sd-back" id="sdBack">←</span>
+      <span class="sd-fav" id="sdFav">♡</span>
+    </div>
+    <img class="sd-cover-circle" id="sdCoverImg" src="" onerror="this.style.visibility='hidden'">
+  </div>
+  <div class="sd-body">
+    <h2 class="sd-title" id="sdTitle">—</h2>
+    <div class="sd-tags" id="sdTags"></div>
+    <p class="sd-plot" id="sdPlot"></p>
+    <div class="sd-seasons-label">Temporadas</div>
+    <div class="sd-season-tabs" id="sdSeasonTabs"></div>
+    <div class="sd-episodes-label" id="sdEpisodesLabel">Episodios</div>
+    <div class="sd-episode-list" id="sdEpisodeList"></div>
+  </div>
+</div>
+
+<!-- Fullscreen video player -->
+<div class="player-overlay" id="playerOverlay">
+  <div class="player-top">
+    <span id="playerTitle">—</span>
+    <span class="close" id="playerClose">✕</span>
+  </div>
+  <video id="videoEl" controls playsinline></video>
+  <div class="player-msg" id="playerMsg" style="display:none">
+    <div class="spinner" id="playerSpinner"></div>
+    <div id="playerMsgText">Cargando señal…</div>
+  </div>
+</div>
+
+<!-- Settings sheet -->
+<div class="overlay" id="overlay">
+  <div class="sheet sheet-pos">
+    <span class="close-x" id="closeSettings">✕</span>
+    <h3 class="display">Conectar proveedor</h3>
+    <p class="help">Introduce los datos de tu servicio de streaming con licencia. NetGo no incluye canales ni contenido propio: todo proviene de tu proveedor. Tus datos se guardan solo en este dispositivo.</p>
+    <div class="conn-types">
+      <div class="chip active" data-type="xtream">Xtream Codes</div>
+      <div class="chip" data-type="m3u">Lista M3U</div>
+      <div class="chip" data-type="api">API propia</div>
+    </div>
+
+    <div id="fieldsXtream">
+      <div class="field"><label>URL del servidor</label><input id="xServer" type="text" placeholder="http://proveedor.ejemplo.com:8080"></div>
+      <div class="field"><label>Usuario</label><input id="xUser" type="text" placeholder="usuario"></div>
+      <div class="field"><label>Contraseña</label><input id="xPass" type="password" placeholder="••••••••"></div>
+      <div class="qr-actions">
+        <button type="button" class="qr-btn" id="btnScanQr">📷 Escanear QR</button>
+        <button type="button" class="qr-btn" id="btnShowQr">🔗 Ver mi QR</button>
+      </div>
+      <div class="qr-actions">
+        <button type="button" class="qr-btn qr-btn-wide" id="btnPairInternet">🌐 Emparejar por internet (cualquier red)</button>
+      </div>
+    </div>
+    <div id="fieldsM3u" style="display:none">
+      <div class="field"><label>URL de la lista M3U</label><input id="m3uUrl" type="text" placeholder="https://proveedor.ejemplo.com/lista.m3u8"></div>
+    </div>
+    <div id="fieldsApi" style="display:none">
+      <div class="field"><label>URL base de la API</label><input id="apiUrl" type="text" placeholder="https://api.tuservicio.com"></div>
+      <div class="field"><label>API Key</label><input id="apiKey" type="password" placeholder="••••••••"></div>
+    </div>
+
+    <button class="save-btn" id="saveConn">Guardar y conectar</button>
+    <div class="status-line mono" id="statusLine">Conectando…</div>
+  </div>
+</div>
+
+<!-- Show QR overlay -->
+<div class="qr-overlay" id="qrShowOverlay" style="display:none">
+  <div class="qr-card">
+    <div id="qrCodeCanvas"></div>
+    <p class="qr-hint">Escanea este código con otro teléfono para copiar la URL, usuario y clave de conexión.</p>
+    <button class="qr-close-btn" id="qrShowClose">Cerrar</button>
+  </div>
+</div>
+
+<!-- Scan QR overlay -->
+<div class="qr-overlay qr-scan-overlay" id="qrScanOverlay" style="display:none">
+  <video id="qrScanVideo" playsinline autoplay muted></video>
+  <canvas id="qrScanCanvas" style="display:none"></canvas>
+  <div class="qr-scan-frame"></div>
+  <p class="qr-scan-hint">Apunta la cámara al código QR</p>
+  <button class="qr-close-btn" id="qrScanClose">Cancelar</button>
+</div>
+
+<!-- Internet pairing overlay -->
+<div class="qr-overlay" id="pairOverlay" style="display:none">
+  <div class="qr-card">
+    <div id="pairCodeCanvas"></div>
+    <p class="qr-hint">Escanea este código con la cámara de <b>cualquier</b> teléfono, en <b>cualquier</b> red (datos móviles incluido). Se abrirá una página para escribir tu URL, usuario y clave — apenas la envíes, esta pantalla se conecta sola.</p>
+    <p class="qr-hint" id="pairStatus" style="color:var(--amber)">Esperando…</p>
+    <button class="qr-close-btn" id="pairClose">Cancelar</button>
+  </div>
+</div>
+
+<!-- Admin PIN gate for manual entry -->
+<div class="qr-overlay" id="pinOverlay" style="display:none">
+  <div class="qr-card">
+    <p class="qr-hint" style="margin-top:0">Acceso solo para el administrador</p>
+    <input type="password" id="pinInput" inputmode="numeric" maxlength="4" placeholder="••••" class="pin-input">
+    <p class="qr-hint" id="pinError" style="color:#FF6B6B; display:none">Clave incorrecta</p>
+    <button class="qr-close-btn" id="pinSubmit">Entrar</button>
+    <button class="qr-close-btn qr-close-btn-ghost" id="pinCancel">Cancelar</button>
+  </div>
+</div>
+
+<!-- Account info panel (opened from the gear icon) -->
+<div class="qr-overlay" id="accountInfoOverlay" style="display:none">
+  <div class="qr-card">
+    <div class="account-icon">👤</div>
+    <h3 class="account-title">Tu cuenta</h3>
+    <div class="account-rows">
+      <div class="account-row"><span>Usuario</span><b id="accInfoUser">—</b></div>
+      <div class="account-row"><span>Conexiones máximas</span><b id="accInfoMaxConn">—</b></div>
+      <div class="account-row"><span>Vence el</span><b id="accInfoExpiry">—</b></div>
+    </div>
+    <button class="qr-close-btn" id="accountInfoClose">Cerrar</button>
+    <button class="qr-close-btn qr-close-btn-danger" id="accountLogoutBtn">Cerrar sesión</button>
+  </div>
+</div>
+
+<script>
+  // ============================================================
+  //  TV MODE — detect Android TV / Google TV (no touchscreen) and
+  //  adapt the UI: bigger sizing, visible remote-control focus rings,
+  //  fullscreen playback instead of the touch-gesture inline player.
+  // ============================================================
+  function isTV(){
+    const noTouch = !('ontouchstart' in window) && (navigator.maxTouchPoints || 0) === 0;
+    const wideAspect = window.innerWidth > window.innerHeight * 1.2;
+    return noTouch || wideAspect;
+  }
+  if(isTV()) document.body.classList.add('tv-mode');
+
+  // Old/weak phones benefit from the same "cheap rendering" mode we built
+  // for TV (no blur, no scale-on-tap animation) — detected via the
+  // Device Memory / CPU core count the browser exposes, when available.
+  // Devices that don't expose these (older WebViews) fall through safely
+  // and just keep the normal phone look.
+  function isLowPower(){
+    const mem = navigator.deviceMemory; // GB, Chromium-only
+    const cores = navigator.hardwareConcurrency;
+    return (typeof mem === 'number' && mem <= 2) || (typeof cores === 'number' && cores <= 4);
+  }
+  if(isLowPower()) document.body.classList.add('lean-mode');
+
+  // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
+  // Plain <div tabindex="0"> elements don't auto-click on Enter like
+  // buttons/links do, so we do it ourselves for our interactive cards.
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn';
+
+  function focusableEls(){
+    return Array.from(document.querySelectorAll(NAV_SELECTOR)).filter(el => {
+      if(el.offsetParent === null) return false; // hidden (display:none or detached)
+      const style = getComputedStyle(el);
+      return style.visibility !== 'hidden';
+    });
+  }
+
+  // Real 2D spatial navigation: picks the closest focusable element in the
+  // pressed direction, using each element's on-screen position — this is
+  // what makes arrow keys actually move between cards instead of doing
+  // nothing (which is what made the remote feel "stuck").
+  function moveFocus(direction){
+    const candidates = focusableEls();
+    if(!candidates.length) return;
+    const current = document.activeElement && document.activeElement.matches(NAV_SELECTOR)
+      ? document.activeElement
+      : null;
+
+    if(!current){
+      candidates[0].focus();
+      return;
+    }
+
+    const r0 = current.getBoundingClientRect();
+    const c0 = { x: r0.left + r0.width/2, y: r0.top + r0.height/2 };
+    let best = null, bestScore = Infinity;
+
+    for(const el of candidates){
+      if(el === current) continue;
+      const r = el.getBoundingClientRect();
+      const c = { x: r.left + r.width/2, y: r.top + r.height/2 };
+      const dx = c.x - c0.x, dy = c.y - c0.y;
+
+      let primary, perpendicular, aligned;
+      if(direction === 'right'){ aligned = dx > 4; primary = dx; perpendicular = Math.abs(dy); }
+      else if(direction === 'left'){ aligned = dx < -4; primary = -dx; perpendicular = Math.abs(dy); }
+      else if(direction === 'down'){ aligned = dy > 4; primary = dy; perpendicular = Math.abs(dx); }
+      else { aligned = dy < -4; primary = -dy; perpendicular = Math.abs(dx); }
+
+      if(!aligned) continue;
+      // Heavily penalize perpendicular offset so navigation stays "in lane"
+      // (e.g. moving right stays in the same row instead of jumping rows).
+      const score = primary + perpendicular * 3;
+      if(score < bestScore){ bestScore = score; best = el; }
+    }
+
+    if(best){
+      best.focus();
+      // 'auto' (instant) instead of 'smooth' — smooth-scroll animations are
+      // what make navigation feel laggy on underpowered TV hardware.
+      best.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'auto' });
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'Enter' || e.key === ' '){
+      const el = document.activeElement;
+      if(el && el.matches(NAV_SELECTOR)){
+        e.preventDefault();
+        el.click();
+      }
+      return;
+    }
+    if(!document.body.classList.contains('tv-mode')) return; // arrow nav only matters on TV
+    const dirMap = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
+    const dir = dirMap[e.key];
+    if(!dir) return;
+    // Don't hijack arrow keys while typing in a text field.
+    if(document.activeElement && document.activeElement.tagName === 'INPUT' &&
+       !document.activeElement.matches('#channelSearch')) return;
+    e.preventDefault();
+    moveFocus(dir);
+  });
+
+  // Start with something focused on TV so the very first D-pad press
+  // already works, instead of requiring an initial random keypress.
+  window.addEventListener('load', () => {
+    if(document.body.classList.contains('tv-mode')){
+      setTimeout(() => {
+        if(!document.activeElement || document.activeElement === document.body){
+          const first = focusableEls()[0];
+          if(first) first.focus();
+        }
+      }, 400);
+    }
+  });
+
+  // ============================================================
+  //  EMPTY CATALOG — shown only until a real provider connects.
+  //  No sample/demo movies or series are bundled in the app.
+  // ============================================================
+  const emptyData = {
+    peliculas: { rows: [], type:'movie' },
+    series: { rows: [], type:'movie' },
+    anime: { rows: [], type:'movie' },
+    kids: { rows: [], type:'movie' },
+    vivo: { rows: [], type:'channel' }
+  };
+
+
+  let liveData = null;          // becomes real provider data once connected
+  let currentCat = 'peliculas';
+
+  function activeData(){ return liveData || emptyData; }
+
+  function posterCard(m){
+    const art = m.img
+      ? `<img class="poster-cover-img" src="${m.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
+      : `<div class="poster-art">${m.icon||'🎬'}</div>`;
+    return `<div class="poster-card" tabindex="0" data-kind="${m.kind||''}" data-url="${m.url||''}" data-sid="${m.series_id||''}" data-title="${m.t}">
+      ${art}
+      <div class="poster-badge mono">${m.badge||'HD'}</div>
+      <div class="poster-rating mono">★ ${m.r||'—'}</div>
+      <div class="poster-scrim"></div>
+      <div class="poster-meta"><div class="t">${m.t}</div><div class="s">${m.meta||''}</div></div>
+    </div>`;
+  }
+  function channelCard(c){
+    const art = c.img
+      ? `<img class="channel-cover-img" src="${c.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
+      : c.icon||'📡';
+    return `<div class="channel-card" tabindex="0" data-kind="live" data-url="${c.url||''}" data-title="${c.t}" data-num="${c.num||''}">
+      <div class="channel-thumb" style="background:${c.grad||'linear-gradient(155deg,#123,#456)'}">
+        ${art}
+        <div class="channel-live mono"><span class="live-dot"></span>EN VIVO</div>
+        <div class="channel-num mono">${c.num||''}</div>
+      </div>
+      <div class="channel-info"><div class="name">${c.t}</div><div class="program">${c.program||''}</div></div>
+    </div>`;
+  }
+
+  let renderGen = 0;
+  let rowObserver = null;
+  function renderCategory(cat){
+    currentCat = cat;
+    const myGen = ++renderGen;
+    const rowsContainer = document.getElementById('rowsContainer');
+    const vivoView = document.getElementById('vivoView');
+
+    if(cat === 'vivo'){
+      rowsContainer.style.display = 'none';
+      vivoView.style.display = 'block';
+      renderVivoView();
+      return;
+    }
+    vivoView.style.display = 'none';
+    rowsContainer.style.display = 'block';
+
+    if(rowObserver){ rowObserver.disconnect(); rowObserver = null; }
+
+    const d = activeData()[cat];
+    if(!d || !d.rows.length){
+      rowsContainer.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">Tu proveedor no tiene contenido en esta categoría</div></div></section>`;
+      return;
+    }
+
+    // ---- Real virtualization ----
+    // 1) Rows only get their cards built the moment they're about to become
+    //    visible (IntersectionObserver) — a category with 50 rows only ever
+    //    builds the ~3 near the viewport, not all 50 at once.
+    // 2) Inside a long row, cards load in batches of 24 as you scroll that
+    //    row sideways, instead of building thousands of cards up front.
+    // This is what makes an unlimited-length catalog stay smooth.
+    rowsContainer.innerHTML = '';
+    const rows = d.rows;
+    const cardFn = d.type === 'channel' ? channelCard : posterCard;
+    const placeholderHeight = d.type === 'channel' ? '158px' : '198px';
+
+    const frag = document.createDocumentFragment();
+    rows.forEach((row, idx) => {
+      const section = document.createElement('section');
+      section.className = 'row';
+      section.dataset.rowIndex = idx;
+      section.innerHTML = `
+        <div class="row-head"><h2>${row.title}</h2><span class="count mono">${row.items.length} ${d.type === 'channel' ? 'canales' : 'títulos'}</span></div>
+        <div class="row-scroll" style="min-height:${placeholderHeight}"></div>
+      `;
+      frag.appendChild(section);
+    });
+    rowsContainer.appendChild(frag);
+
+    function populateRow(section){
+      if(myGen !== renderGen) return;
+      const idx = +section.dataset.rowIndex;
+      const scrollEl = section.querySelector('.row-scroll');
+      const items = rows[idx].items;
+      const BATCH = (isTV() || isLowPower()) ? 14 : 24;
+      let loaded = 0;
+      function loadMore(){
+        if(loaded >= items.length) return;
+        const next = items.slice(loaded, loaded + BATCH);
+        scrollEl.insertAdjacentHTML('beforeend', next.map(cardFn).join(''));
+        loaded += BATCH;
+      }
+      loadMore();
+      if(items.length > BATCH){
+        let ticking = false;
+        scrollEl.addEventListener('scroll', () => {
+          if(ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            if(scrollEl.scrollLeft + scrollEl.clientWidth > scrollEl.scrollWidth - 700) loadMore();
+            ticking = false;
+          });
+        }, { passive:true });
+      }
+    }
+
+    rowObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if(!entry.isIntersecting) return;
+        const section = entry.target;
+        if(section.dataset.populated) return;
+        section.dataset.populated = '1';
+        populateRow(section);
+        rowObserver.unobserve(section);
+      });
+    }, { root:null, rootMargin: '600px 0px' });
+
+    rowsContainer.querySelectorAll('.row').forEach(section => rowObserver.observe(section));
+  }
+
+  // ============================================================
+  //  VIVO: category sidebar + channel list (EPG-style)
+  // ============================================================
+  const FAV_KEY = 'netgo_fav_channels';
+  function getFavorites(){ try{ return JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); }catch(e){ return []; } }
+  function saveFavorites(list){ localStorage.setItem(FAV_KEY, JSON.stringify(list)); }
+  function isFavorite(url){ return getFavorites().some(f => f.url === url); }
+  function toggleFavorite(chan){
+    let list = getFavorites();
+    if(list.some(f => f.url === chan.url)) list = list.filter(f => f.url !== chan.url);
+    else list.push(chan);
+    saveFavorites(list);
+  }
+
+  let vivoTab = 'categoria';
+  let vivoActiveCatIndex = 0;
+  let activeChannelUrl = null;
+
+  function channelRowHtml(c){
+    const fav = isFavorite(c.url);
+    const art = c.img ? `<img src="${c.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">` : (c.icon || '📡');
+    const activeCls = c.url === activeChannelUrl ? ' active' : '';
+    return `<div class="vivo-chan-row${activeCls}" tabindex="0" data-url="${c.url}" data-title="${c.t}" data-num="${c.num||''}" data-img="${c.img||''}">
+      <div class="vivo-chan-logo">${art}</div>
+      <div class="vivo-chan-num">${c.num||''}</div>
+      <div class="vivo-chan-name">${c.t}</div>
+      <div class="vivo-chan-star${fav?' on':''}" data-fav-toggle="1">${fav ? '★' : '☆'}</div>
+      <div class="vivo-chan-arrow">›</div>
+    </div>`;
+  }
+
+  function renderVivoView(){
+    const d = activeData().vivo;
+    const sidebar = document.getElementById('vivoSidebar');
+    const list = document.getElementById('vivoList');
+
+    if(vivoTab === 'favoritos'){
+      sidebar.innerHTML = '';
+      sidebar.style.display = 'none';
+      const favs = getFavorites();
+      list.innerHTML = favs.length
+        ? favs.map(channelRowHtml).join('')
+        : `<div class="vivo-empty">Aún no tienes canales favoritos.<br>Toca la ☆ junto a un canal para guardarlo aquí.</div>`;
+      return;
+    }
+
+    sidebar.style.display = 'block';
+    if(!d || !d.rows.length){
+      list.innerHTML = `<div class="vivo-empty">Tu proveedor no tiene canales en vivo.</div>`;
+      return;
+    }
+    if(vivoActiveCatIndex >= d.rows.length) vivoActiveCatIndex = 0;
+
+    sidebar.innerHTML = d.rows.map((row, i) => `
+      <div class="vivo-cat-item${i === vivoActiveCatIndex ? ' active' : ''}" tabindex="0" data-idx="${i}">${row.title}</div>
+    `).join('');
+
+    const activeRow = d.rows[vivoActiveCatIndex];
+    renderChannelListVirtualized(list, activeRow.items);
+  }
+
+  // Loads a long channel list in batches as the user scrolls near the
+  // bottom, instead of building potentially thousands of rows at once.
+  function renderChannelListVirtualized(list, items){
+    list.innerHTML = '';
+    const BATCH = (isTV() || isLowPower()) ? 22 : 40;
+    let loaded = 0;
+    function loadMore(){
+      const old = list.querySelector('.vivo-sentinel');
+      if(old) old.remove();
+      const next = items.slice(loaded, loaded + BATCH);
+      list.insertAdjacentHTML('beforeend', next.map(channelRowHtml).join(''));
+      loaded += next.length;
+      if(loaded < items.length){
+        const sentinel = document.createElement('div');
+        sentinel.className = 'vivo-sentinel';
+        list.appendChild(sentinel);
+        const obs = new IntersectionObserver((entries) => {
+          if(entries[0].isIntersecting){
+            obs.disconnect();
+            loadMore();
+          }
+        }, { root:null, rootMargin:'500px 0px' });
+        obs.observe(sentinel);
+      }
+    }
+    loadMore();
+  }
+
+  // ---------- Channel search (searches across every category) ----------
+  const channelSearchInput = document.getElementById('channelSearch');
+  channelSearchInput.addEventListener('input', () => {
+    const q = channelSearchInput.value.trim().toLowerCase();
+    if(currentCat !== 'vivo') return;
+    const list = document.getElementById('vivoList');
+    const sidebar = document.getElementById('vivoSidebar');
+    if(!q){ renderVivoView(); return; }
+    const d = activeData().vivo;
+    if(!d || !d.rows.length) return;
+    sidebar.style.display = 'none';
+    const matches = [];
+    d.rows.forEach(row => row.items.forEach(c => { if(c.t.toLowerCase().includes(q)) matches.push(c); }));
+    list.innerHTML = matches.length
+      ? matches.map(channelRowHtml).join('')
+      : `<div class="vivo-empty">Sin resultados para "${q}"</div>`;
+  });
+
+  document.getElementById('vivoTabCat').onclick = () => {
+    vivoTab = 'categoria';
+    document.getElementById('vivoTabCat').classList.add('active');
+    document.getElementById('vivoTabFav').classList.remove('active');
+    renderVivoView();
+  };
+  document.getElementById('vivoTabFav').onclick = () => {
+    vivoTab = 'favoritos';
+    document.getElementById('vivoTabFav').classList.add('active');
+    document.getElementById('vivoTabCat').classList.remove('active');
+    renderVivoView();
+  };
+
+  document.getElementById('vivoSidebar').addEventListener('click', (e) => {
+    const item = e.target.closest('.vivo-cat-item');
+    if(!item) return;
+    vivoActiveCatIndex = parseInt(item.dataset.idx, 10);
+    renderVivoView();
+  });
+
+  document.getElementById('vivoList').addEventListener('click', (e) => {
+    const row = e.target.closest('.vivo-chan-row');
+    if(!row) return;
+    const url = row.dataset.url, title = row.dataset.title;
+
+    if(e.target.closest('[data-fav-toggle]')){
+      toggleFavorite({ url, t: title, num: row.dataset.num, img: row.dataset.img });
+      renderVivoView();
+      return;
+    }
+    activeChannelUrl = url;
+    document.querySelectorAll('.vivo-chan-row').forEach(r => r.classList.toggle('active', r.dataset.url === url));
+
+    // Build the queue from every channel row currently visible in the list,
+    // so swiping left/right in the native player moves between real siblings.
+    const rows = Array.from(document.querySelectorAll('#vivoList .vivo-chan-row'));
+    const queue = rows.map(r => ({ url: r.dataset.url, title: r.dataset.title, num: r.dataset.num }));
+    const startIndex = Math.max(0, rows.findIndex(r => r.dataset.url === url));
+    playQueue(queue, startIndex, title, 'channel');
+  });
+
+  document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(cat => {
+    cat.onclick = () => {
+      document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.remove('active'));
+      cat.classList.add('active');
+      renderCategory(cat.dataset.cat);
+    };
+  });
+
+  // ============================================================
+  //  VIDEO PLAYER (HLS.js)
+  // ============================================================
+  const playerOverlay = document.getElementById('playerOverlay');
+  const videoEl = document.getElementById('videoEl');
+  const playerMsg = document.getElementById('playerMsg');
+  const playerMsgText = document.getElementById('playerMsgText');
+  let hlsInstance = null;
+
+  function showPlayerMsg(text){ playerMsg.style.display='flex'; playerMsgText.textContent = text; }
+  function hidePlayerMsg(){ playerMsg.style.display='none'; }
+
+  function playStreamWeb(url, title){
+    // Browser-preview fallback only (used when opening this HTML directly in a
+    // desktop/mobile browser, not inside the compiled APK) — limited codec
+    // support and no auto-advance to the next episode.
+    document.getElementById('playerTitle').textContent = title || 'Reproduciendo';
+    playerOverlay.classList.add('open');
+    showPlayerMsg('Cargando señal…');
+    if(hlsInstance){ hlsInstance.destroy(); hlsInstance = null; }
+    const isHls = url.includes('.m3u8');
+    if(isHls && window.Hls && Hls.isSupported()){
+      hlsInstance = new Hls();
+      hlsInstance.loadSource(url);
+      hlsInstance.attachMedia(videoEl);
+      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => { hidePlayerMsg(); videoEl.play(); });
+      hlsInstance.on(Hls.Events.ERROR, (evt, data) => {
+        if(data.fatal) showPlayerMsg('No se pudo cargar la señal. Verifica tu conexión o los datos del proveedor.');
+      });
+    } else {
+      videoEl.src = url;
+      videoEl.addEventListener('loadeddata', hidePlayerMsg, { once:true });
+      videoEl.addEventListener('error', () => showPlayerMsg('No se pudo reproducir este contenido.'), { once:true });
+      videoEl.play().catch(()=>{});
+    }
+  }
+
+  // ============================================================
+  //  INLINE PLAYER (embedded in the hero box, native video shows through)
+  // ============================================================
+  const heroBox = document.getElementById('heroBox');
+  const heroPlayerEl = document.getElementById('heroPlayer');
+  const hpSpinnerWrap = document.getElementById('hpSpinnerWrap');
+  const hpTitle = document.getElementById('hpTitle');
+  const hpPlayPause = document.getElementById('hpPlayPause');
+  const hpSeekbar = document.getElementById('hpSeekbar');
+  const hpTimeCur = document.getElementById('hpTimeCur');
+  const hpTimeDur = document.getElementById('hpTimeDur');
+  const hpProgress = document.getElementById('hpProgress');
+  const hpLiveBadge = document.getElementById('hpLiveBadge');
+
+  const inlineAvailable = () => window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.InlineVlcPlayer;
+  let lastKnownDuration = 0;
+  let userIsDraggingSeek = false;
+
+  function fmtTime(ms){
+    if(!ms || ms < 0) return '00:00';
+    const totalSec = Math.floor(ms/1000);
+    const h = Math.floor(totalSec/3600), m = Math.floor((totalSec%3600)/60), s = totalSec%60;
+    const pad = n => String(n).padStart(2,'0');
+    return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }
+
+  function getHeroRect(){
+    const r = heroBox.getBoundingClientRect();
+    return { x: r.left, y: r.top, width: r.width, height: r.height };
+  }
+
+  async function positionInlinePlayer(){
+    if(!inlineAvailable()) return;
+    try{ await window.Capacitor.Plugins.InlineVlcPlayer.updateRect(getHeroRect()); }catch(e){}
+  }
+  // Keep the native video aligned with the hero box while scrolling/resizing
+  let rafPending = false;
+  function schedulePositionUpdate(){
+    if(rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => { rafPending = false; positionInlinePlayer(); });
+  }
+  window.addEventListener('scroll', schedulePositionUpdate, { passive:true });
+  window.addEventListener('resize', schedulePositionUpdate);
+
+  async function playInline(queue, startIndex, kind){
+    if(!inlineAvailable()){
+      const item = queue[startIndex || 0];
+      playStreamWeb(item.url, item.title);
+      return;
+    }
+    heroBox.classList.add('playing');
+    hpProgress.style.display = kind === 'channel' ? 'none' : 'flex';
+    hpLiveBadge.style.display = kind === 'channel' ? 'block' : 'none';
+    hpSpinnerWrap.classList.add('loading');
+    hpPlayPause.textContent = '⏸';
+    window.scrollTo({ top:0, behavior:'smooth' });
+
+    const P = window.Capacitor.Plugins.InlineVlcPlayer;
+    await P.mount(getHeroRect());
+    await P.loadQueue({ queue, startIndex: startIndex || 0 });
+    // Reposition a couple more times shortly after, in case the smooth
+    // scroll or layout is still settling.
+    setTimeout(positionInlinePlayer, 150);
+    setTimeout(positionInlinePlayer, 500);
+  }
+
+  async function closeInlinePlayer(){
+    if(inlineAvailable()){
+      try{ await window.Capacitor.Plugins.InlineVlcPlayer.unmount(); }catch(e){}
+    }
+    heroBox.classList.remove('playing');
+  }
+
+  document.getElementById('hpClose').onclick = closeInlinePlayer;
+  hpPlayPause.onclick = async () => {
+    if(!inlineAvailable()) return;
+    const r = await window.Capacitor.Plugins.InlineVlcPlayer.playPause();
+    hpPlayPause.textContent = r.isPlaying ? '⏸' : '▶';
+  };
+  document.getElementById('hpSeekBack').onclick = () => inlineAvailable() && window.Capacitor.Plugins.InlineVlcPlayer.seekBy({ deltaSeconds:-10 });
+  document.getElementById('hpSeekFwd').onclick = () => inlineAvailable() && window.Capacitor.Plugins.InlineVlcPlayer.seekBy({ deltaSeconds:10 });
+
+  hpSeekbar.addEventListener('input', () => { userIsDraggingSeek = true; });
+  hpSeekbar.addEventListener('change', () => {
+    userIsDraggingSeek = false;
+    if(!inlineAvailable() || !lastKnownDuration) return;
+    const positionMs = Math.round((hpSeekbar.value / 1000) * lastKnownDuration);
+    window.Capacitor.Plugins.InlineVlcPlayer.seekTo({ positionMs });
+  });
+
+  if(inlineAvailable()){
+    window.Capacitor.Plugins.InlineVlcPlayer.addListener('progress', (data) => {
+      hpSpinnerWrap.classList.remove('loading');
+      hpPlayPause.textContent = data.isPlaying ? '⏸' : '▶';
+      lastKnownDuration = data.duration || 0;
+      if(!userIsDraggingSeek){
+        hpTimeCur.textContent = fmtTime(data.position);
+        hpTimeDur.textContent = fmtTime(data.duration);
+        hpSeekbar.value = data.duration ? Math.round((data.position / data.duration) * 1000) : 0;
+      }
+    });
+    window.Capacitor.Plugins.InlineVlcPlayer.addListener('trackChanged', (data) => {
+      hpTitle.textContent = data.title || 'Reproduciendo';
+    });
+    window.Capacitor.Plugins.InlineVlcPlayer.addListener('ended', () => {
+      closeInlinePlayer();
+    });
+  }
+
+  // queue: [{url, title}, ...]  — a movie/channel is a queue of 1; a series is
+  // every episode in order, so the native player can auto-advance through it.
+  // On TV (no touchscreen / remote control) we use the fullscreen native
+  // player, since the inline player's swipe/tap gestures need a finger on
+  // the screen. On phones we keep the inline overlay player.
+  function playQueue(queue, startIndex, fallbackTitle, kind){
+    if(!queue || !queue.length) return;
+    if(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
+      window.Capacitor.Plugins.VlcPlayer.play({ queue, startIndex: startIndex || 0 })
+        .catch(err => console.error('VlcPlayer error:', err));
+      return;
+    }
+    playInline(queue, startIndex || 0, kind);
+  }
+  function closePlayer(){
+    playerOverlay.classList.remove('open');
+    videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load();
+    if(hlsInstance){ hlsInstance.destroy(); hlsInstance = null; }
+  }
+  document.getElementById('playerClose').onclick = closePlayer;
+
+  // Click delegation for poster/channel cards
+  document.addEventListener('click', async (e) => {
+    const card = e.target.closest('.poster-card, .channel-card');
+    if(!card) return;
+    const kind = card.dataset.kind;
+    const title = card.dataset.title;
+    if(kind === 'series'){
+      openSeriesDetail(card.dataset.sid, title);
+    } else if(card.dataset.url){
+      if(card.classList.contains('channel-card')){
+        // Build the queue from sibling channel cards in the same row so
+        // swiping left/right in the native player moves between them.
+        const siblings = Array.from(card.parentElement.querySelectorAll('.channel-card'));
+        const queue = siblings.map(c => ({ url: c.dataset.url, title: c.dataset.title, num: c.dataset.num }));
+        const startIndex = Math.max(0, siblings.indexOf(card));
+        playQueue(queue, startIndex, title, 'channel');
+      } else {
+        playQueue([{ url: card.dataset.url, title }], 0, title, 'poster');
+      }
+    }
+  });
+
+  // ============================================================
+  //  XTREAM CODES INTEGRATION
+  // ============================================================
+  const CONN_KEY = 'netgo_connection';
+
+  function getConn(){
+    try{ return JSON.parse(localStorage.getItem(CONN_KEY) || 'null'); }catch(e){ return null; }
+  }
+  function saveConn(conn){ localStorage.setItem(CONN_KEY, JSON.stringify(conn)); }
+
+  async function xtreamFetch(conn, action, extra='', attempt=1){
+    const base = conn.server.replace(/\/+$/,'');
+    const url = `${base}/player_api.php?username=${encodeURIComponent(conn.username)}&password=${encodeURIComponent(conn.password)}&action=${action}${extra}`;
+    const ctrl = new AbortController();
+    // Slow mobile data needs a generous timeout — 12s was too tight and
+    // would fail requests that were still genuinely loading, not stuck.
+    const timeout = setTimeout(()=>ctrl.abort(), 25000);
+    try{
+      const res = await fetch(url, { signal: ctrl.signal });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch(err){
+      // Retry up to 2 extra times on flaky/slow connections before giving up,
+      // with a short growing pause between tries.
+      if(attempt < 3){
+        await new Promise(r => setTimeout(r, 1200 * attempt));
+        return xtreamFetch(conn, action, extra, attempt + 1);
+      }
+      throw err;
+    } finally { clearTimeout(timeout); }
+  }
+
+  function groupByCategory(items, categories, maxItemsPerRow=Infinity){
+    const byCat = {};
+    items.forEach(it => {
+      const cid = it.category_id;
+      if(!byCat[cid]) byCat[cid] = [];
+      byCat[cid].push(it);
+    });
+    const rows = [];
+    (categories||[]).forEach(c => {
+      const catItems = byCat[c.category_id];
+      if(catItems && catItems.length){
+        rows.push({ title: c.category_name, items: catItems.slice(0, maxItemsPerRow) });
+      }
+    });
+    return rows;
+  }
+
+  function categoriesByKeyword(items, categories, regex, maxItemsPerRow=Infinity){
+    const matched = (categories||[]).filter(c => regex.test(c.category_name));
+    return groupByCategory(items, matched, maxItemsPerRow);
+  }
+
+  let xtreamState = null; // { conn, liveCategories, vodCategories, seriesCategories, live, vod, series }
+
+  async function resolveSeriesQueue(seriesId, seriesName){
+    const info = await xtreamFetch(xtreamState.conn, 'get_series_info', `&series_id=${seriesId}`);
+    const seasons = info.episodes || {};
+    const base = xtreamState.conn.server.replace(/\/+$/,'');
+    const seasonKeys = Object.keys(seasons).sort((a,b) => Number(a) - Number(b));
+    const queue = [];
+    seasonKeys.forEach(sk => {
+      const eps = (seasons[sk] || []).slice().sort((a,b) => Number(a.episode_num) - Number(b.episode_num));
+      eps.forEach(ep => {
+        const ext = ep.container_extension || 'mp4';
+        const epTitle = `${seriesName || info.info?.name || 'Serie'} · T${sk} E${ep.episode_num}${ep.title ? ' - ' + ep.title : ''}`;
+        queue.push({
+          url: `${base}/series/${xtreamState.conn.username}/${xtreamState.conn.password}/${ep.id}.${ext}`,
+          title: epTitle
+        });
+      });
+    });
+    return queue;
+  }
+
+  // ============================================================
+  //  SERIES DETAIL SCREEN
+  // ============================================================
+  let sdCurrentInfo = null;
+  let sdCurrentSeasonKey = null;
+  const sdFavKey = 'netgo_fav_series';
+
+  function getSeriesFavs(){ try{ return JSON.parse(localStorage.getItem(sdFavKey) || '[]'); }catch(e){ return []; } }
+  function isSeriesFav(id){ return getSeriesFavs().includes(id); }
+  function toggleSeriesFav(id){
+    let list = getSeriesFavs();
+    if(list.includes(id)) list = list.filter(x => x !== id); else list.push(id);
+    localStorage.setItem(sdFavKey, JSON.stringify(list));
+  }
+
+  async function openSeriesDetail(seriesId, fallbackTitle){
+    const overlay = document.getElementById('seriesDetailOverlay');
+    overlay.style.display = 'block';
+    overlay.scrollTop = 0;
+    document.getElementById('sdTitle').textContent = fallbackTitle || 'Cargando…';
+    document.getElementById('sdEpisodeList').innerHTML = '';
+    document.getElementById('sdSeasonTabs').innerHTML = '';
+    document.getElementById('sdTags').innerHTML = '';
+    document.getElementById('sdPlot').textContent = '';
+    document.getElementById('sdBackdrop').style.backgroundImage = '';
+    document.getElementById('sdCoverImg').style.visibility = 'visible';
+    document.getElementById('sdCoverImg').src = '';
+
+    const favBtn = document.getElementById('sdFav');
+    favBtn.classList.toggle('active', isSeriesFav(seriesId));
+    favBtn.textContent = isSeriesFav(seriesId) ? '♥' : '♡';
+    favBtn.onclick = () => {
+      toggleSeriesFav(seriesId);
+      favBtn.classList.toggle('active');
+      favBtn.textContent = favBtn.classList.contains('active') ? '♥' : '♡';
+    };
+
+    try{
+      const info = await xtreamFetch(xtreamState.conn, 'get_series_info', `&series_id=${seriesId}`);
+      sdCurrentInfo = info;
+      const meta = info.info || {};
+      document.getElementById('sdTitle').textContent = meta.name || fallbackTitle || 'Serie';
+
+      const backdrop = (meta.backdrop_path && meta.backdrop_path[0]) || meta.cover || '';
+      if(backdrop) document.getElementById('sdBackdrop').style.backgroundImage = `url('${backdrop}')`;
+      document.getElementById('sdCoverImg').src = meta.cover || backdrop || '';
+
+      const tags = [];
+      if(meta.releaseDate) tags.push(String(meta.releaseDate).slice(0,4));
+      if(meta.rating) tags.push(`★ ${meta.rating}`);
+      if(meta.genre) tags.push(String(meta.genre).split(',')[0].trim());
+      document.getElementById('sdTags').innerHTML = tags.map(t => `<span class="sd-tag">${t}</span>`).join('');
+      document.getElementById('sdPlot').textContent = meta.plot || '';
+
+      const seasons = info.episodes || {};
+      const seasonKeys = Object.keys(seasons).sort((a,b) => Number(a) - Number(b));
+      sdCurrentSeasonKey = seasonKeys[0];
+      document.getElementById('sdSeasonTabs').innerHTML = seasonKeys.map(sk => `
+        <div class="sd-season-tab${sk === sdCurrentSeasonKey ? ' active' : ''}" data-season="${sk}">Temporada ${sk}</div>
+      `).join('');
+      renderSeasonEpisodes();
+    }catch(err){
+      document.getElementById('sdTitle').textContent = 'No se pudo cargar la serie';
+      document.getElementById('sdPlot').textContent = err.message || '';
+    }
+  }
+
+  function renderSeasonEpisodes(){
+    if(!sdCurrentInfo) return;
+    const seasons = sdCurrentInfo.episodes || {};
+    const eps = (seasons[sdCurrentSeasonKey] || []).slice().sort((a,b) => Number(a.episode_num) - Number(b.episode_num));
+    document.getElementById('sdEpisodesLabel').textContent = `Episodios · ${eps.length}`;
+    const cover = (sdCurrentInfo.info && sdCurrentInfo.info.cover) || '';
+    document.getElementById('sdEpisodeList').innerHTML = eps.map((ep, i) => `
+      <div class="sd-episode-row" data-idx="${i}">
+        <img class="sd-ep-thumb" src="${(ep.info && ep.info.movie_image) || cover}" onerror="this.style.visibility='hidden'">
+        <div class="sd-ep-info">
+          <div class="sd-ep-num mono">EP ${ep.episode_num}</div>
+          <div class="sd-ep-title">${ep.title || (sdCurrentInfo.info && sdCurrentInfo.info.name) || ''}</div>
+          <div class="sd-ep-dur">${(ep.info && ep.info.duration) || ''}</div>
+        </div>
+        <div class="sd-ep-play">▶</div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('sdSeasonTabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.sd-season-tab');
+    if(!tab) return;
+    sdCurrentSeasonKey = tab.dataset.season;
+    document.querySelectorAll('.sd-season-tab').forEach(t => t.classList.toggle('active', t === tab));
+    renderSeasonEpisodes();
+  });
+
+  document.getElementById('sdEpisodeList').addEventListener('click', (e) => {
+    const row = e.target.closest('.sd-episode-row');
+    if(!row || !sdCurrentInfo) return;
+    const idx = parseInt(row.dataset.idx, 10);
+    const seasons = sdCurrentInfo.episodes || {};
+    const eps = (seasons[sdCurrentSeasonKey] || []).slice().sort((a,b) => Number(a.episode_num) - Number(b.episode_num));
+    const base = xtreamState.conn.server.replace(/\/+$/,'');
+    const seriesName = (sdCurrentInfo.info && sdCurrentInfo.info.name) || document.getElementById('sdTitle').textContent;
+    const queue = eps.map(ep => ({
+      url: `${base}/series/${xtreamState.conn.username}/${xtreamState.conn.password}/${ep.id}.${ep.container_extension || 'mp4'}`,
+      title: `${seriesName} · T${sdCurrentSeasonKey} E${ep.episode_num}${ep.title ? ' - ' + ep.title : ''}`
+    }));
+    playQueue(queue, idx, seriesName, 'poster');
+  });
+
+  document.getElementById('sdBack').onclick = () => {
+    document.getElementById('seriesDetailOverlay').style.display = 'none';
+  };
+
+  // Categories matching this pattern (one-off pay-per-view "events" — not
+  // regular linear channels) are hidden automatically from Vivo, since they
+  // clutter the channel list and aren't meant for everyday browsing.
+  const EXCLUDED_CATEGORY_REGEX = /evento|eventos|ppv|pay.?per.?view|fox one|ufc.*box.*wwe/i;
+  function excludeCategories(categories){
+    return (categories || []).filter(c => !EXCLUDED_CATEGORY_REGEX.test(c.category_name));
+  }
+
+  async function connectXtream(conn){
+    const [liveCategoriesRaw, vodCategoriesRaw, seriesCategoriesRaw] = await Promise.all([
+      xtreamFetch(conn, 'get_live_categories'),
+      xtreamFetch(conn, 'get_vod_categories'),
+      xtreamFetch(conn, 'get_series_categories'),
+    ]);
+    const liveCategories = excludeCategories(liveCategoriesRaw);
+    const vodCategories = excludeCategories(vodCategoriesRaw);
+    const seriesCategories = excludeCategories(seriesCategoriesRaw);
+    const [live, vod, series] = await Promise.all([
+      xtreamFetch(conn, 'get_live_streams'),
+      xtreamFetch(conn, 'get_vod_streams'),
+      xtreamFetch(conn, 'get_series'),
+    ]);
+    xtreamState = { conn, liveCategories, vodCategories, seriesCategories, live, vod, series };
+
+    const base = conn.server.replace(/\/+$/,'');
+    const liveRows = groupByCategory(live, liveCategories).map(row => ({
+      title: row.title,
+      items: row.items.map(s => ({
+        t: s.name, program:'', num: s.num || '',
+        img: s.stream_icon || '',
+        url: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.m3u8`
+      }))
+    }));
+    const vodRows = groupByCategory(vod, vodCategories).map(row => ({
+      title: row.title,
+      items: row.items.map(m => ({
+        t: m.name, meta:'', badge:'HD', r: m.rating || '—',
+        img: m.stream_icon || '',
+        kind:'vod',
+        url: `${base}/movie/${conn.username}/${conn.password}/${m.stream_id}.${m.container_extension || 'mp4'}`
+      }))
+    }));
+    const seriesRows = groupByCategory(series, seriesCategories).map(row => ({
+      title: row.title,
+      items: row.items.map(s => ({
+        t: s.name, meta: s.releaseDate || '', badge:'HD', r: s.rating || '—',
+        img: s.cover || '',
+        kind:'series', series_id: s.series_id
+      }))
+    }));
+    const animeRows = categoriesByKeyword(vod, vodCategories, /anime/i).map(row => ({
+        title: row.title, items: row.items.map(m => ({
+          t:m.name, meta:'', badge:'HD', r:m.rating||'—', img:m.stream_icon||'', kind:'vod',
+          url:`${base}/movie/${conn.username}/${conn.password}/${m.stream_id}.${m.container_extension||'mp4'}`
+        }))
+      })).concat(categoriesByKeyword(series, seriesCategories, /anime/i).map(row => ({
+        title: row.title, items: row.items.map(s => ({
+          t:s.name, meta: s.releaseDate || '', badge:'HD', r:s.rating||'—', img:s.cover||'',
+          kind:'series', series_id:s.series_id
+        }))
+      })));
+    const kidsVodRows = categoriesByKeyword(vod, vodCategories, /kids|infantil|ni[ñn]os|cartoon|toon|disney/i)
+      .map(row => ({ title: row.title, items: row.items.map(x => ({
+        t:x.name, meta:'', badge:'HD', r:x.rating||'—', img:x.stream_icon||'',
+        kind:'vod', url:`${base}/movie/${conn.username}/${conn.password}/${x.stream_id}.${x.container_extension||'mp4'}`
+      })) }));
+    const kidsSeriesRows = categoriesByKeyword(series, seriesCategories, /kids|infantil|ni[ñn]os|cartoon|toon|disney/i)
+      .map(row => ({ title: row.title, items: row.items.map(s => ({
+        t:s.name, meta: s.releaseDate || '', badge:'HD', r:s.rating||'—', img:s.cover||'',
+        kind:'series', series_id:s.series_id
+      })) }));
+    const kidsRows = kidsVodRows.concat(kidsSeriesRows);
+
+    liveData = {
+      vivo: { rows: liveRows, type:'channel' },
+      peliculas: { rows: vodRows, type:'poster' },
+      series: { rows: seriesRows, type:'poster' },
+      anime: { rows: animeRows, type:'poster' },
+      kids: { rows: kidsRows, type:'poster' },
+    };
+
+    document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
+    document.getElementById('heroTitle').textContent = 'Todo listo';
+    document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${live.length}</b> canales</span><span><b>${vod.length}</b> películas</span><span><b>${series.length}</b> series</span></div>`;
+    document.getElementById('heroConnect').textContent = 'Actualizar catálogo';
+    renderCategory(currentCat);
+  }
+
+  async function tryConnect(conn, { silent } = {}){
+    if(!silent) showStatus('Conectando…', false);
+    try{
+      await connectXtream(conn);
+      if(!silent) showStatus('✓ Conectado. Cargando tu catálogo…', false);
+      overlay.classList.remove('open');
+    }catch(err){
+      showStatus('✕ No se pudo conectar: ' + err.message + '. Revisa la URL, usuario y contraseña.', true);
+    }
+  }
+
+  function showStatus(text, isError){
+    const el = document.getElementById('statusLine');
+    el.textContent = text;
+    el.style.color = isError ? '#FF6B6B' : 'var(--green)';
+    el.classList.add('show');
+  }
+
+  renderCategory('peliculas');
+
+  // ---------- Update checker ----------
+  const UPDATE_INFO_URL = 'https://pjaraf.github.io/netgo-android/version.json';
+  const UPDATE_APK_URL = 'https://github.com/pjaraf/netgo-android/releases/latest/download/app-debug.apk';
+
+  async function checkForUpdate(){
+    try{
+      const res = await fetch(UPDATE_INFO_URL, { cache:'no-store' });
+      if(!res.ok) return;
+      const data = await res.json();
+      const current = window.NETGO_APP_VERSION || 0;
+      if(data.version && data.version > current){
+        document.getElementById('updateBannerText').textContent = `Nueva versión disponible (build ${data.version})`;
+        document.getElementById('updateBanner').style.display = 'flex';
+      }
+    }catch(err){ /* offline, or not published yet — ignore silently */ }
+  }
+  document.getElementById('updateBannerBtn').onclick = async () => {
+    const btn = document.getElementById('updateBannerBtn');
+    const plugin = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.UpdateInstaller;
+    if(plugin){
+      btn.textContent = 'Descargando…';
+      btn.disabled = true;
+      try{
+        await plugin.downloadAndInstall({ url: UPDATE_APK_URL });
+      }catch(err){
+        // Fall back to the browser-based download if the direct install
+        // couldn't start (e.g. permission not yet granted).
+        window.open(UPDATE_APK_URL, '_system');
+      }
+      btn.textContent = 'Actualizar';
+      btn.disabled = false;
+    } else {
+      window.open(UPDATE_APK_URL, '_system');
+    }
+  };
+  document.getElementById('updateBannerClose').onclick = () => {
+    document.getElementById('updateBanner').style.display = 'none';
+  };
+
+  // ---------- Remote lock (paused / blocked / removed by the admin) ----------
+  // Checked on every app open, and again every 2 minutes while it's running,
+  // so an admin pausing/blocking/deleting a client takes effect without the
+  // client needing to reinstall or do anything on their end.
+  let statusCheckTimer = null;
+  async function checkClientStatus(){
+    try{
+      const code = getDeviceCode();
+      const res = await fetch(`${FIREBASE_BASE}/status/${code}.json`, { cache:'no-store' });
+      if(!res.ok) return;
+      const data = await res.json();
+      if(data && (data.blocked || data.paused)){
+        showLockout(data.blocked ? 'blocked' : 'paused');
+      }
+    }catch(err){ /* offline — don't lock the app out just because of no signal */ }
+  }
+  function showLockout(kind){
+    if(statusCheckTimer){ clearInterval(statusCheckTimer); statusCheckTimer = null; }
+    document.getElementById('lockoutTitle').textContent = kind === 'blocked' ? 'Cuenta bloqueada' : 'Cuenta pausada';
+    document.getElementById('lockoutMsg').textContent = kind === 'blocked'
+      ? 'El administrador bloqueó tu acceso. Contáctalo para más información.'
+      : 'El administrador pausó tu acceso. Contáctalo para reactivarlo.';
+    document.getElementById('lockoutScreen').style.display = 'flex';
+  }
+  function startStatusPolling(){
+    checkClientStatus();
+    if(statusCheckTimer) clearInterval(statusCheckTimer);
+    statusCheckTimer = setInterval(checkClientStatus, 120000);
+  }
+
+  // Auto-connect on load if credentials were saved previously; otherwise
+  // show the startup QR pairing screen.
+  window.addEventListener('load', () => {
+    const conn = getConn();
+    if(conn && conn.type === 'xtream'){
+      document.getElementById('startScreen').style.display = 'none';
+      tryConnect(conn, { silent:true });
+      startStatusPolling();
+    } else {
+      showStartScreenPairing();
+    }
+    checkForUpdate();
+  });
+</script>
+
+<script>
+  function tick(){
+    const d = new Date();
+    document.getElementById('clock').textContent =
+      d.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
+  }
+  tick(); setInterval(tick, 1000 * 30);
+
+  const overlay = document.getElementById('overlay');
+  async function showAccountInfo(){
+    const overlay = document.getElementById('accountInfoOverlay');
+    const userEl = document.getElementById('accInfoUser');
+    const maxConnEl = document.getElementById('accInfoMaxConn');
+    const expiryEl = document.getElementById('accInfoExpiry');
+    userEl.textContent = 'Cargando…';
+    maxConnEl.textContent = '—';
+    expiryEl.textContent = '—';
+    overlay.style.display = 'flex';
+
+    const conn = getConn();
+    if(!conn || conn.type !== 'xtream'){
+      userEl.textContent = 'Sin proveedor conectado';
+      return;
+    }
+    try{
+      const base = conn.server.replace(/\/+$/,'');
+      const url = `${base}/player_api.php?username=${encodeURIComponent(conn.username)}&password=${encodeURIComponent(conn.password)}`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const info = data.user_info || {};
+      userEl.textContent = info.username || conn.username;
+      maxConnEl.textContent = info.max_connections || '—';
+      if(info.exp_date){
+        const d = new Date(parseInt(info.exp_date, 10) * 1000);
+        expiryEl.textContent = d.toLocaleDateString('es-ES', { year:'numeric', month:'long', day:'numeric' });
+      } else {
+        expiryEl.textContent = 'Sin vencimiento';
+      }
+    }catch(err){
+      userEl.textContent = 'No se pudo obtener la información';
+    }
+  }
+  document.getElementById('accountInfoClose').onclick = () => {
+    document.getElementById('accountInfoOverlay').style.display = 'none';
+  };
+  document.getElementById('accountLogoutBtn').onclick = () => {
+    localStorage.removeItem(CONN_KEY);
+    if(typeof statusCheckTimer !== 'undefined' && statusCheckTimer){ clearInterval(statusCheckTimer); statusCheckTimer = null; }
+    document.getElementById('accountInfoOverlay').style.display = 'none';
+    showStartScreenPairing();
+  };
+  document.getElementById('openSettings').onclick = () => { showAccountInfo(); };
+  document.getElementById('openSettingsTV').onclick = () => { showAccountInfo(); };
+  document.getElementById('heroConnect').onclick = () => overlay.classList.add('open');
+  document.getElementById('closeSettings').onclick = () => overlay.classList.remove('open');
+  overlay.onclick = (e) => { if(e.target === overlay) overlay.classList.remove('open'); };
+
+  const chips = document.querySelectorAll('.chip');
+  const fieldsets = { xtream:'fieldsXtream', m3u:'fieldsM3u', api:'fieldsApi' };
+  let activeConnType = 'xtream';
+  chips.forEach(chip => {
+    chip.onclick = () => {
+      chips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeConnType = chip.dataset.type;
+      Object.values(fieldsets).forEach(id => document.getElementById(id).style.display = 'none');
+      document.getElementById(fieldsets[chip.dataset.type]).style.display = 'block';
+    };
+  });
+
+  document.getElementById('saveConn').onclick = () => {
+    if(activeConnType === 'xtream'){
+      const server = document.getElementById('xServer').value.trim();
+      const username = document.getElementById('xUser').value.trim();
+      const password = document.getElementById('xPass').value.trim();
+      if(!server || !username || !password){
+        showStatus('Completa URL, usuario y contraseña.', true);
+        return;
+      }
+      const conn = { type:'xtream', server, username, password };
+      saveConn(conn);
+      tryConnect(conn);
+    } else {
+      showStatus('Este tipo de conexión aún no está implementado en esta versión.', true);
+    }
+  };
+
+  // ============================================================
+  //  QR login — generate a QR with your URL/user/password, or scan one
+  //  to fill the form. Everything is local: the QR just encodes plain
+  //  text, no network/pairing involved.
+  // ============================================================
+  document.getElementById('btnShowQr').onclick = () => {
+    const server = document.getElementById('xServer').value.trim();
+    const user = document.getElementById('xUser').value.trim();
+    const pass = document.getElementById('xPass').value.trim();
+    if(!server || !user || !pass){
+      showStatus('Completa URL, usuario y contraseña antes de generar el QR.', true);
+      return;
+    }
+    const text = `URL: ${server}\nUsuario: ${user}\nClave: ${pass}`;
+    const holder = document.getElementById('qrCodeCanvas');
+    holder.innerHTML = '';
+    if(window.QRCode){
+      new QRCode(holder, { text, width:220, height:220, colorDark:'#0B1B26', colorLight:'#ffffff' });
+    } else {
+      holder.textContent = 'No se pudo generar el QR.';
+    }
+    document.getElementById('qrShowOverlay').style.display = 'flex';
+  };
+  document.getElementById('qrShowClose').onclick = () => {
+    document.getElementById('qrShowOverlay').style.display = 'none';
+  };
+
+  let qrScanStream = null;
+  let qrScanRAF = null;
+
+  document.getElementById('btnScanQr').onclick = async () => {
+    document.getElementById('qrScanOverlay').style.display = 'flex';
+    try{
+      qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      const video = document.getElementById('qrScanVideo');
+      video.srcObject = qrScanStream;
+      await video.play();
+      startQrScanLoop();
+    }catch(err){
+      closeQrScan();
+      showStatus('No se pudo acceder a la cámara: ' + err.message, true);
+    }
+  };
+
+  function startQrScanLoop(){
+    const video = document.getElementById('qrScanVideo');
+    const canvas = document.getElementById('qrScanCanvas');
+    const ctx = canvas.getContext('2d');
+    function tick(){
+      if(video.readyState === video.HAVE_ENOUGH_DATA && window.jsQR){
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        if(code && code.data){
+          handleScannedQr(code.data);
+          return;
+        }
+      }
+      qrScanRAF = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  function handleScannedQr(text){
+    const urlMatch = text.match(/URL:\s*(.+)/i);
+    const userMatch = text.match(/Usuario:\s*(.+)/i);
+    const passMatch = text.match(/Clave:\s*(.+)/i);
+    if(urlMatch) document.getElementById('xServer').value = urlMatch[1].trim();
+    if(userMatch) document.getElementById('xUser').value = userMatch[1].trim();
+    if(passMatch) document.getElementById('xPass').value = passMatch[1].trim();
+    closeQrScan();
+    if(urlMatch && userMatch && passMatch){
+      showStatus('✓ Datos leídos del QR. Toca "Guardar y conectar".', false);
+    } else {
+      showStatus('El código QR no tiene el formato esperado (URL / Usuario / Clave).', true);
+    }
+  }
+
+  function closeQrScan(){
+    document.getElementById('qrScanOverlay').style.display = 'none';
+    if(qrScanRAF){ cancelAnimationFrame(qrScanRAF); qrScanRAF = null; }
+    if(qrScanStream){ qrScanStream.getTracks().forEach(t => t.stop()); qrScanStream = null; }
+  }
+  document.getElementById('qrScanClose').onclick = closeQrScan;
+
+  // ============================================================
+  //  Internet pairing — scan from ANY network (not just local WiFi).
+  //  A random code is shown as a QR pointing to a small web page
+  //  (hosted on GitHub Pages) where you type URL/user/password; that
+  //  page writes the data to a free Firebase Realtime Database, which
+  //  this app polls until the data shows up.
+  // ============================================================
+  const PAIR_SITE = 'https://pjaraf.github.io/netgo-android/pair.html';
+  const FIREBASE_BASE = 'https://netgo-pairing-default-rtdb.firebaseio.com';
+  let pairPollTimer = null;
+  let pairCode = null;
+
+  function randomPairCode(){
+    let out = '';
+    for(let i = 0; i < 6; i++) out += Math.floor(Math.random() * 10);
+    return out;
+  }
+
+  document.getElementById('btnPairInternet').onclick = () => {
+    pairCode = randomPairCode();
+    const pairUrl = `${PAIR_SITE}?code=${pairCode}`;
+    const holder = document.getElementById('pairCodeCanvas');
+    holder.innerHTML = '';
+    if(window.QRCode){
+      new QRCode(holder, { text: pairUrl, width:220, height:220, colorDark:'#0B1B26', colorLight:'#ffffff' });
+    }
+    document.getElementById('pairStatus').textContent = 'Esperando que escanees y envíes los datos…';
+    document.getElementById('pairOverlay').style.display = 'flex';
+    startPairPolling();
+  };
+
+  function startPairPolling(){
+    stopPairPolling();
+    pairPollTimer = setInterval(async () => {
+      try{
+        const res = await fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`);
+        if(!res.ok) return;
+        const data = await res.json();
+        if(data && data.server && data.username && data.password){
+          document.getElementById('xServer').value = data.server;
+          document.getElementById('xUser').value = data.username;
+          document.getElementById('xPass').value = data.password;
+          // Clean up the temporary pairing entry right away.
+          fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`, { method:'DELETE' }).catch(()=>{});
+          stopPairPolling();
+          document.getElementById('pairOverlay').style.display = 'none';
+          showStatus('✓ Datos recibidos por internet. Conectando…', false);
+          const conn = { type:'xtream', server:data.server, username:data.username, password:data.password };
+          saveConn(conn);
+          tryConnect(conn);
+        }
+      }catch(err){ /* keep polling silently */ }
+    }, 2500);
+  }
+  function stopPairPolling(){
+    if(pairPollTimer){ clearInterval(pairPollTimer); pairPollTimer = null; }
+  }
+  document.getElementById('pairClose').onclick = () => {
+    stopPairPolling();
+    document.getElementById('pairOverlay').style.display = 'none';
+  };
+
+  // ---------- Startup QR screen ----------
+  let startPollTimer = null;
+
+  // ---------- Persistent per-device code ----------
+  // Generated once the first time the app ever opens, then stored on-device
+  // forever (until the app is uninstalled/reinstalled) — so every install
+  // has its own fixed, unique code the admin can use to identify it, even
+  // across app restarts.
+  const DEVICE_CODE_KEY = 'netgo_device_code';
+  function getDeviceCode(){
+    let code = localStorage.getItem(DEVICE_CODE_KEY);
+    if(!code){
+      code = randomPairCode();
+      localStorage.setItem(DEVICE_CODE_KEY, code);
+    }
+    return code;
+  }
+
+  function showStartScreenPairing(){
+    document.getElementById('startScreen').style.display = 'flex';
+    pairCode = getDeviceCode();
+    document.getElementById('startCodeDigits').textContent = pairCode;
+    document.getElementById('startStatus').textContent = 'Esperando que el administrador active tu cuenta…';
+    startStartScreenPolling();
+  }
+
+  function startStartScreenPolling(){
+    stopStartScreenPolling();
+    startPollTimer = setInterval(async () => {
+      try{
+        const res = await fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`);
+        if(!res.ok) return;
+        const data = await res.json();
+        if(data && data.server && data.username && data.password){
+          fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`, { method:'DELETE' }).catch(()=>{});
+          stopStartScreenPolling();
+          document.getElementById('startScreen').style.display = 'none';
+          const conn = { type:'xtream', server:data.server, username:data.username, password:data.password };
+          saveConn(conn);
+          tryConnect(conn);
+        }
+      }catch(err){ /* keep polling silently */ }
+    }, 2500);
+  }
+  function stopStartScreenPolling(){
+    if(startPollTimer){ clearInterval(startPollTimer); startPollTimer = null; }
+  }
+
+  const ADMIN_PIN = '1286';
+  function submitPin(){
+    const val = document.getElementById('pinInput').value.trim();
+    if(val === ADMIN_PIN){
+      document.getElementById('pinOverlay').style.display = 'none';
+      stopStartScreenPolling();
+      document.getElementById('startScreen').style.display = 'none';
+      overlay.classList.add('open');
+    } else {
+      document.getElementById('pinError').style.display = 'block';
+      document.getElementById('pinInput').value = '';
+    }
+  }
+  document.getElementById('pinSubmit').onclick = submitPin;
+  document.getElementById('pinInput').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') submitPin();
+  });
+  document.getElementById('pinCancel').onclick = () => {
+    document.getElementById('pinOverlay').style.display = 'none';
+  };
+</script>
+
+</body>
+</html>
