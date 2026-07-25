@@ -322,8 +322,8 @@
   }
   .vivo-recommend-slide{
     position:absolute; inset:0; opacity:0; transition:opacity .7s ease;
-    display:flex; align-items:flex-end; background-size:cover; background-position:center top;
-    background-color:var(--bg);
+    display:flex; align-items:flex-end; background-size:contain; background-repeat:no-repeat;
+    background-position:center center; background-color:var(--bg);
   }
   .vivo-recommend-slide.active{ opacity:1; }
   .vivo-recommend-slide-info{
@@ -334,13 +334,6 @@
     font-family:'Space Grotesk'; font-weight:700; font-size:17px; color:var(--text);
   }
   .vivo-recommend-slide-meta{ font-size:12.5px; color:var(--text-dim); margin-top:2px; }
-  .vivo-recommend-dots{
-    position:absolute; bottom:10px; right:14px; display:flex; gap:6px;
-  }
-  .vivo-recommend-dot{
-    width:6px; height:6px; border-radius:50%; background:rgba(234,242,245,0.35);
-  }
-  .vivo-recommend-dot.active{ background:var(--amber); }
 
   .vivo-chan-name{ flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vivo-chan-star{ font-size:15px; color:var(--text-dim); padding:4px; flex-shrink:0; }
@@ -1479,6 +1472,11 @@
   let recommendCarouselTimer = null;
   let recommendCarouselIndex = 0;
 
+  function itemYear(it){
+    const m = String(it.meta || '').match(/(\d{4})/);
+    return m ? m[1] : null;
+  }
+
   function renderVivoRecommendations(){
     const row = document.getElementById('vivoRecommendRow');
     if(!row) return;
@@ -1487,11 +1485,13 @@
     const items = [];
     ['peliculas','series','anime','kids'].forEach(key => {
       const cd = activeData()[key];
-      if(cd && cd.rows && cd.rows.length) items.push(...cd.rows[0].items.slice(0, 5));
+      if(cd && cd.rows && cd.rows.length){
+        items.push(...cd.rows[0].items.filter(it => itemYear(it) === '2026').slice(0, 5));
+      }
     });
 
     if(!items.length){
-      row.innerHTML = `<div class="empty-card">Sin recomendaciones todavía</div>`;
+      row.innerHTML = `<div class="empty-card">Sin recomendaciones de 2026 todavía</div>`;
       return;
     }
 
@@ -1503,19 +1503,13 @@
           <div class="vivo-recommend-slide-meta">${it.meta || ''}</div>
         </div>
       </div>
-    `).join('') + `
-      <div class="vivo-recommend-dots">
-        ${items.map((_, i) => `<div class="vivo-recommend-dot${i === 0 ? ' active' : ''}"></div>`).join('')}
-      </div>
-    `;
+    `).join('');
 
     recommendCarouselIndex = 0;
     if(items.length > 1){
       recommendCarouselTimer = setInterval(() => {
         recommendCarouselIndex = (recommendCarouselIndex + 1) % items.length;
         row.querySelectorAll('.vivo-recommend-slide').forEach((el, i) =>
-          el.classList.toggle('active', i === recommendCarouselIndex));
-        row.querySelectorAll('.vivo-recommend-dot').forEach((el, i) =>
           el.classList.toggle('active', i === recommendCarouselIndex));
       }, 5000);
     }
@@ -2092,7 +2086,7 @@
     const vodRows = groupByCategory(vod, vodCategories).map(row => ({
       title: row.title,
       items: row.items.map(m => ({
-        t: m.name, meta:'', badge:'HD', r: m.rating || '—',
+        t: m.name, meta: m.releaseDate || m.releasedate || m.release_date || '', badge:'HD', r: m.rating || '—',
         img: m.stream_icon || '',
         kind:'vod',
         url: `${base}/movie/${conn.username}/${conn.password}/${m.stream_id}.${m.container_extension || 'mp4'}`
