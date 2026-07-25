@@ -412,6 +412,7 @@
   .sd-episode-row{
     display:flex; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:12px;
     padding:10px; align-items:center; cursor:pointer;
+    content-visibility:auto; contain-intrinsic-size:0 88px;
   }
   .sd-ep-thumb{ width:96px; height:64px; border-radius:8px; background:var(--bg-raise); flex-shrink:0; object-fit:cover; }
   .sd-ep-info{ flex:1; min-width:0; }
@@ -2066,15 +2067,16 @@
     const seasons = sdCurrentInfo.episodes || {};
     const eps = (seasons[sdCurrentSeasonKey] || []).slice().sort((a,b) => Number(a.episode_num) - Number(b.episode_num));
     document.getElementById('sdEpisodesLabel').textContent = `Episodios · ${eps.length}`;
+    const list = document.getElementById('sdEpisodeList');
     if(!eps.length){
       console.warn('No episodes found for season', sdCurrentSeasonKey, 'available seasons:', Object.keys(seasons), 'raw episodes object:', seasons);
-      document.getElementById('sdEpisodeList').innerHTML = `<div class="empty-card">Tu proveedor no devolvió episodios para esta temporada.</div>`;
+      list.innerHTML = `<div class="empty-card">Tu proveedor no devolvió episodios para esta temporada.</div>`;
       return;
     }
     const cover = (sdCurrentInfo.info && sdCurrentInfo.info.cover) || '';
-    document.getElementById('sdEpisodeList').innerHTML = eps.map((ep, i) => `
+    const episodeRow = (ep, i) => `
       <div class="sd-episode-row" tabindex="0" data-idx="${i}">
-        <img class="sd-ep-thumb" src="${(ep.info && ep.info.movie_image) || cover}" onerror="this.style.visibility='hidden'">
+        <img class="sd-ep-thumb" loading="lazy" decoding="async" src="${(ep.info && ep.info.movie_image) || cover}" onerror="this.style.visibility='hidden'">
         <div class="sd-ep-info">
           <div class="sd-ep-num mono">EP ${ep.episode_num}</div>
           <div class="sd-ep-title">${ep.title || (sdCurrentInfo.info && sdCurrentInfo.info.name) || ''}</div>
@@ -2082,7 +2084,31 @@
         </div>
         <div class="sd-ep-play">▶</div>
       </div>
-    `).join('');
+    `;
+
+    // Load in batches as the list scrolls, instead of building every
+    // episode (with its thumbnail) synchronously in one go — the same
+    // approach we already use for long channel/content lists elsewhere.
+    list.innerHTML = '';
+    const BATCH = (isTV() || isLowPower()) ? 6 : 12;
+    let loaded = 0;
+    function loadMore(){
+      const old = list.querySelector('.sd-ep-sentinel');
+      if(old) old.remove();
+      const next = eps.slice(loaded, loaded + BATCH);
+      list.insertAdjacentHTML('beforeend', next.map(episodeRow).join(''));
+      loaded += next.length;
+      if(loaded < eps.length){
+        const sentinel = document.createElement('div');
+        sentinel.className = 'sd-ep-sentinel';
+        list.appendChild(sentinel);
+        const obs = new IntersectionObserver((entries) => {
+          if(entries[0].isIntersecting){ obs.disconnect(); loadMore(); }
+        }, { root:null, rootMargin:'400px 0px' });
+        obs.observe(sentinel);
+      }
+    }
+    loadMore();
   }
 
   document.getElementById('sdSeasonTabs').addEventListener('click', (e) => {
