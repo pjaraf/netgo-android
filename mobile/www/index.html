@@ -2416,9 +2416,8 @@
 
   if(isTV()){
     document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.toggle('active', c.dataset.cat === 'vivo'));
-    renderCategory('vivo');
   } else {
-    renderCategory('peliculas');
+    document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.toggle('active', c.dataset.cat === 'peliculas'));
   }
 
   // Called from the native side when the remote's Back button is pressed —
@@ -2538,9 +2537,12 @@
     const conn = getConn();
     if(conn && (conn.type === 'xtream' || conn.type === 'm3u')){
       document.getElementById('startScreen').style.display = 'none';
-      tryConnect(conn, { silent:true });
+      tryConnect(conn, { silent:true }); // shows cached content instantly, then refreshes
       startStatusPolling();
     } else {
+      // No saved connection yet — nothing to show regardless, and the
+      // pairing screen covers everything anyway.
+      renderCategory(isTV() ? 'vivo' : 'peliculas');
       showStartScreenPairing();
     }
     checkForUpdate();
