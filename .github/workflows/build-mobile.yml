@@ -75,9 +75,6 @@ jobs:
       - name: Keep MainActivity alive across screen rotation (fullscreen video)
         run: node scripts/patch-orientation.js
 
-      - name: Register Google Cast (Chromecast / Android TV casting)
-        run: node scripts/patch-cast.js
-
       - name: Add camera permission (for QR code scanning)
         run: node scripts/patch-camera.js
 
