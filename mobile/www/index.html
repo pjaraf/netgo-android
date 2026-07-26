@@ -2436,10 +2436,11 @@
     document.getElementById('seriesDetailOverlay').style.display = 'none';
   };
 
-  // Categories matching this pattern (one-off pay-per-view "events" — not
-  // regular linear channels) are hidden automatically from Vivo, since they
-  // clutter the channel list and aren't meant for everyday browsing.
-  const EXCLUDED_CATEGORY_REGEX = /evento|eventos|ppv|pay.?per.?view|fox one|ufc.*box.*wwe/i;
+  // Categories matching this pattern are hidden automatically from Vivo,
+  // since they clutter the channel list and aren't meant for everyday
+  // browsing (one-off pay-per-view "events"), or were explicitly excluded
+  // by request (US/Spain/Italy flags & names, 24/7 channels, Reality shows).
+  const EXCLUDED_CATEGORY_REGEX = /evento|eventos|ppv|pay.?per.?view|fox one|ufc.*box.*wwe|🇺🇸|\bUSA\b|\bEE\.?UU\.?\b|ESTADOS UNIDOS|UNITED STATES|🇪🇸|ESPA[ÑN]A|\bSPAIN\b|24\s?[\/\-]?\s?7|🇮🇹|ITALI[AE]|\bITALY\b|REALITYS?|REALITY SHOW/i;
   function excludeCategories(categories){
     return (categories || []).filter(c => !EXCLUDED_CATEGORY_REGEX.test(c.category_name));
   }
@@ -2573,7 +2574,7 @@
       text = await res.text();
     } finally { clearTimeout(timeout); }
 
-    const entries = parseM3U(text);
+    const entries = parseM3U(text).filter(e => !EXCLUDED_CATEGORY_REGEX.test(e.group));
     if(!entries.length) throw new Error('La lista no tiene canales válidos');
 
     const buckets = { vivo:{}, peliculas:{}, series:{}, anime:{}, kids:{} };
