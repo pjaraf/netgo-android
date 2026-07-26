@@ -622,6 +622,29 @@
   }
   #lockoutScreen{ z-index:9999; }
 
+  /* ---------- Admin message (dismissible, unlike the lockout screen) ---------- */
+  .admin-message-overlay{
+    position:fixed; inset:0; z-index:9998;
+    background:rgba(5,12,17,0.88);
+    display:flex; align-items:center; justify-content:center; padding:28px;
+  }
+  .admin-message-card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:28px; max-width:400px; width:100%; text-align:center;
+  }
+  .admin-message-icon{ font-size:36px; margin-bottom:12px; }
+  .admin-message-title{
+    font-family:'Space Grotesk'; font-weight:700; font-size:18px; margin-bottom:12px;
+  }
+  .admin-message-text{
+    color:var(--text-dim); font-size:14px; line-height:1.6; margin-bottom:22px;
+    white-space:pre-wrap;
+  }
+  .admin-message-close{
+    background:var(--amber); color:#1A0E00; border:none; font-weight:700;
+    font-size:14px; padding:13px 32px; border-radius:10px; cursor:pointer;
+  }
+
   /* ---------- Profile picker (Netflix-style) ---------- */
   .profile-screen{
     position:fixed; inset:0; z-index:150;
@@ -950,6 +973,15 @@
   <p class="start-sub" id="lockoutMsg">El administrador pausó tu acceso. Contáctalo para reactivarlo.</p>
 </div>
 
+<div id="adminMessageOverlay" class="admin-message-overlay" style="display:none">
+  <div class="admin-message-card">
+    <div class="admin-message-icon">💬</div>
+    <h2 class="admin-message-title">Mensaje del administrador</h2>
+    <p class="admin-message-text" id="adminMessageText"></p>
+    <button class="admin-message-close" id="adminMessageClose" tabindex="0">Cerrar</button>
+  </div>
+</div>
+
 <div id="profileScreen" class="profile-screen" style="display:none">
   <h1 class="profile-heading">¿Quién está viendo?</h1>
   <div class="profile-grid" id="profileGrid"></div>
@@ -1243,13 +1275,13 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, #vivoPreviewFullscreen, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, #vivoPreviewFullscreen, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #adminMessageClose';
 
   // If a modal (series detail, account info, PIN, QR screens) is open,
   // navigation must stay inside it — otherwise focus could jump to
   // elements on the screen behind it that are only visually covered, not
   // actually hidden (offsetParent stays non-null for those).
-  const MODAL_OVERLAY_IDS = ['seriesDetailOverlay', 'qrShowOverlay', 'qrScanOverlay', 'pairOverlay', 'pinOverlay', 'accountInfoOverlay', 'profileEditOverlay', 'profileScreen'];
+  const MODAL_OVERLAY_IDS = ['seriesDetailOverlay', 'qrShowOverlay', 'qrScanOverlay', 'pairOverlay', 'pinOverlay', 'accountInfoOverlay', 'profileEditOverlay', 'profileScreen', 'adminMessageOverlay'];
   function getActiveOverlayScope(){
     for(const id of MODAL_OVERLAY_IDS){
       const el = document.getElementById(id);
@@ -2884,9 +2916,24 @@
       const data = await res.json();
       if(data && (data.blocked || data.paused)){
         showLockout(data.blocked ? 'blocked' : 'paused');
+        return;
+      }
+      if(data && data.message && data.message.text && data.message.ts){
+        const lastShownTs = Number(localStorage.getItem('netgo_last_message_ts') || 0);
+        if(data.message.ts > lastShownTs){
+          showAdminMessage(data.message.text, data.message.ts);
+        }
       }
     }catch(err){ /* offline — don't lock the app out just because of no signal */ }
   }
+  function showAdminMessage(text, ts){
+    document.getElementById('adminMessageText').textContent = text;
+    document.getElementById('adminMessageOverlay').style.display = 'flex';
+    localStorage.setItem('netgo_last_message_ts', String(ts));
+  }
+  document.getElementById('adminMessageClose').onclick = () => {
+    document.getElementById('adminMessageOverlay').style.display = 'none';
+  };
   function showLockout(kind){
     if(statusCheckTimer){ clearInterval(statusCheckTimer); statusCheckTimer = null; }
     document.getElementById('lockoutTitle').textContent = kind === 'blocked' ? 'Cuenta bloqueada' : 'Cuenta pausada';
