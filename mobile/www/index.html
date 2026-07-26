@@ -826,10 +826,6 @@
   }
 
   body.tv-mode{ font-size:17px; }
-  body.tv-mode .cats{ padding-bottom:14px; }
-  body.tv-mode .cat{ padding:11px 3px; }
-  body.tv-mode .cat .icon{ font-size:25px; }
-  body.tv-mode .cat span{ font-size:14px; }
   body.tv-mode .row-head h2{ font-size:20px; }
   body.tv-mode .row-head .count{ font-size:14px; }
   body.tv-mode .poster-card{ flex-basis:130px; min-width:130px; }
@@ -858,17 +854,22 @@
   body.tv-mode.tv-hide-navbar .cats{ display:none; }
   body.tv-mode .cats{
     left:0; right:0; top:auto; bottom:0; width:auto; height:96px;
-    flex-direction:row; justify-content:flex-start; align-items:center;
-    padding: 0 22px; gap: 26px;
+    flex-direction:row; justify-content:center; align-items:center;
+    padding: 0 22px; gap: 14px;
     border-top:1px solid var(--line); border-bottom:none;
     overflow-x:auto; overflow-y:hidden;
   }
   body.tv-mode .cat{
-    flex:none;
-    padding: 8px 4px;
+    flex:none; width:104px;
+    padding: 10px 4px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    border-radius:12px;
   }
   body.tv-mode .cat .icon{ font-size:24px; }
-  body.tv-mode .cat span{ font-size:13px; }
+  body.tv-mode .cat span{
+    font-size:12.5px; text-align:center; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; max-width:100%;
+  }
   body.tv-mode #rowsContainer, body.tv-mode .vivo-view{ padding-bottom:20px; }
   /* TV only: the main screen shows just the player + recommendations —
      no category/favorites tabs or channel list. Phone's Vivo tab keeps
@@ -1044,6 +1045,7 @@
   <div class="cat active" tabindex="0" data-cat="peliculas"><div class="icon">🎬</div><span>Películas</span></div>
   <div class="cat" tabindex="0" data-cat="anime"><div class="icon">🎌</div><span>Anime</span></div>
   <div class="cat" tabindex="0" data-cat="kids"><div class="icon">🧒</div><span>Kids</span></div>
+  <div class="cat" tabindex="0" data-cat="continuar"><div class="icon">⏵</div><span>Seguir</span></div>
   <div class="cat tv-sidebar-gear" tabindex="0" id="openSettingsTV">
     <div class="icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="#EAF2F5" stroke-width="1.6" width="19" height="19"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -1432,9 +1434,19 @@
 
     if(rowObserver){ rowObserver.disconnect(); rowObserver = null; }
 
-    const d = activeData()[cat];
+    let d;
+    if(cat === 'continuar'){
+      const all = getContinueList().sort((a,b) => b.ts - a.ts);
+      const items = all.map(x => ({
+        t:x.title, url:x.url, img:x.img, kind:'poster', badge:'HD', r:'—', meta:'',
+        _progressPct: x.durationMs ? Math.min(100, Math.round((x.positionMs / x.durationMs) * 100)) : 0
+      }));
+      d = { rows: items.length ? [{ title:'Seguir viendo', items }] : [], type:'poster' };
+    } else {
+      d = activeData()[cat];
+    }
     if(!d || !d.rows.length){
-      rowsContainer.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">Tu proveedor no tiene contenido en esta categoría</div></div></section>`;
+      rowsContainer.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">${cat === 'continuar' ? 'Todavía no tienes nada para seguir viendo' : 'Tu proveedor no tiene contenido en esta categoría'}</div></div></section>`;
       return;
     }
 
