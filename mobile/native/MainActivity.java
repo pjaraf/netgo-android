@@ -29,10 +29,18 @@ public class MainActivity extends BridgeActivity {
         // Let the web app try to handle this first — on TV, if we're
         // anywhere other than the home screen, "back" should return there
         // instead of exiting the app.
+        //
+        // evaluateJavascript's callback receives the result as its JSON
+        // representation, so a JS boolean `true` comes back as the STRING
+        // "true" WITH the quote characters included (i.e. \"true\"), not
+        // the bare word true. Comparing against "true" without quotes
+        // never matched, so this was always falling through to the
+        // exit-app flow — even while just browsing Películas/Series/etc.
+        // — which is what was causing the blank white screen.
         getBridge().getWebView().evaluateJavascript(
                 "(window.handleTVBack ? window.handleTVBack() : false)",
                 result -> {
-                    if (!"true".equals(result)) {
+                    if (!"\"true\"".equals(result)) {
                         handleAppExitBack();
                     }
                 }
