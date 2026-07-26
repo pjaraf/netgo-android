@@ -619,6 +619,89 @@
     padding:32px 26px; text-align:center;
   }
   #lockoutScreen{ z-index:9999; }
+
+  /* ---------- Profile picker (Netflix-style) ---------- */
+  .profile-screen{
+    position:fixed; inset:0; z-index:150;
+    background: var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:32px;
+  }
+  .profile-heading{
+    font-family:'Space Grotesk'; font-weight:700; font-size:26px;
+    margin-bottom:36px; text-align:center;
+  }
+  .profile-grid{
+    display:flex; flex-wrap:wrap; gap:24px; justify-content:center; max-width:760px;
+  }
+  .profile-tile{
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    cursor:pointer; width:112px;
+  }
+  .profile-avatar{
+    width:96px; height:96px; border-radius:16px;
+    background: var(--card); border:2px solid transparent;
+    display:flex; align-items:center; justify-content:center; font-size:44px;
+    position:relative;
+  }
+  .profile-tile:focus-visible .profile-avatar,
+  .profile-tile:hover .profile-avatar{ border-color:var(--amber); }
+  .profile-kids-badge{
+    position:absolute; bottom:-6px; right:-6px; background:var(--amber); color:#1A0E00;
+    font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px;
+  }
+  .profile-name{ font-size:13.5px; color:var(--text-dim); text-align:center; }
+  .profile-edit-btn{
+    position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%;
+    background:rgba(11,27,38,0.75); color:#fff; font-size:12px;
+    display:none; align-items:center; justify-content:center;
+  }
+  .profile-tile:hover .profile-edit-btn, .profile-tile:focus-visible .profile-edit-btn{ display:flex; }
+  .profile-tile.add-profile .profile-avatar{
+    background:transparent; border:2px dashed var(--line); color:var(--text-dim); font-size:32px;
+  }
+
+  .profile-edit-overlay{
+    position:fixed; inset:0; z-index:220; background:rgba(5,12,17,0.85);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .profile-edit-card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:24px; width:100%; max-width:380px;
+  }
+  .profile-edit-card h2{ font-family:'Space Grotesk'; font-size:18px; margin-bottom:18px; }
+  .profile-edit-card label{ display:block; font-size:12px; color:var(--text-dim); margin:14px 0 6px; }
+  .profile-edit-card input[type="text"]{
+    width:100%; background:var(--bg); border:1px solid var(--line); border-radius:9px;
+    padding:11px 12px; color:var(--text); font-size:14px; box-sizing:border-box;
+  }
+  .profile-avatar-picker{ display:flex; flex-wrap:wrap; gap:8px; }
+  .profile-avatar-option{
+    width:42px; height:42px; border-radius:10px; background:var(--bg);
+    border:2px solid transparent; display:flex; align-items:center; justify-content:center;
+    font-size:20px; cursor:pointer;
+  }
+  .profile-avatar-option.selected{ border-color:var(--amber); }
+  .profile-kids-toggle{
+    display:flex !important; align-items:center; gap:8px; margin-top:16px !important;
+    font-size:12.5px !important; color:var(--text-dim) !important; cursor:pointer;
+  }
+  .profile-kids-toggle input{ width:16px; height:16px; }
+  .profile-edit-actions{ display:flex; gap:10px; margin-top:22px; }
+  .profile-edit-cancel, .profile-edit-save{
+    flex:1; padding:12px; border-radius:10px; font-weight:700; font-size:13.5px; cursor:pointer; border:none;
+  }
+  .profile-edit-cancel{ background:var(--bg); color:var(--text-dim); border:1px solid var(--line); }
+  .profile-edit-save{ background:var(--amber); color:#1A0E00; }
+  .profile-edit-delete{
+    width:100%; margin-top:12px; background:none; border:none; color:#FF6B6B;
+    font-size:12.5px; padding:8px; cursor:pointer;
+  }
+
+  /* On TV: bigger tiles, avatars easy to see/select at a distance */
+  body.tv-mode .profile-avatar{ width:120px; height:120px; font-size:56px; }
+  body.tv-mode .profile-tile{ width:140px; }
+  body.tv-mode .profile-name{ font-size:15px; }
   .start-logo{
     width:60px; height:60px; border-radius:16px;
     background: linear-gradient(135deg, var(--amber), #FFB870);
@@ -724,6 +807,11 @@
   .sd-episode-row:focus-visible,
   .sd-back:focus-visible,
   .sd-fav:focus-visible,
+  .profile-tile:focus-visible,
+  .profile-avatar-option:focus-visible,
+  .profile-edit-cancel:focus-visible,
+  .profile-edit-save:focus-visible,
+  .profile-edit-delete:focus-visible,
   #channelSearch:focus-visible{
     outline: 3px solid var(--amber);
     outline-offset: 2px;
@@ -852,6 +940,30 @@
   <div class="start-logo" style="background:linear-gradient(135deg, #FF6B6B, #D64545);">🔒</div>
   <h1 class="start-title" id="lockoutTitle">Cuenta pausada</h1>
   <p class="start-sub" id="lockoutMsg">El administrador pausó tu acceso. Contáctalo para reactivarlo.</p>
+</div>
+
+<div id="profileScreen" class="profile-screen" style="display:none">
+  <h1 class="profile-heading">¿Quién está viendo?</h1>
+  <div class="profile-grid" id="profileGrid"></div>
+</div>
+
+<div id="profileEditOverlay" class="profile-edit-overlay" style="display:none">
+  <div class="profile-edit-card">
+    <h2 id="profileEditTitle">Nuevo perfil</h2>
+    <label>Nombre</label>
+    <input id="profileNameInput" type="text" maxlength="20" placeholder="Ej: Juan">
+    <label>Avatar</label>
+    <div class="profile-avatar-picker" id="profileAvatarPicker"></div>
+    <label class="profile-kids-toggle">
+      <input type="checkbox" id="profileKidsToggle">
+      <span>Este es un perfil infantil (solo muestra contenido de Kids)</span>
+    </label>
+    <div class="profile-edit-actions">
+      <button class="profile-edit-cancel" id="profileEditCancel" tabindex="0">Cancelar</button>
+      <button class="profile-edit-save" id="profileEditSave" tabindex="0">Guardar</button>
+    </div>
+    <button class="profile-edit-delete" id="profileEditDelete" tabindex="0" style="display:none">Eliminar perfil</button>
+  </div>
 </div>
 
 <header>
@@ -1089,6 +1201,7 @@
       <div class="account-row"><span>Vence el</span><b id="accInfoExpiry">—</b></div>
     </div>
     <button class="qr-close-btn" id="accountInfoClose">Cerrar</button>
+    <button class="qr-close-btn" id="accountSwitchProfileBtn">Cambiar de perfil</button>
     <button class="qr-close-btn qr-close-btn-danger" id="accountLogoutBtn">Cerrar sesión</button>
   </div>
 </div>
@@ -1121,13 +1234,13 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, #vivoPreviewFullscreen, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, #vivoPreviewFullscreen, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn';
 
   // If a modal (series detail, account info, PIN, QR screens) is open,
   // navigation must stay inside it — otherwise focus could jump to
   // elements on the screen behind it that are only visually covered, not
   // actually hidden (offsetParent stays non-null for those).
-  const MODAL_OVERLAY_IDS = ['seriesDetailOverlay', 'qrShowOverlay', 'qrScanOverlay', 'pairOverlay', 'pinOverlay', 'accountInfoOverlay'];
+  const MODAL_OVERLAY_IDS = ['seriesDetailOverlay', 'qrShowOverlay', 'qrScanOverlay', 'pairOverlay', 'pinOverlay', 'accountInfoOverlay', 'profileEditOverlay', 'profileScreen'];
   function getActiveOverlayScope(){
     for(const id of MODAL_OVERLAY_IDS){
       const el = document.getElementById(id);
@@ -1941,6 +2054,145 @@
   }
   function saveConn(conn){ localStorage.setItem(CONN_KEY, JSON.stringify(conn)); }
 
+  // ============================================================
+  //  PROFILES (Netflix-style "who's watching" picker)
+  // ============================================================
+  const PROFILES_KEY = 'netgo_profiles';
+  const ACTIVE_PROFILE_KEY = 'netgo_active_profile';
+  const AVATAR_OPTIONS = ['🙂','😎','🦸','🐱','🐶','🦊','🐼','🦄','⭐','🎮','🎬','⚽'];
+  let activeProfile = null;
+
+  function getProfiles(){
+    try{ return JSON.parse(localStorage.getItem(PROFILES_KEY) || '[]'); }catch(e){ return []; }
+  }
+  function saveProfiles(list){ localStorage.setItem(PROFILES_KEY, JSON.stringify(list)); }
+  function ensureDefaultProfile(){
+    const list = getProfiles();
+    if(!list.length){
+      list.push({ id:'p'+Date.now(), name:'Principal', avatar:'🙂', isKids:false });
+      saveProfiles(list);
+    }
+  }
+
+  function isKidsMode(){ return !!(activeProfile && activeProfile.isKids); }
+
+  // Locks the app down to just Kids content when a kids profile is active:
+  // hides every other tab and the settings gear, and forces the Kids view.
+  function applyKidsRestrictions(){
+    const kids = isKidsMode();
+    document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => {
+      c.style.display = (!kids || c.dataset.cat === 'kids') ? '' : 'none';
+    });
+    const gear = document.getElementById('openSettingsTV');
+    if(gear) gear.style.display = kids ? 'none' : '';
+    document.querySelectorAll('.gear').forEach(g => { g.style.display = kids ? 'none' : ''; });
+  }
+
+  function showProfileScreen(onDone){
+    const screen = document.getElementById('profileScreen');
+    const grid = document.getElementById('profileGrid');
+    ensureDefaultProfile();
+    const profiles = getProfiles();
+
+    grid.innerHTML = profiles.map(p => `
+      <div class="profile-tile" tabindex="0" data-id="${p.id}">
+        <div class="profile-avatar">
+          ${p.avatar}
+          ${p.isKids ? '<span class="profile-kids-badge">KIDS</span>' : ''}
+          <span class="profile-edit-btn" data-edit="${p.id}">✎</span>
+        </div>
+        <div class="profile-name">${p.name}</div>
+      </div>
+    `).join('') + `
+      <div class="profile-tile add-profile" tabindex="0" id="profileAddTile">
+        <div class="profile-avatar">+</div>
+        <div class="profile-name">Agregar perfil</div>
+      </div>
+    `;
+
+    grid.querySelectorAll('.profile-tile:not(.add-profile)').forEach(tile => {
+      tile.onclick = (e) => {
+        if(e.target.closest('[data-edit]')){
+          openProfileEditor(profiles.find(p => p.id === tile.dataset.id));
+          return;
+        }
+        activeProfile = profiles.find(p => p.id === tile.dataset.id);
+        localStorage.setItem(ACTIVE_PROFILE_KEY, activeProfile.id);
+        applyKidsRestrictions();
+        screen.style.display = 'none';
+        if(liveData){
+          // Content's already loaded (this is a mid-session profile
+          // switch, not first boot) — jump straight to the right view.
+          const target = isKidsMode() ? 'kids' : (isTV() ? 'vivo' : 'peliculas');
+          document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.toggle('active', c.dataset.cat === target));
+          renderCategory(target);
+        }
+        onDone();
+      };
+    });
+    document.getElementById('profileAddTile').onclick = () => openProfileEditor(null);
+
+    screen.style.display = 'flex';
+  }
+
+  let editingProfileId = null;
+  function openProfileEditor(profile){
+    editingProfileId = profile ? profile.id : null;
+    document.getElementById('profileEditTitle').textContent = profile ? 'Editar perfil' : 'Nuevo perfil';
+    document.getElementById('profileNameInput').value = profile ? profile.name : '';
+    document.getElementById('profileKidsToggle').checked = profile ? !!profile.isKids : false;
+    document.getElementById('profileEditDelete').style.display = profile ? 'block' : 'none';
+
+    const picker = document.getElementById('profileAvatarPicker');
+    const selected = profile ? profile.avatar : AVATAR_OPTIONS[0];
+    picker.innerHTML = AVATAR_OPTIONS.map(a => `
+      <div class="profile-avatar-option${a === selected ? ' selected' : ''}" tabindex="0" data-avatar="${a}">${a}</div>
+    `).join('');
+    picker.querySelectorAll('.profile-avatar-option').forEach(el => {
+      el.onclick = () => {
+        picker.querySelectorAll('.profile-avatar-option').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+      };
+    });
+
+    document.getElementById('profileEditOverlay').style.display = 'flex';
+  }
+
+  document.getElementById('profileEditCancel').onclick = () => {
+    document.getElementById('profileEditOverlay').style.display = 'none';
+  };
+
+  document.getElementById('profileEditSave').onclick = () => {
+    const name = document.getElementById('profileNameInput').value.trim();
+    if(!name) return;
+    const avatar = document.querySelector('.profile-avatar-option.selected')?.dataset.avatar || AVATAR_OPTIONS[0];
+    const isKids = document.getElementById('profileKidsToggle').checked;
+
+    const list = getProfiles();
+    if(editingProfileId){
+      const p = list.find(x => x.id === editingProfileId);
+      if(p){ p.name = name; p.avatar = avatar; p.isKids = isKids; }
+    } else {
+      list.push({ id:'p'+Date.now(), name, avatar, isKids });
+    }
+    saveProfiles(list);
+    document.getElementById('profileEditOverlay').style.display = 'none';
+    showProfileScreen(profileScreenReturnCallback);
+  };
+
+  document.getElementById('profileEditDelete').onclick = () => {
+    let list = getProfiles();
+    if(list.length <= 1) return; // always keep at least one profile
+    list = list.filter(p => p.id !== editingProfileId);
+    saveProfiles(list);
+    document.getElementById('profileEditOverlay').style.display = 'none';
+    showProfileScreen(profileScreenReturnCallback);
+  };
+
+  // Lets "Cambiar de perfil" (wired further below, in settings) reopen the
+  // picker using the same "what happens after picking" callback as boot.
+  let profileScreenReturnCallback = () => {};
+
   // Provider responses can be huge (tens of thousands of channels/movies).
   // JSON.parse() is synchronous and normally runs on the main thread — for
   // a big enough payload that's a real, noticeable freeze. A Web Worker is
@@ -2563,8 +2815,11 @@
     const conn = getConn();
     if(conn && (conn.type === 'xtream' || conn.type === 'm3u')){
       document.getElementById('startScreen').style.display = 'none';
-      tryConnect(conn, { silent:true }); // shows cached content instantly, then refreshes
-      startStatusPolling();
+      profileScreenReturnCallback = () => {
+        tryConnect(conn, { silent:true }); // shows cached content instantly, then refreshes
+        startStatusPolling();
+      };
+      showProfileScreen(profileScreenReturnCallback);
     } else {
       // No saved connection yet — nothing to show regardless, and the
       // pairing screen covers everything anyway.
@@ -2626,6 +2881,10 @@
   }
   document.getElementById('accountInfoClose').onclick = () => {
     document.getElementById('accountInfoOverlay').style.display = 'none';
+  };
+  document.getElementById('accountSwitchProfileBtn').onclick = () => {
+    document.getElementById('accountInfoOverlay').style.display = 'none';
+    showProfileScreen(() => {}); // content is already loaded — just apply the new profile's restrictions
   };
   document.getElementById('accountLogoutBtn').onclick = () => {
     localStorage.removeItem(CONN_KEY);
