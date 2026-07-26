@@ -494,6 +494,10 @@
     background: linear-gradient(180deg, transparent, rgba(6,14,20,0.92) 78%);
   }
   .poster-meta{ position:absolute; left:9px; right:9px; bottom:9px; }
+  .poster-progress-track{
+    position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(0,0,0,0.4);
+  }
+  .poster-progress-fill{ height:100%; background:var(--amber); }
   .poster-meta .t{ font-size:12px; font-weight:600; line-height:1.25; margin-bottom:3px; }
   .poster-meta .s{ display:flex; align-items:center; gap:5px; font-size:10px; color:var(--text-dim); }
   .poster-badge{
@@ -1385,12 +1389,15 @@
     const art = m.img
       ? `<img class="poster-cover-img" src="${m.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="poster-art">${m.icon||'🎬'}</div>`;
-    return `<div class="poster-card" tabindex="0" data-kind="${m.kind||''}" data-url="${m.url||''}" data-sid="${m.series_id||''}" data-title="${m.t}">
+    return `<div class="poster-card" tabindex="0" data-kind="${m.kind||''}" data-url="${m.url||''}" data-sid="${m.series_id||''}" data-title="${m.t}" data-img="${m.img||''}">
       ${art}
       <div class="poster-badge mono">${m.badge||'HD'}</div>
       <div class="poster-rating mono">★ ${m.r||'—'}</div>
       <div class="poster-scrim"></div>
       <div class="poster-meta"><div class="t">${m.t}</div><div class="s">${m.meta||''}</div></div>
+      <div class="poster-progress-track" style="display:${m._progressPct ? 'block' : 'none'}">
+        <div class="poster-progress-fill" style="width:${m._progressPct||0}%"></div>
+      </div>
     </div>`;
   }
   function channelCard(c){
@@ -1443,7 +1450,17 @@
     //    row sideways, instead of building thousands of cards up front.
     // This is what makes an unlimited-length catalog stay smooth.
     rowsContainer.innerHTML = '';
-    const rows = d.rows;
+    let rows = d.rows;
+    if(['peliculas','series','anime','kids'].includes(cat)){
+      const cw = getContinueForCat(cat);
+      if(cw.length){
+        const cwItems = cw.map(x => ({
+          t: x.title, url: x.url, img: x.img, kind:'poster', badge:'HD', r:'—', meta:'',
+          _progressPct: x.durationMs ? Math.min(100, Math.round((x.positionMs / x.durationMs) * 100)) : 0
+        }));
+        rows = [{ title:'Seguir viendo', items: cwItems }, ...rows];
+      }
+    }
     const cardFn = d.type === 'channel' ? channelCard : posterCard;
     const placeholderHeight = d.type === 'channel' ? '158px' : '198px';
 
@@ -1936,7 +1953,7 @@
   window.addEventListener('scroll', schedulePositionUpdate, { passive:true });
   window.addEventListener('resize', schedulePositionUpdate);
 
-  async function playInline(queue, startIndex, kind){
+  async function playInline(queue, startIndex, kind, resumeMs){
     if(!inlineAvailable()){
       const item = queue[startIndex || 0];
       playStreamWeb(item.url, item.title);
@@ -1952,6 +1969,9 @@
     const P = window.Capacitor.Plugins.InlineVlcPlayer;
     await P.mount(getHeroRect());
     await P.loadQueue({ queue, startIndex: startIndex || 0 });
+    if(resumeMs && resumeMs > 0){
+      setTimeout(() => P.seekTo({ positionMs: resumeMs }).catch(()=>{}), 700);
+    }
     // Reposition a couple more times shortly after, in case the smooth
     // scroll or layout is still settling.
     setTimeout(positionInlinePlayer, 150);
@@ -1983,6 +2003,7 @@
   });
 
   if(inlineAvailable()){
+    let lastProgressSaveTime = 0;
     window.Capacitor.Plugins.InlineVlcPlayer.addListener('progress', (data) => {
       hpSpinnerWrap.classList.remove('loading');
       hpPlayPause.textContent = data.isPlaying ? '⏸' : '▶';
@@ -1992,11 +2013,19 @@
         hpTimeDur.textContent = fmtTime(data.duration);
         hpSeekbar.value = data.duration ? Math.round((data.position / data.duration) * 1000) : 0;
       }
+      if(currentPlayingItem && data.duration > 0){
+        const now = Date.now();
+        if(now - lastProgressSaveTime > 5000){
+          lastProgressSaveTime = now;
+          saveProgress(currentPlayingItem, data.position, data.duration);
+        }
+      }
     });
     window.Capacitor.Plugins.InlineVlcPlayer.addListener('trackChanged', (data) => {
       hpTitle.textContent = data.title || 'Reproduciendo';
     });
     window.Capacitor.Plugins.InlineVlcPlayer.addListener('ended', () => {
+      if(currentPlayingItem) removeFromContinue(currentPlayingItem.url);
       closeInlinePlayer();
     });
   }
@@ -2006,14 +2035,17 @@
   // On TV (no touchscreen / remote control) we use the fullscreen native
   // player, since the inline player's swipe/tap gestures need a finger on
   // the screen. On phones we keep the inline overlay player.
-  function playQueue(queue, startIndex, fallbackTitle, kind){
+  function playQueue(queue, startIndex, fallbackTitle, kind, resumeMs){
     if(!queue || !queue.length) return;
     if(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
-      window.Capacitor.Plugins.VlcPlayer.play({ queue, startIndex: startIndex || 0, deviceCode: getDeviceCode() })
-        .catch(err => console.error('VlcPlayer error:', err));
+      window.Capacitor.Plugins.VlcPlayer.play({
+        queue, startIndex: startIndex || 0, deviceCode: getDeviceCode(),
+        startPositionMs: resumeMs || 0,
+        contPlayingItem: currentPlayingItem ? JSON.stringify(currentPlayingItem) : ''
+      }).catch(err => console.error('VlcPlayer error:', err));
       return;
     }
-    playInline(queue, startIndex || 0, kind);
+    playInline(queue, startIndex || 0, kind, resumeMs);
   }
   function closePlayer(){
     playerOverlay.classList.remove('open');
@@ -2039,7 +2071,9 @@
         const startIndex = Math.max(0, siblings.indexOf(card));
         playQueue(queue, startIndex, title, 'channel');
       } else {
-        playQueue([{ url: card.dataset.url, title }], 0, title, 'poster');
+        currentPlayingItem = { url: card.dataset.url, title, img: card.dataset.img || '', kind:'poster', cat: currentCat };
+        const resumeMs = (getContinueList().find(x => x.url === card.dataset.url) || {}).positionMs || 0;
+        playQueue([{ url: card.dataset.url, title }], 0, title, 'poster', resumeMs);
       }
     }
   });
@@ -2053,6 +2087,40 @@
     try{ return JSON.parse(localStorage.getItem(CONN_KEY) || 'null'); }catch(e){ return null; }
   }
   function saveConn(conn){ localStorage.setItem(CONN_KEY, JSON.stringify(conn)); }
+
+  // ============================================================
+  //  CONTINUE WATCHING (Películas, Series, Anime, Kids)
+  // ============================================================
+  const CONTINUE_KEY = 'netgo_continue_watching';
+  const CONTINUE_MAX = 30;
+  let currentPlayingItem = null; // set right before playback starts
+
+  function getContinueList(){
+    try{ return JSON.parse(localStorage.getItem(CONTINUE_KEY) || '[]'); }catch(e){ return []; }
+  }
+  function saveContinueList(list){ localStorage.setItem(CONTINUE_KEY, JSON.stringify(list)); }
+
+  // Called periodically while something plays. Skips live content (no
+  // fixed duration) and drops anything barely started or basically
+  // finished — those don't belong in "seguir viendo".
+  function saveProgress(item, positionMs, durationMs){
+    if(!item || !item.url || !durationMs || durationMs <= 0) return;
+    const pct = positionMs / durationMs;
+    let list = getContinueList().filter(x => x.url !== item.url);
+    if(pct >= 0.03 && pct <= 0.95){
+      list.unshift({
+        url:item.url, title:item.title || '', img:item.img || '', kind:item.kind || 'poster',
+        cat:item.cat || 'peliculas', positionMs, durationMs, ts:Date.now()
+      });
+    }
+    saveContinueList(list.slice(0, CONTINUE_MAX));
+  }
+  function removeFromContinue(url){
+    saveContinueList(getContinueList().filter(x => x.url !== url));
+  }
+  function getContinueForCat(cat){
+    return getContinueList().filter(x => x.cat === cat).sort((a,b) => b.ts - a.ts);
+  }
 
   // ============================================================
   //  PROFILES (Netflix-style "who's watching" picker)
@@ -2429,7 +2497,13 @@
       url: `${base}/series/${xtreamState.conn.username}/${xtreamState.conn.password}/${ep.id}.${ep.container_extension || 'mp4'}`,
       title: `${seriesName} · T${sdCurrentSeasonKey} E${ep.episode_num}${ep.title ? ' - ' + ep.title : ''}`
     }));
-    playQueue(queue, idx, seriesName, 'poster');
+    const chosen = queue[idx];
+    currentPlayingItem = {
+      url: chosen.url, title: chosen.title,
+      img: (sdCurrentInfo.info && sdCurrentInfo.info.cover) || '', kind:'poster', cat:'series'
+    };
+    const resumeMs = (getContinueList().find(x => x.url === chosen.url) || {}).positionMs || 0;
+    playQueue(queue, idx, seriesName, 'poster', resumeMs);
   });
 
   document.getElementById('sdBack').onclick = () => {
@@ -2828,6 +2902,26 @@
       showStartScreenPairing();
     }
     checkForUpdate();
+  });
+
+  // On TV, the fullscreen native player is a separate Activity — the only
+  // way to know it closed is noticing the WebView becoming visible again.
+  // That's when we pick up whatever progress it was tracking and save it
+  // for "seguir viendo".
+  document.addEventListener('visibilitychange', async () => {
+    if(document.visibilityState !== 'visible') return;
+    if(!(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer && window.Capacitor.Plugins.VlcPlayer.getLastProgress)) return;
+    try{
+      const res = await window.Capacitor.Plugins.VlcPlayer.getLastProgress();
+      if(res && res.url && res.durationMs > 0){
+        let item = null;
+        try{ item = JSON.parse(res.item); }catch(e){}
+        if(item && item.url === res.url){
+          saveProgress(item, res.positionMs, res.durationMs);
+          if(currentCat && ['peliculas','series','anime','kids'].includes(currentCat)) renderCategory(currentCat);
+        }
+      }
+    }catch(e){}
   });
 </script>
 
