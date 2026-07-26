@@ -14,6 +14,12 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DeviceIdPlugin.class);
         super.onCreate(savedInstanceState);
         getBridge().getWebView().getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        // WebViews default to a WHITE background before/between paints —
+        // that's the white flash that was showing up whenever returning
+        // from the fullscreen native player (or any other activity
+        // transition). Setting it to the app's own dark background means
+        // there's never a white frame to see, no matter the timing.
+        getBridge().getWebView().setBackgroundColor(0xFF0B1B26);
     }
 
     private long lastBackPressTime = 0;
