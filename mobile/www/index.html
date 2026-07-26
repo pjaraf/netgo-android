@@ -976,7 +976,7 @@
 <div id="adminMessageOverlay" class="admin-message-overlay" style="display:none">
   <div class="admin-message-card">
     <div class="admin-message-icon">💬</div>
-    <h2 class="admin-message-title">Mensaje del administrador</h2>
+    <h2 class="admin-message-title" id="adminMessageTitle">Mensaje del administrador</h2>
     <p class="admin-message-text" id="adminMessageText"></p>
     <button class="admin-message-close" id="adminMessageClose" tabindex="0">Cerrar</button>
   </div>
@@ -2921,12 +2921,13 @@
       if(data && data.message && data.message.text && data.message.ts){
         const lastShownTs = Number(localStorage.getItem('netgo_last_message_ts') || 0);
         if(data.message.ts > lastShownTs){
-          showAdminMessage(data.message.text, data.message.ts);
+          showAdminMessage(data.message.text, data.message.ts, data.message.name);
         }
       }
     }catch(err){ /* offline — don't lock the app out just because of no signal */ }
   }
-  function showAdminMessage(text, ts){
+  function showAdminMessage(text, ts, name){
+    document.getElementById('adminMessageTitle').textContent = name ? `¡Hola ${name}!` : 'Mensaje del administrador';
     document.getElementById('adminMessageText').textContent = text;
     document.getElementById('adminMessageOverlay').style.display = 'flex';
     localStorage.setItem('netgo_last_message_ts', String(ts));
