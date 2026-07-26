@@ -834,12 +834,108 @@ public class VlcPlayerActivity extends Activity {
                 boolean paused = obj.optBoolean("paused", false);
                 if (blocked || paused) {
                     runOnUiThread(() -> showLockout(blocked));
+                    return;
+                }
+
+                JSONObject message = obj.optJSONObject("message");
+                if (message != null) {
+                    String msgText = message.optString("text", "");
+                    long msgTs = message.optLong("ts", 0);
+                    android.content.SharedPreferences prefs = getSharedPreferences("netgo_prefs", MODE_PRIVATE);
+                    long lastShownTs = prefs.getLong("last_message_ts", 0);
+                    if (!msgText.isEmpty() && msgTs > lastShownTs) {
+                        prefs.edit().putLong("last_message_ts", msgTs).apply();
+                        runOnUiThread(() -> showAdminMessage(msgText));
+                    }
                 }
             } catch (Exception ignored) {
                 // Offline or Firebase unreachable — don't lock the player
                 // out just because of a network hiccup.
             }
         }).start();
+    }
+
+    private FrameLayout adminMessageView;
+    private TextView adminMessageTextView;
+
+    /** Shows a message from the admin right over the video — playback
+     *  keeps going, unlike the lockout screen; the person can dismiss it
+     *  and keep watching without ever leaving the fullscreen player. */
+    private void showAdminMessage(String text) {
+        if (adminMessageView == null) buildAdminMessageView();
+        adminMessageTextView.setText(text);
+        adminMessageView.setAlpha(0f);
+        adminMessageView.setVisibility(View.VISIBLE);
+        adminMessageView.animate().alpha(1f).setDuration(200).start();
+    }
+
+    private void buildAdminMessageView() {
+        FrameLayout root = findViewById(android.R.id.content);
+        adminMessageView = new FrameLayout(this);
+        adminMessageView.setBackgroundColor(0xDD050C11);
+        adminMessageView.setVisibility(View.GONE);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER);
+        int pad = dp(28);
+        card.setPadding(pad, pad, pad, pad);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(0xFF142838);
+        bg.setCornerRadius(dp(16));
+        bg.setStroke(dp(1), 0x33FFFFFF);
+        card.setBackground(bg);
+
+        TextView icon = new TextView(this);
+        icon.setText("💬");
+        icon.setTextSize(32);
+        icon.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        iconLp.bottomMargin = dp(10);
+        card.addView(icon, iconLp);
+
+        TextView title = new TextView(this);
+        title.setText("Mensaje del administrador");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(17);
+        title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        titleLp.bottomMargin = dp(10);
+        card.addView(title, titleLp);
+
+        adminMessageTextView = new TextView(this);
+        adminMessageTextView.setTextColor(0xFF9FB6C4);
+        adminMessageTextView.setTextSize(14);
+        adminMessageTextView.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
+                dp(320), ViewGroup.LayoutParams.WRAP_CONTENT);
+        textLp.bottomMargin = dp(18);
+        card.addView(adminMessageTextView, textLp);
+
+        TextView closeBtn = new TextView(this);
+        closeBtn.setText("Cerrar");
+        closeBtn.setTextColor(0xFF1A0E00);
+        closeBtn.setTypeface(closeBtn.getTypeface(), android.graphics.Typeface.BOLD);
+        closeBtn.setGravity(Gravity.CENTER);
+        closeBtn.setPadding(dp(28), dp(12), dp(28), dp(12));
+        GradientDrawable btnBg = new GradientDrawable();
+        btnBg.setColor(0xFFFF8A3D);
+        btnBg.setCornerRadius(dp(10));
+        closeBtn.setBackground(btnBg);
+        closeBtn.setOnClickListener(v -> adminMessageView.animate().alpha(0f).setDuration(150)
+                .withEndAction(() -> adminMessageView.setVisibility(View.GONE)).start());
+        card.addView(closeBtn);
+
+        FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardLp.gravity = Gravity.CENTER;
+        adminMessageView.addView(card, cardLp);
+
+        root.addView(adminMessageView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     }
 
     private void buildLockoutView() {
