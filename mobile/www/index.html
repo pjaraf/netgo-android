@@ -1386,7 +1386,7 @@
 
 
   let liveData = null;          // becomes real provider data once connected
-  let currentCat = 'peliculas';
+  let currentCat = isTV() ? 'vivo' : 'peliculas';
 
   function activeData(){ return liveData || emptyData; }
 
@@ -1732,10 +1732,6 @@
     row.innerHTML = items.map((it, i) => `
       <div class="vivo-recommend-slide${i === 0 ? ' active' : ''}" data-idx="${i}"
            style="background-image:url('${it.img || ''}')">
-        <div class="vivo-recommend-slide-info">
-          <div class="vivo-recommend-slide-title">${it.t}</div>
-          <div class="vivo-recommend-slide-meta">${it.meta || ''}</div>
-        </div>
       </div>
     `).join('');
 
