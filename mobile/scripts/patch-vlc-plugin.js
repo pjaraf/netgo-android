@@ -21,7 +21,7 @@ const packagePath = appId.split('.').join(path.sep);
 // 1) Java sources
 const javaDir = path.join(androidAppDir, 'src', 'main', 'java', packagePath);
 fs.mkdirSync(javaDir, { recursive: true });
-['VlcPlayerPlugin.java', 'VlcPlayerActivity.java', 'InlineVlcPlayerPlugin.java', 'CastOptionsProvider.java', 'MainActivity.java', 'UpdateInstallerPlugin.java', 'DeviceIdPlugin.java'].forEach(file => {
+['VlcPlayerPlugin.java', 'VlcPlayerActivity.java', 'InlineVlcPlayerPlugin.java', 'MainActivity.java', 'UpdateInstallerPlugin.java', 'DeviceIdPlugin.java'].forEach(file => {
   fs.copyFileSync(path.join(nativeDir, file), path.join(javaDir, file));
 });
 
@@ -50,7 +50,7 @@ let gradle = fs.readFileSync(gradlePath, 'utf8');
 if (!gradle.includes('libvlc-all')) {
   gradle = gradle.replace(
     /dependencies\s*\{/,
-    "dependencies {\n    implementation 'org.videolan.android:libvlc-all:3.5.1'\n    implementation 'com.google.android.gms:play-services-cast-framework:22.3.1'\n    implementation 'androidx.mediarouter:mediarouter:1.7.0'"
+    "dependencies {\n    implementation 'org.videolan.android:libvlc-all:3.5.1'"
   );
   fs.writeFileSync(gradlePath, gradle);
 }
