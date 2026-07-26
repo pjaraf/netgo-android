@@ -288,6 +288,18 @@ public class VlcPlayerActivity extends Activity {
     // ---------- Remote control ----------
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // The admin message takes priority over everything else while it's
+        // showing — any OK/Back press just dismisses it (this player
+        // doesn't use Android's native view-focus system for its
+        // controls, they're all handled directly here by keycode).
+        if (adminMessageView != null && adminMessageView.getVisibility() == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                    || keyCode == KeyEvent.KEYCODE_BACK) {
+                adminMessageView.animate().alpha(0f).setDuration(150)
+                        .withEndAction(() -> adminMessageView.setVisibility(View.GONE)).start();
+            }
+            return true;
+        }
         if (isLive && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             if (browseState == BROWSE_NONE) { openChannelBrowse(); return true; }
             if (browseState == BROWSE_CHANNELS) { openCategoryBrowse(); return true; }
@@ -840,12 +852,13 @@ public class VlcPlayerActivity extends Activity {
                 JSONObject message = obj.optJSONObject("message");
                 if (message != null) {
                     String msgText = message.optString("text", "");
+                    String msgName = message.optString("name", "");
                     long msgTs = message.optLong("ts", 0);
                     android.content.SharedPreferences prefs = getSharedPreferences("netgo_prefs", MODE_PRIVATE);
                     long lastShownTs = prefs.getLong("last_message_ts", 0);
                     if (!msgText.isEmpty() && msgTs > lastShownTs) {
                         prefs.edit().putLong("last_message_ts", msgTs).apply();
-                        runOnUiThread(() -> showAdminMessage(msgText));
+                        runOnUiThread(() -> showAdminMessage(msgText, msgName));
                     }
                 }
             } catch (Exception ignored) {
@@ -857,12 +870,14 @@ public class VlcPlayerActivity extends Activity {
 
     private FrameLayout adminMessageView;
     private TextView adminMessageTextView;
+    private TextView adminMessageTitleView;
 
     /** Shows a message from the admin right over the video — playback
      *  keeps going, unlike the lockout screen; the person can dismiss it
      *  and keep watching without ever leaving the fullscreen player. */
-    private void showAdminMessage(String text) {
+    private void showAdminMessage(String text, String name) {
         if (adminMessageView == null) buildAdminMessageView();
+        adminMessageTitleView.setText(name != null && !name.isEmpty() ? "¡Hola " + name + "!" : "Mensaje del administrador");
         adminMessageTextView.setText(text);
         adminMessageView.setAlpha(0f);
         adminMessageView.setVisibility(View.VISIBLE);
@@ -896,6 +911,7 @@ public class VlcPlayerActivity extends Activity {
         card.addView(icon, iconLp);
 
         TextView title = new TextView(this);
+        adminMessageTitleView = title;
         title.setText("Mensaje del administrador");
         title.setTextColor(Color.WHITE);
         title.setTextSize(17);
