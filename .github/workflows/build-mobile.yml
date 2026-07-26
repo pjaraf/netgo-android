@@ -118,4 +118,12 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/version.json
           git commit -m "Update version.json to build ${{ github.run_number }} [skip ci]" || echo "No changes to commit"
-          git push
+          # If something else was pushed to main while this build was
+          # running, "git push" alone gets rejected — pull (rebasing our
+          # one small commit on top) and retry a couple of times instead
+          # of failing the whole workflow over this bookkeeping step.
+          for i in 1 2 3; do
+            git push && break
+            echo "Push rejected, pulling latest and retrying ($i/3)…"
+            git pull --rebase origin main
+          done
