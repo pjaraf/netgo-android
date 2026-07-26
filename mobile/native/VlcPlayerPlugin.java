@@ -64,6 +64,7 @@ public class VlcPlayerPlugin extends Plugin {
         intent.putExtra("startPositionMs", startPositionMs);
         intent.putExtra("contPlayingItem", contPlayingItem);
         getActivity().startActivity(intent);
+        getActivity().overridePendingTransition(0, 0);
         call.resolve();
     }
 
@@ -92,6 +93,7 @@ public class VlcPlayerPlugin extends Plugin {
         intent.putExtra("isLive", true);
         intent.putExtra("deviceCode", deviceCode);
         getActivity().startActivity(intent);
+        getActivity().overridePendingTransition(0, 0);
         call.resolve();
     }
 
