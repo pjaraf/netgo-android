@@ -62,6 +62,8 @@ public class VlcPlayerActivity extends Activity {
     private final List<String> titles = new ArrayList<>();
     private final List<String> nums = new ArrayList<>();
     private int currentIndex = 0;
+    private long pendingResumePositionMs = 0;
+    private String continueItemJson = "";
 
     // ---- Live TV mode (categories + browsing) ----
     private boolean isLive = false;
@@ -198,7 +200,13 @@ public class VlcPlayerActivity extends Activity {
                     spinner.setVisibility(View.GONE);
                     cancelMaintenanceTimer();
                     hideMaintenanceView();
-                    if (!isLive) startProgressTicker();
+                    if (!isLive) {
+                        startProgressTicker();
+                        if (pendingResumePositionMs > 0) {
+                            mediaPlayer.setTime(pendingResumePositionMs);
+                            pendingResumePositionMs = 0;
+                        }
+                    }
                 });
             } else if (event.type == MediaPlayer.Event.EncounteredError) {
                 runOnUiThread(() -> {
@@ -258,6 +266,8 @@ public class VlcPlayerActivity extends Activity {
                     titles.add(obj.optString("title", "Reproduciendo"));
                     nums.add(obj.optString("num", ""));
                 }
+                pendingResumePositionMs = getIntent().getLongExtra("startPositionMs", 0);
+                continueItemJson = getIntent().getStringExtra("contPlayingItem");
                 currentIndex = getIntent().getIntExtra("startIndex", 0);
                 if (currentIndex < 0 || currentIndex >= urls.size()) currentIndex = 0;
                 return !urls.isEmpty();
@@ -673,6 +683,14 @@ public class VlcPlayerActivity extends Activity {
                     seekBar.setProgress((int) time);
                     timeTotalView.setText(formatTime((int) length));
                     timeElapsedView.setText(formatTime((int) time));
+                    // Report back so the web app can save "seguir viendo" —
+                    // Activities can't call the WebView directly, so JS
+                    // reads this via VlcPlayer.getLastProgress() once it's
+                    // visible again.
+                    VlcPlayerPlugin.lastProgressUrl = urls.get(currentIndex);
+                    VlcPlayerPlugin.lastProgressItemJson = continueItemJson != null ? continueItemJson : "";
+                    VlcPlayerPlugin.lastProgressPositionMs = time;
+                    VlcPlayerPlugin.lastProgressDurationMs = length;
                 }
             }
             handler.postDelayed(progressTickRunnable, 500);
