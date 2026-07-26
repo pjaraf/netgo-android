@@ -1123,8 +1123,22 @@
   // buttons/links do, so we do it ourselves for our interactive cards.
   const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, #vivoPreviewFullscreen, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav';
 
+  // If a modal (series detail, account info, PIN, QR screens) is open,
+  // navigation must stay inside it — otherwise focus could jump to
+  // elements on the screen behind it that are only visually covered, not
+  // actually hidden (offsetParent stays non-null for those).
+  const MODAL_OVERLAY_IDS = ['seriesDetailOverlay', 'qrShowOverlay', 'qrScanOverlay', 'pairOverlay', 'pinOverlay', 'accountInfoOverlay'];
+  function getActiveOverlayScope(){
+    for(const id of MODAL_OVERLAY_IDS){
+      const el = document.getElementById(id);
+      if(el && el.style.display && el.style.display !== 'none') return el;
+    }
+    return document;
+  }
+
   function focusableEls(){
-    return Array.from(document.querySelectorAll(NAV_SELECTOR)).filter(el => {
+    const scope = getActiveOverlayScope();
+    return Array.from(scope.querySelectorAll(NAV_SELECTOR)).filter(el => {
       if(el.offsetParent === null) return false; // hidden (display:none or detached)
       const style = getComputedStyle(el);
       return style.visibility !== 'hidden';
