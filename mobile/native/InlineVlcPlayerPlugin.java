@@ -63,6 +63,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
     private boolean closeIfOpen() {
         if (container != null && container.getVisibility() == View.VISIBLE) {
             if (isFullscreen) exitFullscreen(getActivity());
+            getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             container.setVisibility(View.GONE);
             notifyListeners("ended", new JSObject());
             return true;
@@ -183,6 +184,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
     public void unmount(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             if (isFullscreen) exitFullscreen(getActivity());
+            getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             stopTicker();
             cancelAutoHide();
             cancelMaintenanceTimer();
@@ -212,6 +214,12 @@ public class InlineVlcPlayerPlugin extends Plugin {
         if (container != null) return;
         Activity activity = getActivity();
         FrameLayout root = activity.findViewById(android.R.id.content);
+
+        // The fullscreen native player (VlcPlayerActivity) already keeps
+        // the screen awake — this one (the phone's main player, and also
+        // the TV home screen's live preview box) never did, so the device
+        // was sleeping/locking mid-playback.
+        activity.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         container = new FrameLayout(activity);
         videoLayout = new VLCVideoLayout(activity);
