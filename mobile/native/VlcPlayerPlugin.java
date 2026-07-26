@@ -34,11 +34,23 @@ public class VlcPlayerPlugin extends Plugin {
     static JSArray pendingQueue;
     static JSArray pendingCategories;
 
+    // Continue-watching: VlcPlayerActivity writes here periodically while
+    // playing (movies/series only, not live). JS reads it back via
+    // getLastProgress() when the app becomes visible again after the
+    // fullscreen player closes — Activities have no direct callback to the
+    // WebView, so this static field (safe: same process) is the bridge.
+    static String lastProgressUrl = "";
+    static String lastProgressItemJson = "";
+    static long lastProgressPositionMs = 0;
+    static long lastProgressDurationMs = 0;
+
     @PluginMethod
     public void play(PluginCall call) {
         JSArray queue = call.getArray("queue");
         Integer startIndex = call.getInt("startIndex", 0);
         String deviceCode = call.getString("deviceCode", "");
+        long startPositionMs = call.getData().optLong("startPositionMs", 0);
+        String contPlayingItem = call.getString("contPlayingItem", "");
 
         if (queue == null || queue.length() == 0) {
             call.reject("Falta la cola de reproducción (queue)");
@@ -49,6 +61,8 @@ public class VlcPlayerPlugin extends Plugin {
         Intent intent = new Intent(getContext(), VlcPlayerActivity.class);
         intent.putExtra("startIndex", startIndex);
         intent.putExtra("deviceCode", deviceCode);
+        intent.putExtra("startPositionMs", startPositionMs);
+        intent.putExtra("contPlayingItem", contPlayingItem);
         getActivity().startActivity(intent);
         call.resolve();
     }
@@ -79,5 +93,20 @@ public class VlcPlayerPlugin extends Plugin {
         intent.putExtra("deviceCode", deviceCode);
         getActivity().startActivity(intent);
         call.resolve();
+    }
+
+    /** Returns (and clears) the last progress report from the native player. */
+    @PluginMethod
+    public void getLastProgress(PluginCall call) {
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        ret.put("url", lastProgressUrl);
+        ret.put("item", lastProgressItemJson);
+        ret.put("positionMs", lastProgressPositionMs);
+        ret.put("durationMs", lastProgressDurationMs);
+        lastProgressUrl = "";
+        lastProgressItemJson = "";
+        lastProgressPositionMs = 0;
+        lastProgressDurationMs = 0;
+        call.resolve(ret);
     }
 }
