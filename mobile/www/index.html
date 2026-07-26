@@ -821,6 +821,13 @@
     box-shadow: 0 0 0 6px rgba(255,138,61,0.25);
   }
   .poster-card:focus-visible, .channel-card:focus-visible{
+    /* box-shadow (not outline) here on purpose — outline doesn't reliably
+       follow border-radius on every WebView, which was leaving the
+       highlight looking misaligned/partial on rounded cards. box-shadow
+       is always clipped to the element's own rounded corners, so it
+       covers the card edge-to-edge with no gaps. */
+    outline: none;
+    box-shadow: 0 0 0 3px var(--amber), 0 0 0 8px rgba(255,138,61,0.25);
     transform: scale(1.06);
     z-index: 3;
   }
