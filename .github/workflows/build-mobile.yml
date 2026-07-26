@@ -69,6 +69,9 @@ jobs:
       - name: Replace the default splash screen with the NetGo logo
         run: node scripts/patch-splash.js
 
+      - name: Fix white-flash on transitions (dark windowBackground on every theme)
+        run: node scripts/patch-window-theme.js
+
       - name: Add Android TV home-screen launcher support
         run: node scripts/patch-tv-launcher.js
 
