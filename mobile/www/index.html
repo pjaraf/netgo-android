@@ -1438,6 +1438,7 @@
     vivoView.style.display = 'none';
     rowsContainer.style.display = 'block';
     if(typeof stopVivoPreview === 'function') stopVivoPreview();
+    if(typeof recommendCarouselTimer !== 'undefined' && recommendCarouselTimer){ clearInterval(recommendCarouselTimer); recommendCarouselTimer = null; }
 
     if(rowObserver){ rowObserver.disconnect(); rowObserver = null; }
 
@@ -1569,6 +1570,7 @@
 
   let vivoTab = 'categoria';
   let vivoActiveCatIndex = 0;
+  let vivoDefaultApplied = false;
   let activeChannelUrl = null;
 
   function channelRowHtml(c){
@@ -1605,6 +1607,11 @@
     if(!d || !d.rows.length){
       list.innerHTML = `<div class="vivo-empty">Tu proveedor no tiene canales en vivo.</div>`;
       return;
+    }
+    if(!vivoDefaultApplied){
+      vivoDefaultApplied = true;
+      const chileIdx = d.rows.findIndex(r => /chile/i.test(r.title));
+      if(chileIdx !== -1) vivoActiveCatIndex = chileIdx;
     }
     if(vivoActiveCatIndex >= d.rows.length) vivoActiveCatIndex = 0;
 
