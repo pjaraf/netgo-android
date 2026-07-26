@@ -928,7 +928,6 @@
     <div class="name">NetGo</div>
   </div>
   <div class="cat" tabindex="0" data-cat="vivo"><div class="icon">📡</div><span>TV</span></div>
-  <div class="cat" tabindex="0" data-cat="destacados"><div class="icon">⭐</div><span>Destacados</span></div>
   <div class="cat" tabindex="0" data-cat="series"><div class="icon">📺</div><span>Series</span></div>
   <div class="cat active" tabindex="0" data-cat="peliculas"><div class="icon">🎬</div><span>Películas</span></div>
   <div class="cat" tabindex="0" data-cat="anime"><div class="icon">🎌</div><span>Anime</span></div>
@@ -1278,19 +1277,7 @@
 
     if(rowObserver){ rowObserver.disconnect(); rowObserver = null; }
 
-    let d;
-    if(cat === 'destacados'){
-      // A simple, honest "featured" mashup: the first (usually top/newest)
-      // row from each on-demand category, combined into one view.
-      const rows = [];
-      ['peliculas','series','anime','kids'].forEach(key => {
-        const cd = activeData()[key];
-        if(cd && cd.rows && cd.rows.length) rows.push(cd.rows[0]);
-      });
-      d = { rows, type:'movie' };
-    } else {
-      d = activeData()[cat];
-    }
+    const d = activeData()[cat];
     if(!d || !d.rows.length){
       rowsContainer.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">Tu proveedor no tiene contenido en esta categoría</div></div></section>`;
       return;
