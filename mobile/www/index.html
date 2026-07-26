@@ -65,9 +65,7 @@
   .brand{ display:flex; align-items:center; gap:10px; }
   .brand .mark{
     width:34px; height:34px; border-radius:9px;
-    background: linear-gradient(135deg, var(--amber), #FFB870);
-    display:flex; align-items:center; justify-content:center;
-    font-family:'Space Grotesk'; font-weight:700; color:#0B1B26; font-size:16px;
+    object-fit:cover; display:block;
   }
   .brand .name{ font-family:'Space Grotesk'; font-weight:700; font-size:19px; letter-spacing:-0.02em; }
   .brand .ver{ font-family:'JetBrains Mono'; font-size:10px; color:var(--text-dim); margin-left:2px; }
@@ -713,6 +711,7 @@
     font-family:'Space Grotesk'; font-weight:700; color:#0B1B26; font-size:26px;
     margin-bottom:14px;
   }
+  img.start-logo{ background:none; object-fit:cover; }
   .start-title{ font-family:'Space Grotesk'; font-size:22px; font-weight:700; margin:0 0 10px; }
   .start-sub{ color:var(--text-dim); font-size:13px; line-height:1.55; max-width:320px; margin:0 0 22px; }
   .start-generate-btn{
@@ -893,10 +892,7 @@
   body.tv-mode .tv-sidebar-brand .mark{
     width:42px; height:42px;
     border-radius:11px;
-    background:linear-gradient(135deg, var(--amber), #FFB870);
-    display:flex; align-items:center; justify-content:center;
-    font-family:'Space Grotesk'; font-weight:700; color:#0B1B26;
-    font-size:19px;
+    object-fit:cover; display:block;
   }
   body.tv-mode .tv-sidebar-brand .name{
     font-family:'Space Grotesk'; font-weight:700;
@@ -930,7 +926,7 @@
 
 <!-- Startup screen: shown before the app if no provider is connected yet -->
 <div id="startScreen" class="start-screen">
-  <div class="start-logo">N</div>
+  <img class="start-logo" src="logo.png" alt="NetGo">
   <h1 class="start-title">NetGo</h1>
   <p class="start-sub">Envía este código al administrador para activar tu cuenta.</p>
 
@@ -972,7 +968,7 @@
 
 <header>
   <div class="brand">
-    <div class="mark">N</div>
+    <img class="mark" src="logo.png" alt="NetGo">
     <div class="name">NetGo</div>
     <div class="ver mono">1.0</div>
   </div>
@@ -1040,7 +1036,7 @@
 
 <div class="cats">
   <div class="tv-sidebar-brand">
-    <div class="mark">N</div>
+    <img class="mark" src="logo.png" alt="NetGo">
     <div class="name">NetGo</div>
   </div>
   <div class="cat" tabindex="0" data-cat="vivo"><div class="icon">📡</div><span>TV</span></div>
