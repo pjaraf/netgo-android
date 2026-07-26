@@ -151,6 +151,7 @@
     <button class="tab" data-tab="active">Usuarios activos</button>
     <button class="tab" data-tab="expiring">Usuarios por vencer</button>
     <button class="tab" data-tab="expired">Usuarios vencidos</button>
+    <button class="tab" data-tab="messages">Mensajes</button>
     <button class="tab" data-tab="admins" id="adminsTabBtn" style="display:none">Paneles de administradores</button>
     <button class="tab" data-tab="servers" id="serversTabBtn" style="display:none">Servidores</button>
   </div>
@@ -313,6 +314,29 @@
       <button class="ghost small" id="refreshBtnExpired">🔄 Actualizar</button>
       <div id="listExpired"></div>
       <p class="empty-msg" id="emptyExpired" style="display:none">No hay usuarios vencidos.</p>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-messages" style="display:none">
+    <div class="card">
+      <h2>Mensaje masivo</h2>
+      <p class="tab-hint">Escribe un mensaje y se lo mandamos a todos tus clientes por su código de dispositivo — les aparecerá dentro de la app (mismo mecanismo que pausar/bloquear), en un par de minutos.</p>
+      <label>Mensaje</label>
+      <textarea id="massMessageText" rows="4" style="width:100%; box-sizing:border-box; background:#0F2536; border:1px solid var(--line); border-radius:9px; padding:11px 12px; color:var(--text); font-size:14px; font-family:inherit;" placeholder="Ej: Recuerda que tu plan vence pronto, contáctanos para renovar."></textarea>
+      <button class="primary" id="btnBuildMassMessage" style="margin-top:12px;">Enviar a todos</button>
+      <div id="massMessageLinks" style="margin-top:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="qr-overlay" id="messageModalOverlay" style="display:none; position:fixed; inset:0; background:rgba(5,12,17,0.85); align-items:center; justify-content:center; z-index:300;">
+  <div class="card" style="max-width:380px; width:100%; margin:0 16px;">
+    <h2 id="messageModalTitle">Enviar mensaje</h2>
+    <label>Mensaje</label>
+    <textarea id="singleMessageText" rows="4" style="width:100%; box-sizing:border-box; background:#0F2536; border:1px solid var(--line); border-radius:9px; padding:11px 12px; color:var(--text); font-size:14px; font-family:inherit;" placeholder="Escribe el mensaje para este cliente…"></textarea>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button class="ghost small" id="messageModalCancel" style="flex:1;">Cancelar</button>
+      <button class="primary" id="messageModalSend" style="flex:1;">Enviar por WhatsApp</button>
     </div>
   </div>
 </div>
@@ -786,6 +810,7 @@
           <button class="ghost small" onclick="editClient('${code}')">Editar</button>
           <button class="ghost small" onclick="toggleClientPause('${code}', ${!!c.paused})">${c.paused ? 'Reactivar' : 'Pausar'}</button>
           <button class="ghost small" onclick="toggleClientBlock('${code}', ${!!c.blocked})">${c.blocked ? 'Desbloquear' : 'Bloquear'}</button>
+          <button class="ghost small" onclick="openMessageModal('${code}', '${(c.name||'').replace(/'/g,"")}')">💬 Mensaje</button>
           <button class="ghost small" style="color:var(--red); border-color:rgba(255,107,107,.4);" onclick="deleteClient('${code}', '${(c.name||'').replace(/'/g,"")}')">Eliminar cliente</button>
         </div>
       </div>
@@ -823,6 +848,62 @@
       method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ blocked:true })
     });
     loadAllLists();
+  };
+
+  // ---------- Messages (per-client + mass) — sent by device code,
+  // written to the same status/{code} record the app already polls every
+  // 2 minutes for pause/block, and shown as a dismissible message inside
+  // the app itself (not WhatsApp). ----------
+  let messageTargetCode = '';
+  window.openMessageModal = (code, name) => {
+    messageTargetCode = code;
+    document.getElementById('messageModalTitle').textContent = 'Enviar mensaje a ' + (name || code);
+    document.getElementById('singleMessageText').value = '';
+    document.getElementById('messageModalOverlay').style.display = 'flex';
+    document.getElementById('singleMessageText').focus();
+  };
+  document.getElementById('messageModalCancel').onclick = () => {
+    document.getElementById('messageModalOverlay').style.display = 'none';
+  };
+  document.getElementById('messageModalSend').onclick = async () => {
+    const text = document.getElementById('singleMessageText').value.trim();
+    if(!text) return;
+    await fetch(`${FIREBASE_BASE}/status/${messageTargetCode}/message.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, ts: Date.now() })
+    });
+    document.getElementById('messageModalOverlay').style.display = 'none';
+    alert('Mensaje enviado. Aparecerá en la pantalla del cliente en un par de minutos (la app revisa cada 2 minutos).');
+  };
+
+  document.getElementById('btnBuildMassMessage').onclick = async () => {
+    const text = document.getElementById('massMessageText').value.trim();
+    const linksBox = document.getElementById('massMessageLinks');
+    if(!text){ linksBox.innerHTML = '<p class="empty-msg">Escribe un mensaje primero.</p>'; return; }
+    if(!confirm('¿Enviar este mensaje a TODOS tus clientes?')) return;
+
+    linksBox.innerHTML = '<p class="empty-msg">Enviando…</p>';
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/${clientsPath()}.json`);
+      const data = await res.json() || {};
+      const codes = Object.keys(data);
+
+      if(!codes.length){
+        linksBox.innerHTML = '<p class="empty-msg">No tienes clientes todavía.</p>';
+        return;
+      }
+
+      const ts = Date.now();
+      await Promise.all(codes.map(code =>
+        fetch(`${FIREBASE_BASE}/status/${code}/message.json`, {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ text, ts })
+        })
+      ));
+      linksBox.innerHTML = `<p class="tab-hint">✓ Enviado a ${codes.length} cliente(s). Les aparecerá en la app en un par de minutos.</p>`;
+    }catch(err){
+      linksBox.innerHTML = '<p class="empty-msg">Error al enviar: ' + err.message + '</p>';
+    }
   };
 
   window.editClient = async (code) => {
