@@ -1150,7 +1150,7 @@
   // what makes arrow keys actually move between cards instead of doing
   // nothing (which is what made the remote feel "stuck").
   function moveFocus(direction){
-    const candidates = focusableEls();
+    let candidates = focusableEls();
     if(!candidates.length) return;
     const current = document.activeElement && document.activeElement.matches(NAV_SELECTOR)
       ? document.activeElement
@@ -1159,6 +1159,22 @@
     if(!current){
       candidates[0].focus();
       return;
+    }
+
+    // For card grids specifically: only consider cards from the current
+    // row and its immediate neighbors — a D-pad press never actually needs
+    // a card five rows away, so skipping the position math for every
+    // far-off card (there can be dozens loaded at once) is what keeps
+    // navigation feeling instant instead of increasingly sluggish.
+    if(current.matches('.poster-card, .channel-card')){
+      const currentSection = current.closest('section.row');
+      if(currentSection){
+        const nearbySections = [currentSection.previousElementSibling, currentSection, currentSection.nextElementSibling].filter(Boolean);
+        const cardCandidates = candidates.filter(el =>
+          el.matches('.poster-card, .channel-card') && nearbySections.some(sec => sec.contains(el)));
+        const otherCandidates = candidates.filter(el => !el.matches('.poster-card, .channel-card'));
+        candidates = cardCandidates.concat(otherCandidates);
+      }
     }
 
     const r0 = current.getBoundingClientRect();
@@ -1192,6 +1208,7 @@
     }
   }
 
+  let lastMoveFocusTime = 0;
   document.addEventListener('keydown', (e) => {
     if(e.key === 'Enter' || e.key === ' '){
       const el = document.activeElement;
@@ -1209,6 +1226,14 @@
     if(document.activeElement && document.activeElement.tagName === 'INPUT' &&
        !document.activeElement.matches('#channelSearch')) return;
     e.preventDefault();
+    // If the remote's key-repeat fires faster than we can move+scroll,
+    // each extra press just piles more geometry work on top of the last —
+    // this is what made rapid/held navigation feel like it was lagging
+    // behind. Dropping presses that arrive faster than ~80ms apart keeps
+    // it feeling immediate instead of backed up.
+    const now = performance.now();
+    if(now - lastMoveFocusTime < 80) return;
+    lastMoveFocusTime = now;
     moveFocus(dir);
   });
 
