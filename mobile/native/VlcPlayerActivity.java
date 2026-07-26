@@ -52,6 +52,15 @@ import java.util.List;
  */
 public class VlcPlayerActivity extends Activity {
 
+    @Override
+    public void finish() {
+        super.finish();
+        // No transition animation at all when closing — this removes any
+        // chance of a flash/flicker during the switch back to the main
+        // screen, regardless of what's causing it on a given device.
+        overridePendingTransition(0, 0);
+    }
+
     private LibVLC libVLC;
     private MediaPlayer mediaPlayer;
     private TextView titleView;
