@@ -210,7 +210,9 @@ public class VlcPlayerActivity extends Activity {
                     selectSpanishAudioTrack();
                     liveRetryCount = 0;
                     cancelStallTimer();
-                    if (!isLive) {
+                    if (isLive) {
+                        startProgressWatchdog();
+                    } else {
                         startProgressTicker();
                         if (pendingResumePositionMs > 0) {
                             mediaPlayer.setTime(pendingResumePositionMs);
@@ -509,6 +511,42 @@ public class VlcPlayerActivity extends Activity {
         stallRunnable = null;
     }
 
+    // ---------- Progress watchdog: catches SILENT freezes ----------
+    // Some servers just stop delivering data without VLC ever firing a
+    // Buffering or EncounteredError event — the picture just freezes on
+    // the last frame while VLC still thinks it's "Playing" normally. The
+    // Buffering-triggered stall timer above can't catch that case at all,
+    // since it never enters a buffering state to begin with. This checks
+    // whether playback position is actually moving forward, independent
+    // of what VLC's own event stream is reporting.
+    private Runnable progressWatchdogRunnable;
+    private long lastWatchdogTime = -1;
+    private static final long WATCHDOG_INTERVAL_MS = 5000;
+
+    private void startProgressWatchdog() {
+        stopProgressWatchdog();
+        lastWatchdogTime = -1;
+        progressWatchdogRunnable = () -> {
+            if (mediaPlayer != null && isLive) {
+                long now = mediaPlayer.getTime();
+                if (lastWatchdogTime >= 0 && now == lastWatchdogTime && mediaPlayer.isPlaying()) {
+                    // Position hasn't moved in 5s despite VLC saying it's
+                    // playing — frozen. Reconnect the same channel.
+                    scheduleLiveRetry();
+                    return; // scheduleLiveRetry will trigger a fresh loadCurrent, which restarts this watchdog
+                }
+                lastWatchdogTime = now;
+            }
+            handler.postDelayed(progressWatchdogRunnable, WATCHDOG_INTERVAL_MS);
+        };
+        handler.postDelayed(progressWatchdogRunnable, WATCHDOG_INTERVAL_MS);
+    }
+
+    private void stopProgressWatchdog() {
+        if (progressWatchdogRunnable != null) handler.removeCallbacks(progressWatchdogRunnable);
+        progressWatchdogRunnable = null;
+    }
+
     /** Reconnects to the exact same channel after a short, increasing
      *  delay — never a different channel, never a popup. Caps out at 15s
      *  between attempts so a genuinely dead stream retries forever
@@ -522,6 +560,7 @@ public class VlcPlayerActivity extends Activity {
 
     private void loadCurrent() {
         cancelStallTimer();
+        stopProgressWatchdog();
         spinner.setVisibility(View.VISIBLE);
         titleView.setText(titles.get(currentIndex));
         stopProgressTicker();
@@ -1039,6 +1078,7 @@ public class VlcPlayerActivity extends Activity {
         super.onDestroy();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
         cancelStallTimer();
+        stopProgressWatchdog();
         cancelStatusCheck();
         stopProgressTicker();
         if (mediaPlayer != null) mediaPlayer.release();
