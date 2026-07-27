@@ -3003,6 +3003,25 @@
     statusCheckTimer = setInterval(checkClientStatus, 120000);
   }
 
+  // Background catalog refresh — the equivalent of a periodic WorkManager
+  // job: keeps the cache (and, quietly, the currently-open screen) up to
+  // date on its own while the app sits open, instead of only refreshing
+  // when the user manually reconnects or reopens the app. This is what
+  // makes the NEXT open feel instant even after the provider's catalog has
+  // changed.
+  let backgroundRefreshTimer = null;
+  function startBackgroundCatalogRefresh(conn){
+    if(backgroundRefreshTimer) clearInterval(backgroundRefreshTimer);
+    backgroundRefreshTimer = setInterval(async () => {
+      try{
+        if(conn.type === 'm3u') await connectM3U(conn);
+        else await connectXtream(conn);
+        saveCatalogCache(connCacheKey(conn), liveData);
+      }catch(err){ /* a background refresh failing silently is fine — the
+                      cache and current view just keep what they had */ }
+    }, 25 * 60 * 1000); // every 25 minutes
+  }
+
   // Auto-connect on load if credentials were saved previously; otherwise
   // show the startup QR pairing screen.
   window.addEventListener('load', async () => {
@@ -3013,6 +3032,7 @@
       profileScreenReturnCallback = () => {
         tryConnect(conn, { silent:true }); // shows cached content instantly, then refreshes
         startStatusPolling();
+        startBackgroundCatalogRefresh(conn);
       };
       showProfileScreen(profileScreenReturnCallback);
     } else {
@@ -3359,6 +3379,8 @@
           document.getElementById('startScreen').style.display = 'none';
           saveConn(conn);
           tryConnect(conn);
+          startStatusPolling();
+          startBackgroundCatalogRefresh(conn);
         }
       }catch(err){ /* keep polling silently */ }
     }, 2500);
