@@ -281,7 +281,7 @@
     padding:22px; height:100%; box-sizing:border-box;
   }
   .vivo-preview{
-    display:flex; flex-direction:column; min-height:0;
+    display:flex; flex-direction:column; min-height:0; min-width:0;
     padding:20px; border-radius:18px;
     background: linear-gradient(165deg, var(--card), var(--bg-raise));
     border:1px solid rgba(255,138,61,0.18);
@@ -317,18 +317,16 @@
   }
   .vivo-preview-meta{ font-size:13px; color:var(--text-dim); margin-bottom:16px; }
   .vivo-logo-carousel{
-    display:flex; gap:10px; overflow-x:auto; padding-top:4px; flex-shrink:0;
+    display:flex; gap:10px; overflow:hidden; padding-top:4px; flex-shrink:0;
+    height:56px; width:100%; max-width:100%;
   }
   .vivo-logo-tile{
-    flex-shrink:0; width:64px; height:64px; border-radius:12px;
+    flex-shrink:0; width:56px; height:56px; border-radius:12px;
     background:var(--bg); border:2px solid var(--line);
     display:flex; align-items:center; justify-content:center; overflow:hidden;
-    cursor:pointer; transition:border-color .15s ease, transform .15s ease;
   }
   .vivo-logo-tile img{ width:100%; height:100%; object-fit:contain; }
-  .vivo-logo-tile .vivo-logo-fallback{ font-size:22px; opacity:.5; }
-  .vivo-logo-tile.active{ border-color:var(--amber); box-shadow:0 0 0 3px rgba(255,138,61,0.25); }
-  .vivo-logo-tile:focus-visible, .vivo-logo-tile:hover{ transform:translateY(-2px); border-color:var(--amber); }
+  .vivo-logo-tile .vivo-logo-fallback{ font-size:20px; opacity:.5; }
 
   .vivo-recommend-card{
     display:flex; flex-direction:column; min-height:0;
@@ -857,7 +855,6 @@
   .start-manual-btn:focus-visible,
   #updateBannerBtn:focus-visible,
   #updateBannerClose:focus-visible,
-  .vivo-logo-tile:focus-visible,
   .sd-season-tab:focus-visible,
   .sd-episode-row:focus-visible,
   .sd-back:focus-visible,
@@ -1304,7 +1301,7 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .vivo-logo-tile, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #adminMessageClose';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #adminMessageClose';
 
   // If a modal (series detail, account info, PIN, QR screens) is open,
   // navigation must stay inside it — otherwise focus could jump to
@@ -1500,6 +1497,7 @@
     rowsContainer.style.display = 'block';
     if(typeof stopVivoPreview === 'function') stopVivoPreview();
     if(typeof recommendCarouselTimer !== 'undefined' && recommendCarouselTimer){ clearInterval(recommendCarouselTimer); recommendCarouselTimer = null; }
+    if(typeof logoCarouselTimer !== 'undefined' && logoCarouselTimer){ clearInterval(logoCarouselTimer); logoCarouselTimer = null; }
 
     if(rowObserver){ rowObserver.disconnect(); rowObserver = null; }
 
@@ -1693,21 +1691,29 @@
 
   // Horizontal strip of channel logos under the preview — tap one to
   // switch what's playing there, without needing the full channel list.
+  let logoCarouselTimer = null;
   function renderVivoLogoCarousel(items){
     const carousel = document.getElementById('vivoLogoCarousel');
     if(!carousel) return;
-    carousel.innerHTML = items.map((it, i) => `
-      <div class="vivo-logo-tile${vivoPreviewSelected && vivoPreviewSelected.url === it.url ? ' active' : ''}" tabindex="0" data-idx="${i}">
+    if(logoCarouselTimer){ clearInterval(logoCarouselTimer); logoCarouselTimer = null; }
+
+    // Purely a visual strip — not selectable, just auto-scrolls on its own
+    // within the fixed space where the fullscreen button used to be.
+    carousel.innerHTML = items.map(it => `
+      <div class="vivo-logo-tile">
         ${it.img ? `<img src="${it.img}" onerror="this.parentElement.innerHTML='<span class=&quot;vivo-logo-fallback&quot;>📡</span>'">` : `<span class="vivo-logo-fallback">📡</span>`}
       </div>
     `).join('');
-    carousel.querySelectorAll('.vivo-logo-tile').forEach(tile => {
-      tile.onclick = () => {
-        playVivoChannelData(items[+tile.dataset.idx]);
-        carousel.querySelectorAll('.vivo-logo-tile').forEach(t => t.classList.remove('active'));
-        tile.classList.add('active');
-      };
-    });
+
+    if(items.length > 1){
+      logoCarouselTimer = setInterval(() => {
+        if(!carousel.isConnected){ clearInterval(logoCarouselTimer); logoCarouselTimer = null; return; }
+        carousel.scrollLeft += 1;
+        if(carousel.scrollLeft >= carousel.scrollWidth - carousel.clientWidth){
+          carousel.scrollLeft = 0;
+        }
+      }, 30);
+    }
   }
 
   // Loads a long channel list in batches as the user scrolls near the
