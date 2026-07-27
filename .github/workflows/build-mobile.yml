@@ -115,18 +115,31 @@ jobs:
       - name: Publish version.json (so the app can detect this update)
         working-directory: .
         run: |
+          # Done in a completely separate, fresh clone — the main checkout
+          # is full of build artifacts (android/, node_modules, gradle
+          # output) that "git pull --rebase" refuses to run next to, since
+          # it wants a clean working tree. A throwaway clone sidesteps that
+          # entirely and gives every retry a guaranteed-clean start.
+          rm -rf /tmp/version-bump
+          git clone --depth 1 "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" /tmp/version-bump
+          cd /tmp/version-bump
           mkdir -p docs
           printf '{\n  "version": %s\n}\n' "${{ github.run_number }}" > docs/version.json
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/version.json
           git commit -m "Update version.json to build ${{ github.run_number }} [skip ci]" || echo "No changes to commit"
-          # If something else was pushed to main while this build was
-          # running, "git push" alone gets rejected — pull (rebasing our
-          # one small commit on top) and retry a couple of times instead
-          # of failing the whole workflow over this bookkeeping step.
           for i in 1 2 3; do
             git push && break
-            echo "Push rejected, pulling latest and retrying ($i/3)…"
-            git pull --rebase origin main
+            echo "Push rejected, re-cloning fresh and retrying ($i/3)…"
+            cd /tmp
+            rm -rf version-bump
+            git clone --depth 1 "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" version-bump
+            cd version-bump
+            mkdir -p docs
+            printf '{\n  "version": %s\n}\n' "${{ github.run_number }}" > docs/version.json
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add docs/version.json
+            git commit -m "Update version.json to build ${{ github.run_number }} [skip ci]" || echo "No changes to commit"
           done
