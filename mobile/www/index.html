@@ -2417,21 +2417,35 @@
   const jsonParseWorker = (() => {
     const workerCode = `
       self.onmessage = function(e){
-        try{ self.postMessage({ ok:true, data: JSON.parse(e.data) }); }
-        catch(err){ self.postMessage({ ok:false, error: err.message }); }
+        const { id, text } = e.data;
+        try{ self.postMessage({ id, ok:true, data: JSON.parse(text) }); }
+        catch(err){ self.postMessage({ id, ok:false, error: err.message }); }
       };
     `;
     const blob = new Blob([workerCode], { type:'application/javascript' });
     return new Worker(URL.createObjectURL(blob));
   })();
+
+  // Multiple calls to parseJsonOffThread happen concurrently all the time
+  // (categories + streams are fetched via Promise.all) — a single shared
+  // worker with one listener added per call meant EVERY pending listener
+  // fired on EVERY incoming message, so concurrent requests could resolve
+  // with each other's data. Each request now carries a unique id, and a
+  // single shared listener routes each response only to its own caller.
+  let jsonParseNextId = 1;
+  const jsonParsePending = new Map();
+  jsonParseWorker.addEventListener('message', (e) => {
+    const { id, ok, data, error } = e.data;
+    const pending = jsonParsePending.get(id);
+    if(!pending) return;
+    jsonParsePending.delete(id);
+    if(ok) pending.resolve(data); else pending.reject(new Error(error));
+  });
   function parseJsonOffThread(text){
     return new Promise((resolve, reject) => {
-      const handler = (e) => {
-        jsonParseWorker.removeEventListener('message', handler);
-        if(e.data.ok) resolve(e.data.data); else reject(new Error(e.data.error));
-      };
-      jsonParseWorker.addEventListener('message', handler);
-      jsonParseWorker.postMessage(text);
+      const id = jsonParseNextId++;
+      jsonParsePending.set(id, { resolve, reject });
+      jsonParseWorker.postMessage({ id, text });
     });
   }
 
@@ -2760,16 +2774,24 @@
     renderCategory(currentCat);
   }
 
-  // Same as connectXtream, but for a client with SEVERAL servers assigned
-  // at once — fetches each one and merges their categories together under
-  // the same tabs, so the person just sees one combined catalog.
+  // For a client with several sources assigned at once — Xtream servers,
+  // M3U/OTT lists, or any mix of both — fetches every one of them and
+  // merges their categories together under the same tabs, so the person
+  // just sees one combined catalog no matter where each piece came from.
   async function connectMultiXtream(connections){
     const results = await Promise.all(
-      connections.map(c => fetchXtreamServerRows({ type:'xtream', server:c.server, username:c.username, password:c.password })
-        .catch(err => { console.error('One server failed to load:', c.server, err); return null; }))
+      connections.map(c => {
+        const fetchPromise = c.type === 'm3u'
+          ? fetchM3URows(c.url)
+          : fetchXtreamServerRows({ type:'xtream', server:c.server, username:c.username, password:c.password });
+        return fetchPromise.catch(err => {
+          console.error('One source failed to load:', c.type === 'm3u' ? c.url : c.server, err);
+          return null;
+        });
+      })
     );
     const ok = results.filter(Boolean);
-    if(!ok.length) throw new Error('Ninguno de los servidores asignados respondió');
+    if(!ok.length) throw new Error('Ninguna de las fuentes asignadas respondió');
 
     xtreamState = { conn: { type:'xtream', connections } };
     rawLiveData = {
@@ -2781,9 +2803,9 @@
     };
     liveData = filterHiddenCategories(rawLiveData);
 
-    const totalLive = ok.reduce((n, r) => n + r.counts.live, 0);
-    const totalVod = ok.reduce((n, r) => n + r.counts.vod, 0);
-    const totalSeries = ok.reduce((n, r) => n + r.counts.series, 0);
+    const totalLive = ok.reduce((n, r) => n + (r.counts.live || 0), 0);
+    const totalVod = ok.reduce((n, r) => n + (r.counts.vod || 0), 0);
+    const totalSeries = ok.reduce((n, r) => n + (r.counts.series || 0), 0);
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
     document.getElementById('heroTitle').textContent = 'Todo listo';
     document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${totalLive}</b> canales</span><span><b>${totalVod}</b> películas</span><span><b>${totalSeries}</b> series</span></div>`;
@@ -2831,12 +2853,14 @@
     return 'vivo';
   }
 
-  async function connectM3U(conn){
+  // Fetches and shapes ONE M3U/OTT list into our row format — same idea as
+  // fetchXtreamServerRows, so both source types can be merged together.
+  async function fetchM3URows(url){
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 25000);
     let text;
     try{
-      const res = await fetch(conn.server, { signal: ctrl.signal });
+      const res = await fetch(url, { signal: ctrl.signal });
       if(!res.ok) throw new Error('HTTP ' + res.status);
       text = await res.text();
     } finally { clearTimeout(timeout); }
@@ -2862,22 +2886,36 @@
       }));
     }
 
+    return {
+      liveRows: bucketToRows(buckets.vivo, true),
+      vodRows: bucketToRows(buckets.peliculas, false),
+      seriesRows: bucketToRows(buckets.series, false),
+      animeRows: bucketToRows(buckets.anime, false),
+      kidsRows: bucketToRows(buckets.kids, false),
+      counts: { live: (buckets.vivo ? Object.values(buckets.vivo) : []).flat().length, entries: entries.length }
+    };
+  }
+
+  async function connectM3U(conn){
+    const data = await fetchM3URows(conn.server);
+
     rawLiveData = {
-      vivo: { rows: bucketToRows(buckets.vivo, true), type:'channel' },
-      peliculas: { rows: bucketToRows(buckets.peliculas, false), type:'poster' },
-      series: { rows: bucketToRows(buckets.series, false), type:'poster' },
-      anime: { rows: bucketToRows(buckets.anime, false), type:'poster' },
-      kids: { rows: bucketToRows(buckets.kids, false), type:'poster' },
+      vivo: { rows: data.liveRows, type:'channel' },
+      peliculas: { rows: data.vodRows, type:'poster' },
+      series: { rows: data.seriesRows, type:'poster' },
+      anime: { rows: data.animeRows, type:'poster' },
+      kids: { rows: data.kidsRows, type:'poster' },
     };
     liveData = filterHiddenCategories(rawLiveData);
     xtreamState = { conn }; // minimal — enough for the account panel to know we're connected
 
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
     document.getElementById('heroTitle').textContent = 'Todo listo';
-    document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${entries.length}</b> elementos (lista M3U)</span></div>`;
+    document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${data.counts.entries}</b> elementos (lista M3U)</span></div>`;
     document.getElementById('heroConnect').textContent = 'Actualizar catálogo';
     renderCategory(currentCat);
   }
+
 
   // ---------- Local catalog cache (IndexedDB — the browser's real,
   // persistent structured database; the closest web equivalent to Room) ----------
