@@ -1686,7 +1686,17 @@
       // screen never sits empty waiting for a selection.
       playVivoChannelData(activeRow.items[0]);
     }
-    if(isTV()) renderVivoLogoCarousel(activeRow.items);
+    if(isTV()){
+      // Pull from several categories (not just the active one) and only
+      // include channels that actually have a logo — this is a purely
+      // decorative showcase strip, so a channel with no artwork (which
+      // would just show a placeholder icon) doesn't add anything to it.
+      const withLogos = [];
+      d.rows.slice(0, 8).forEach(row => {
+        row.items.forEach(it => { if(it.img) withLogos.push(it); });
+      });
+      renderVivoLogoCarousel(withLogos);
+    }
   }
 
   // Horizontal strip of channel logos under the preview — tap one to
@@ -1885,7 +1895,7 @@
 
     document.getElementById('vivoPreviewArt').innerHTML = ''; // native video renders on top of this box
     const P = window.Capacitor.Plugins.InlineVlcPlayer;
-    await P.mount(getVivoPreviewRect());
+    await P.mount({ ...getVivoPreviewRect(), showControls: false });
     await P.loadQueue({ queue: [{ url:item.url, title:item.t }], startIndex: 0 });
     vivoPreviewPlaying = true;
     startVivoRateIndicator();
