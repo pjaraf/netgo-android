@@ -316,17 +316,19 @@
     color:var(--text); margin-bottom:4px;
   }
   .vivo-preview-meta{ font-size:13px; color:var(--text-dim); margin-bottom:16px; }
-  .vivo-preview-fullscreen{
-    background:linear-gradient(135deg, #FFC98A, var(--amber));
-    color:#1A0E00; border:none; font-weight:700;
-    font-size:14px; padding:13px; border-radius:12px; cursor:pointer;
-    box-shadow: 0 8px 20px rgba(255,138,61,0.3);
-    transition: transform .15s ease, box-shadow .15s ease;
+  .vivo-logo-carousel{
+    display:flex; gap:10px; overflow-x:auto; padding-top:4px; flex-shrink:0;
   }
-  .vivo-preview-fullscreen:focus-visible, .vivo-preview-fullscreen:hover{
-    transform: translateY(-2px);
-    box-shadow: 0 12px 26px rgba(255,138,61,0.4);
+  .vivo-logo-tile{
+    flex-shrink:0; width:64px; height:64px; border-radius:12px;
+    background:var(--bg); border:2px solid var(--line);
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+    cursor:pointer; transition:border-color .15s ease, transform .15s ease;
   }
+  .vivo-logo-tile img{ width:100%; height:100%; object-fit:contain; }
+  .vivo-logo-tile .vivo-logo-fallback{ font-size:22px; opacity:.5; }
+  .vivo-logo-tile.active{ border-color:var(--amber); box-shadow:0 0 0 3px rgba(255,138,61,0.25); }
+  .vivo-logo-tile:focus-visible, .vivo-logo-tile:hover{ transform:translateY(-2px); border-color:var(--amber); }
 
   .vivo-recommend-card{
     display:flex; flex-direction:column; min-height:0;
@@ -855,6 +857,7 @@
   .start-manual-btn:focus-visible,
   #updateBannerBtn:focus-visible,
   #updateBannerClose:focus-visible,
+  .vivo-logo-tile:focus-visible,
   .sd-season-tab:focus-visible,
   .sd-episode-row:focus-visible,
   .sd-back:focus-visible,
@@ -1131,7 +1134,7 @@
         <div class="vivo-preview-name" id="vivoPreviewName">Selecciona un canal</div>
         <div class="vivo-preview-meta" id="vivoPreviewMeta"></div>
       </div>
-      <button class="vivo-preview-fullscreen" id="vivoPreviewFullscreen">⤢ Pantalla Completa</button>
+      <div class="vivo-logo-carousel" id="vivoLogoCarousel"></div>
     </div>
     <div class="vivo-recommend-card">
       <div class="vivo-recommend-title">Recomendados para ti</div>
@@ -1301,7 +1304,7 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, #vivoPreviewFullscreen, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #adminMessageClose';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .vivo-logo-tile, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #adminMessageClose';
 
   // If a modal (series detail, account info, PIN, QR screens) is open,
   // navigation must stay inside it — otherwise focus could jump to
@@ -1685,6 +1688,26 @@
       // screen never sits empty waiting for a selection.
       playVivoChannelData(activeRow.items[0]);
     }
+    if(isTV()) renderVivoLogoCarousel(activeRow.items);
+  }
+
+  // Horizontal strip of channel logos under the preview — tap one to
+  // switch what's playing there, without needing the full channel list.
+  function renderVivoLogoCarousel(items){
+    const carousel = document.getElementById('vivoLogoCarousel');
+    if(!carousel) return;
+    carousel.innerHTML = items.map((it, i) => `
+      <div class="vivo-logo-tile${vivoPreviewSelected && vivoPreviewSelected.url === it.url ? ' active' : ''}" tabindex="0" data-idx="${i}">
+        ${it.img ? `<img src="${it.img}" onerror="this.parentElement.innerHTML='<span class=&quot;vivo-logo-fallback&quot;>📡</span>'">` : `<span class="vivo-logo-fallback">📡</span>`}
+      </div>
+    `).join('');
+    carousel.querySelectorAll('.vivo-logo-tile').forEach(tile => {
+      tile.onclick = () => {
+        playVivoChannelData(items[+tile.dataset.idx]);
+        carousel.querySelectorAll('.vivo-logo-tile').forEach(t => t.classList.remove('active'));
+        tile.classList.add('active');
+      };
+    });
   }
 
   // Loads a long channel list in batches as the user scrolls near the
@@ -1890,7 +1913,6 @@
       deviceCode: getDeviceCode()
     }).catch(err => console.error('VlcPlayer playLive error:', err));
   }
-  document.getElementById('vivoPreviewFullscreen').onclick = launchTVLivePlayback;
 
   document.getElementById('vivoList').addEventListener('click', (e) => {
     const row = e.target.closest('.vivo-chan-row');
