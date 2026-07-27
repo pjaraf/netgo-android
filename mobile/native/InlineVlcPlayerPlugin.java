@@ -106,9 +106,11 @@ public class InlineVlcPlayerPlugin extends Plugin {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable progressTicker;
+    private boolean controlsEnabled = true;
 
     @PluginMethod
     public void mount(PluginCall call) {
+        controlsEnabled = call.getData().optBoolean("showControls", true);
         getActivity().runOnUiThread(() -> {
             ensureViewsCreated();
             applyRect(call);
@@ -252,7 +254,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
             return true;
         });
 
-        buildControls(activity, container);
+        if (controlsEnabled) buildControls(activity, container);
         buildMaintenanceView(activity, container);
 
         root.addView(container, new FrameLayout.LayoutParams(0, 0));
@@ -569,7 +571,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
 
     private void loadCurrent() {
         if (urls.isEmpty()) return;
-        titleView.setText(titles.get(currentIndex));
+        if (titleView != null) titleView.setText(titles.get(currentIndex));
         if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
         scheduleMaintenanceTimer();
 
@@ -678,9 +680,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
                         position = 0; playing = false;
                     }
                     boolean isLive = duration <= 0;
-                    progressRow.setVisibility(isLive ? View.GONE : View.VISIBLE);
-                    liveBadgeView.setVisibility(isLive ? View.VISIBLE : View.GONE);
-                    if (!isLive) {
+                    if (progressRow != null) progressRow.setVisibility(isLive ? View.GONE : View.VISIBLE);
+                    if (liveBadgeView != null) liveBadgeView.setVisibility(isLive ? View.VISIBLE : View.GONE);
+                    if (!isLive && timeCurView != null) {
                         timeCurView.setText(fmt(position));
                         timeDurView.setText(fmt(duration));
                         seekBar.setProgress((int) (1000.0 * position / duration));
@@ -695,7 +697,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
             }
         };
         handler.post(progressTicker);
-        showControls();
+        if (controlsEnabled) showControls();
     }
 
     private String fmt(long ms) {
