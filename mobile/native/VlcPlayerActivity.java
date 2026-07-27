@@ -116,11 +116,6 @@ public class VlcPlayerActivity extends Activity {
     private TextView lockoutMsgView;
     private Runnable hideBannerRunnable;
 
-    // ---- "Canal en mantenimiento" (stuck-loading) screen ----
-    private FrameLayout maintenanceView;
-    private Runnable maintenanceRunnable;
-    private static final long MAINTENANCE_TIMEOUT_MS = 10000;
-
     // ---- Progress bar (movies/series only, not live TV) ----
     private LinearLayout progressBarContainer;
     private SeekBar seekBar;
@@ -180,7 +175,6 @@ public class VlcPlayerActivity extends Activity {
         rootView.requestFocus();
 
         buildChannelBanner();
-        buildMaintenanceView();
         buildBrowsePanels();
         buildLockoutView();
 
@@ -211,8 +205,6 @@ public class VlcPlayerActivity extends Activity {
             if (event.type == MediaPlayer.Event.Playing) {
                 runOnUiThread(() -> {
                     spinner.setVisibility(View.GONE);
-                    cancelMaintenanceTimer();
-                    hideMaintenanceView();
                     selectSpanishAudioTrack();
                     if (!isLive) {
                         startProgressTicker();
@@ -223,15 +215,10 @@ public class VlcPlayerActivity extends Activity {
                     }
                 });
             } else if (event.type == MediaPlayer.Event.EncounteredError) {
-                runOnUiThread(() -> {
-                    spinner.setVisibility(View.GONE);
-                    cancelMaintenanceTimer();
-                    if (isLive) {
-                        showMaintenanceThenAdvance();
-                    } else {
-                        showMaintenanceNow();
-                    }
-                });
+                // No dialog, no automatic channel change — VLC's own
+                // --http-reconnect keeps trying in the background. The
+                // channel only changes when the person presses the remote.
+                runOnUiThread(() -> spinner.setVisibility(View.GONE));
             } else if (event.type == MediaPlayer.Event.EndReached) {
                 runOnUiThread(() -> {
                     // A live channel's connection dropping briefly can also
@@ -489,9 +476,6 @@ public class VlcPlayerActivity extends Activity {
     private void loadCurrent() {
         spinner.setVisibility(View.VISIBLE);
         titleView.setText(titles.get(currentIndex));
-        hideMaintenanceView();
-        scheduleMaintenanceTimer();
-        if (autoAdvanceRunnable != null) { handler.removeCallbacks(autoAdvanceRunnable); autoAdvanceRunnable = null; }
         stopProgressTicker();
         if (progressBarContainer != null) {
             progressBarContainer.setVisibility(View.GONE);
@@ -770,93 +754,6 @@ public class VlcPlayerActivity extends Activity {
         return h > 0 ? String.format("%d:%02d:%02d", h, m, s) : String.format("%02d:%02d", m, s);
     }
 
-    // ---------- "Canal en mantenimiento" screen ----------
-    private void buildMaintenanceView() {
-        FrameLayout root = findViewById(android.R.id.content);
-        maintenanceView = new FrameLayout(this);
-        maintenanceView.setBackgroundColor(0xFF0B1B26);
-        maintenanceView.setVisibility(View.GONE);
-
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setGravity(Gravity.CENTER);
-
-        ImageView logo = new ImageView(this);
-        int logoSize = dp(84);
-        try {
-            logo.setImageResource(getResources().getIdentifier("ic_launcher_foreground", "mipmap", getPackageName()));
-        } catch (Exception ignored) { }
-        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(logoSize, logoSize);
-        logoLp.bottomMargin = dp(20);
-        col.addView(logo, logoLp);
-
-        TextView msg = new TextView(this);
-        msg.setText("Canal en mantenimiento");
-        msg.setTextColor(Color.WHITE);
-        msg.setTextSize(20);
-        msg.setTypeface(msg.getTypeface(), android.graphics.Typeface.BOLD);
-        msg.setGravity(Gravity.CENTER);
-        col.addView(msg);
-
-        TextView sub = new TextView(this);
-        sub.setText("No pudimos cargar esta señal. Prueba otro canal.");
-        sub.setTextColor(0xFF9FB6C4);
-        sub.setTextSize(13);
-        sub.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        subLp.topMargin = dp(8);
-        col.addView(sub, subLp);
-
-        FrameLayout.LayoutParams colLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        colLp.gravity = Gravity.CENTER;
-        maintenanceView.addView(col, colLp);
-
-        root.addView(maintenanceView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-    }
-
-    private void scheduleMaintenanceTimer() {
-        cancelMaintenanceTimer();
-        maintenanceRunnable = () -> {
-            spinner.setVisibility(View.GONE);
-            maintenanceView.setAlpha(0f);
-            maintenanceView.setVisibility(View.VISIBLE);
-            maintenanceView.animate().alpha(1f).setDuration(200).start();
-        };
-        handler.postDelayed(maintenanceRunnable, MAINTENANCE_TIMEOUT_MS);
-    }
-
-    private void cancelMaintenanceTimer() {
-        if (maintenanceRunnable != null) handler.removeCallbacks(maintenanceRunnable);
-    }
-
-    private void hideMaintenanceView() {
-        if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
-    }
-
-    /** Shows "Canal en mantenimiento" right away (used on a real playback error). */
-    private void showMaintenanceNow() {
-        spinner.setVisibility(View.GONE);
-        maintenanceView.setAlpha(0f);
-        maintenanceView.setVisibility(View.VISIBLE);
-        maintenanceView.animate().alpha(1f).setDuration(200).start();
-    }
-
-    /** For live TV: shows the maintenance message, then automatically
-     *  retries the SAME channel after a few seconds — it used to jump to
-     *  the next channel in the list instead, which meant a channel that
-     *  just needed a moment to reconnect would get swapped out for a
-     *  completely different one without anyone asking for that. */
-    private Runnable autoAdvanceRunnable;
-    private void showMaintenanceThenAdvance() {
-        showMaintenanceNow();
-        if (autoAdvanceRunnable != null) handler.removeCallbacks(autoAdvanceRunnable);
-        autoAdvanceRunnable = this::loadCurrent; // reload the same channel, don't change it
-        handler.postDelayed(autoAdvanceRunnable, 3000);
-    }
-
     // ---------- Remote lock: checked directly by this screen ----------
     private void scheduleStatusCheck() {
         if (deviceCode == null || deviceCode.isEmpty()) return;
@@ -1049,7 +946,6 @@ public class VlcPlayerActivity extends Activity {
 
     private void showLockout(boolean blocked) {
         cancelStatusCheck();
-        cancelMaintenanceTimer();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
         if (mediaPlayer != null) mediaPlayer.stop();
 
@@ -1082,8 +978,6 @@ public class VlcPlayerActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
-        if (autoAdvanceRunnable != null) handler.removeCallbacks(autoAdvanceRunnable);
-        cancelMaintenanceTimer();
         cancelStatusCheck();
         stopProgressTicker();
         if (mediaPlayer != null) mediaPlayer.release();
