@@ -490,10 +490,15 @@ public class VlcPlayerActivity extends Activity {
     private static final long STALL_TIMEOUT_MS = 9000;
 
     /** If a live channel starts buffering and never reaches Playing within
-     *  this window, treat it as frozen and reconnect automatically. */
+     *  this window, treat it as frozen and reconnect automatically. Only
+     *  arms once per buffering episode — VLC can fire repeated Buffering
+     *  progress updates while genuinely stuck at the same spot, and
+     *  resetting the timer on every one of them meant it could never
+     *  actually elapse. */
     private void scheduleStallTimer() {
-        cancelStallTimer();
+        if (stallRunnable != null) return; // already armed for this stall
         stallRunnable = () -> {
+            stallRunnable = null;
             if (isLive) scheduleLiveRetry();
         };
         handler.postDelayed(stallRunnable, STALL_TIMEOUT_MS);
@@ -501,6 +506,7 @@ public class VlcPlayerActivity extends Activity {
 
     private void cancelStallTimer() {
         if (stallRunnable != null) handler.removeCallbacks(stallRunnable);
+        stallRunnable = null;
     }
 
     /** Reconnects to the exact same channel after a short, increasing
@@ -523,6 +529,12 @@ public class VlcPlayerActivity extends Activity {
             progressBarContainer.setVisibility(View.GONE);
             seekBar.setProgress(0);
         }
+        // Explicitly stop before loading the next media — without this,
+        // a previous session that ended in an error/stuck state can leave
+        // internal state that prevents the NEXT load from ever reaching
+        // Playing, which is why only the very first channel tended to
+        // work. Calling stop() when already stopped is a safe no-op.
+        mediaPlayer.stop();
         Media media = new Media(libVLC, Uri.parse(urls.get(currentIndex)));
         media.setHWDecoderEnabled(true, false);
         mediaPlayer.setMedia(media);
