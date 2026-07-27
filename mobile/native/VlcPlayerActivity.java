@@ -832,15 +832,16 @@ public class VlcPlayerActivity extends Activity {
         maintenanceView.animate().alpha(1f).setDuration(200).start();
     }
 
-    /** For live TV: shows the maintenance message, then automatically moves
-     *  to the next channel after a few seconds instead of getting stuck —
-     *  the person never has to back out to the home screen. */
+    /** For live TV: shows the maintenance message, then automatically
+     *  retries the SAME channel after a few seconds — it used to jump to
+     *  the next channel in the list instead, which meant a channel that
+     *  just needed a moment to reconnect would get swapped out for a
+     *  completely different one without anyone asking for that. */
     private Runnable autoAdvanceRunnable;
     private void showMaintenanceThenAdvance() {
         showMaintenanceNow();
         if (autoAdvanceRunnable != null) handler.removeCallbacks(autoAdvanceRunnable);
-        if (urls.size() <= 1) return; // nothing to advance to
-        autoAdvanceRunnable = () -> goToChannel(currentIndex + 1 >= urls.size() ? 0 : currentIndex + 1);
+        autoAdvanceRunnable = this::loadCurrent; // reload the same channel, don't change it
         handler.postDelayed(autoAdvanceRunnable, 3000);
     }
 
