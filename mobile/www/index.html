@@ -84,12 +84,17 @@
   /* ---------- Hero / signal state ---------- */
   .hero{
     margin: 6px 22px 26px;
-    border-radius: var(--radius);
+    border-radius: 20px;
     border:1px solid var(--line);
     background: var(--bg-raise);
     overflow:hidden;
     position:relative;
     aspect-ratio: 16/7;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    transition: box-shadow .3s ease, border-color .3s ease;
+  }
+  .hero.playing{
+    box-shadow: 0 0 0 1.5px rgba(255,138,61,0.5), 0 14px 40px rgba(255,138,61,0.18), 0 10px 30px rgba(0,0,0,0.45);
   }
   .hero::before{
     content:'';
@@ -277,14 +282,17 @@
   }
   .vivo-preview{
     display:flex; flex-direction:column; min-height:0;
-    padding:20px; border-radius:16px;
-    background: var(--card); border:1px solid var(--line);
+    padding:20px; border-radius:18px;
+    background: linear-gradient(165deg, var(--card), var(--bg-raise));
+    border:1px solid rgba(255,138,61,0.18);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02) inset;
   }
   .vivo-preview-art{
-    flex:1; border-radius:12px; background: var(--bg);
+    flex:1; border-radius:14px; background: var(--bg);
     display:flex; align-items:center; justify-content:center;
     margin-bottom:16px; overflow:hidden; min-height:0;
     border:1px solid var(--line);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.35);
   }
   .vivo-preview-icon{ font-size:56px; opacity:.5; }
   .vivo-preview-art img{ width:100%; height:100%; object-fit:contain; }
@@ -293,6 +301,15 @@
     color: var(--amber); letter-spacing:.04em; margin-bottom:6px;
     display:flex; align-items:center; gap:10px; flex-shrink:0;
   }
+  .vivo-preview-live::before{
+    content:''; width:7px; height:7px; border-radius:50%; background:var(--amber);
+    box-shadow: 0 0 0 0 rgba(255,138,61,0.6);
+    animation: vivoLivePulse 1.8s ease-out infinite;
+  }
+  @keyframes vivoLivePulse{
+    0%{ box-shadow: 0 0 0 0 rgba(255,138,61,0.55); }
+    100%{ box-shadow: 0 0 0 9px rgba(255,138,61,0); }
+  }
   .vivo-preview-rate{ color:var(--text-dim); font-weight:600; }
   .vivo-preview-name{
     font-family:'Space Grotesk'; font-size:20px; font-weight:700;
@@ -300,14 +317,23 @@
   }
   .vivo-preview-meta{ font-size:13px; color:var(--text-dim); margin-bottom:16px; }
   .vivo-preview-fullscreen{
-    background:var(--amber); color:#1A0E00; border:none; font-weight:700;
-    font-size:14px; padding:13px; border-radius:10px; cursor:pointer;
+    background:linear-gradient(135deg, #FFC98A, var(--amber));
+    color:#1A0E00; border:none; font-weight:700;
+    font-size:14px; padding:13px; border-radius:12px; cursor:pointer;
+    box-shadow: 0 8px 20px rgba(255,138,61,0.3);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .vivo-preview-fullscreen:focus-visible, .vivo-preview-fullscreen:hover{
+    transform: translateY(-2px);
+    box-shadow: 0 12px 26px rgba(255,138,61,0.4);
   }
 
   .vivo-recommend-card{
     display:flex; flex-direction:column; min-height:0;
-    padding:20px; border-radius:16px;
-    background: var(--card); border:1px solid var(--line);
+    padding:20px; border-radius:18px;
+    background: linear-gradient(165deg, var(--card), var(--bg-raise));
+    border:1px solid var(--line);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.4);
     overflow:hidden;
   }
   .vivo-recommend-title{
@@ -1101,7 +1127,7 @@
         <div class="vivo-preview-icon" id="vivoPreviewIcon">📡</div>
       </div>
       <div class="vivo-preview-info">
-        <div class="vivo-preview-live">● EN VIVO <span class="vivo-preview-rate" id="vivoPreviewRate"></span></div>
+        <div class="vivo-preview-live">EN VIVO <span class="vivo-preview-rate" id="vivoPreviewRate"></span></div>
         <div class="vivo-preview-name" id="vivoPreviewName">Selecciona un canal</div>
         <div class="vivo-preview-meta" id="vivoPreviewMeta"></div>
       </div>
