@@ -194,9 +194,13 @@ public class VlcPlayerActivity extends Activity {
         options.add("--no-drop-late-frames");
         options.add("--no-skip-frames");
         options.add("--rtsp-tcp");
-        options.add("--network-caching=1200");
-        options.add("--live-caching=1200");
-        options.add("--file-caching=600");
+        // 1200ms was tuned for a fast channel switch, but on a connection
+        // that isn't perfectly steady it wasn't enough buffer to absorb
+        // brief hiccups — which showed up as freezing/stalling. 2500ms
+        // matches the buffer already used elsewhere in the app.
+        options.add("--network-caching=2500");
+        options.add("--live-caching=2500");
+        options.add("--file-caching=1000");
         options.add("--http-reconnect");
 
         libVLC = new LibVLC(this, options);
@@ -229,7 +233,15 @@ public class VlcPlayerActivity extends Activity {
                     }
                 });
             } else if (event.type == MediaPlayer.Event.EndReached) {
-                runOnUiThread(this::advanceOrFinish);
+                runOnUiThread(() -> {
+                    // A live channel's connection dropping briefly can also
+                    // surface as EndReached (not just EncounteredError) —
+                    // reconnect to the SAME channel instead of advancing.
+                    // Only movies/series actually finishing should move on
+                    // to the next item.
+                    if (isLive) loadCurrent();
+                    else advanceOrFinish();
+                });
             }
         });
 
