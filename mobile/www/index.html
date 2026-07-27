@@ -1460,6 +1460,7 @@
 
 
   let liveData = null;          // becomes real provider data once connected
+  let rawLiveData = null;       // unfiltered — needed so un-hiding a category can bring it back
   let currentCat = isTV() ? 'vivo' : 'peliculas';
 
   function activeData(){ return liveData || emptyData; }
@@ -2225,6 +2226,23 @@
   const CONTINUE_MAX = 30;
   let currentPlayingItem = null; // set right before playback starts
 
+  // ---------- Hidden categories (set per-client by the admin) ----------
+  let hiddenCategoryNames = [];
+  try{ hiddenCategoryNames = JSON.parse(localStorage.getItem('netgo_hidden_categories') || '[]'); }catch(e){}
+
+  function filterHiddenCategories(data){
+    if(!data || !hiddenCategoryNames.length) return data;
+    const filtered = {};
+    for(const key of Object.keys(data)){
+      const section = data[key];
+      filtered[key] = {
+        ...section,
+        rows: (section.rows || []).filter(row => !hiddenCategoryNames.includes(row.title))
+      };
+    }
+    return filtered;
+  }
+
   function getContinueList(){
     try{ return JSON.parse(localStorage.getItem(CONTINUE_KEY) || '[]'); }catch(e){ return []; }
   }
@@ -2726,13 +2744,14 @@
     const data = await fetchXtreamServerRows(conn);
     xtreamState = { conn };
 
-    liveData = {
+    rawLiveData = {
       vivo: { rows: data.liveRows, type:'channel' },
       peliculas: { rows: data.vodRows, type:'poster' },
       series: { rows: data.seriesRows, type:'poster' },
       anime: { rows: data.animeRows, type:'poster' },
       kids: { rows: data.kidsRows, type:'poster' },
     };
+    liveData = filterHiddenCategories(rawLiveData);
 
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
     document.getElementById('heroTitle').textContent = 'Todo listo';
@@ -2753,13 +2772,14 @@
     if(!ok.length) throw new Error('Ninguno de los servidores asignados respondió');
 
     xtreamState = { conn: { type:'xtream', connections } };
-    liveData = {
+    rawLiveData = {
       vivo: { rows: [].concat(...ok.map(r => r.liveRows)), type:'channel' },
       peliculas: { rows: [].concat(...ok.map(r => r.vodRows)), type:'poster' },
       series: { rows: [].concat(...ok.map(r => r.seriesRows)), type:'poster' },
       anime: { rows: [].concat(...ok.map(r => r.animeRows)), type:'poster' },
       kids: { rows: [].concat(...ok.map(r => r.kidsRows)), type:'poster' },
     };
+    liveData = filterHiddenCategories(rawLiveData);
 
     const totalLive = ok.reduce((n, r) => n + r.counts.live, 0);
     const totalVod = ok.reduce((n, r) => n + r.counts.vod, 0);
@@ -2842,13 +2862,14 @@
       }));
     }
 
-    liveData = {
+    rawLiveData = {
       vivo: { rows: bucketToRows(buckets.vivo, true), type:'channel' },
       peliculas: { rows: bucketToRows(buckets.peliculas, false), type:'poster' },
       series: { rows: bucketToRows(buckets.series, false), type:'poster' },
       anime: { rows: bucketToRows(buckets.anime, false), type:'poster' },
       kids: { rows: bucketToRows(buckets.kids, false), type:'poster' },
     };
+    liveData = filterHiddenCategories(rawLiveData);
     xtreamState = { conn }; // minimal — enough for the account panel to know we're connected
 
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
@@ -2911,7 +2932,8 @@
       const cached = await loadCatalogCache(cacheKey);
       if(cached && cached.data){
         hadCache = true;
-        liveData = cached.data;
+        rawLiveData = cached.data;
+        liveData = filterHiddenCategories(cached.data);
         xtreamState = { conn };
         document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
         document.getElementById('heroTitle').textContent = 'Todo listo';
@@ -3064,6 +3086,17 @@
         const lastShownTs = Number(localStorage.getItem('netgo_last_message_ts') || 0);
         if(data.message.ts > lastShownTs){
           showAdminMessage(data.message.text, data.message.ts, data.message.name);
+        }
+      }
+      if(data && Array.isArray(data.hiddenCategories)){
+        const changed = JSON.stringify(data.hiddenCategories) !== JSON.stringify(hiddenCategoryNames);
+        if(changed){
+          hiddenCategoryNames = data.hiddenCategories;
+          localStorage.setItem('netgo_hidden_categories', JSON.stringify(hiddenCategoryNames));
+          if(rawLiveData){
+            liveData = filterHiddenCategories(rawLiveData);
+            renderCategory(currentCat);
+          }
         }
       }
     }catch(err){ /* offline — don't lock the app out just because of no signal */ }
