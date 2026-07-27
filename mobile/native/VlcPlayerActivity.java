@@ -188,16 +188,13 @@ public class VlcPlayerActivity extends Activity {
         options.add("--no-drop-late-frames");
         options.add("--no-skip-frames");
         options.add("--rtsp-tcp");
-        // 1200ms was tuned for a fast channel switch, but on a connection
-        // that isn't perfectly steady it wasn't enough buffer to absorb
-        // Tuned for live IPTV/HLS specifically: big enough to absorb real
-        // network fluctuations without stalling, without adding so much
-        // delay that a channel feels slow to respond.
+        // Tuned for live IPTV/HLS: big enough to absorb real network
+        // fluctuations without stalling, without adding so much delay
+        // that a channel feels slow to respond.
         options.add("--network-caching=3000");
         options.add("--live-caching=3000");
         options.add("--file-caching=1000");
         options.add("--http-reconnect");
-        options.add("--http-reconnect-delay=1000");
 
         libVLC = new LibVLC(this, options);
         mediaPlayer = new MediaPlayer(libVLC);
@@ -529,12 +526,6 @@ public class VlcPlayerActivity extends Activity {
             progressBarContainer.setVisibility(View.GONE);
             seekBar.setProgress(0);
         }
-        // Explicitly stop before loading the next media — without this,
-        // a previous session that ended in an error/stuck state can leave
-        // internal state that prevents the NEXT load from ever reaching
-        // Playing, which is why only the very first channel tended to
-        // work. Calling stop() when already stopped is a safe no-op.
-        mediaPlayer.stop();
         Media media = new Media(libVLC, Uri.parse(urls.get(currentIndex)));
         media.setHWDecoderEnabled(true, false);
         mediaPlayer.setMedia(media);
