@@ -286,6 +286,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
                     if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
                     cancelMaintenanceTimer();
                     if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
+                    selectSpanishAudioTrack();
                 });
             } else if (event.type == MediaPlayer.Event.Paused) {
                 getActivity().runOnUiThread(() -> { if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_play); });
@@ -293,6 +294,32 @@ public class InlineVlcPlayerPlugin extends Plugin {
         });
 
         startTicker();
+    }
+
+    // If the stream has more than one audio track, switch to a Spanish
+    // Latin American one automatically — checked every time playback
+    // starts, since a new item can have a different track layout than
+    // the last one. Prefers a track explicitly labeled "Latino"/"es-419"
+    // over a generic Spanish one (Spain dub), falling back to any
+    // Spanish-labeled track if that's all there is.
+    private void selectSpanishAudioTrack() {
+        if (mediaPlayer == null) return;
+        MediaPlayer.TrackDescription[] tracks = mediaPlayer.getAudioTracks();
+        if (tracks == null || tracks.length <= 1) return;
+
+        java.util.regex.Pattern latino = java.util.regex.Pattern.compile(
+                "latino|latin\\s*am|es-?419", java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Pattern anySpanish = java.util.regex.Pattern.compile(
+                "espa|spanish|\\bspa\\b|\\bes\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        Integer latinoId = null, spanishId = null;
+        for (MediaPlayer.TrackDescription t : tracks) {
+            if (t.name == null) continue;
+            if (latinoId == null && latino.matcher(t.name).find()) latinoId = t.id;
+            if (spanishId == null && anySpanish.matcher(t.name).find()) spanishId = t.id;
+        }
+        Integer chosen = latinoId != null ? latinoId : spanishId;
+        if (chosen != null) mediaPlayer.setAudioTrack(chosen);
     }
 
     private void buildControls(Activity activity, FrameLayout parent) {
