@@ -231,22 +231,12 @@
       <label>Nombre del cliente</label>
       <input id="fName" type="text" placeholder="Juan Pérez">
 
-      <label>Tipo de conexión</label>
-      <div class="conn-type-toggle">
-        <button type="button" class="conn-type-btn active" id="connTypeXtream">Xtream (usuario/clave)</button>
-        <button type="button" class="conn-type-btn" id="connTypeM3u">Lista M3U (solo URL)</button>
-      </div>
-
-      <div id="xtreamFields">
-        <label>Servidores asignados a este cliente</label>
-        <div id="serverBlocksContainer"></div>
-        <button type="button" class="ghost small" id="btnAddServerBlock" style="margin-top:8px;">+ Agregar otro servidor</button>
-      </div>
-
-      <div id="m3uFields" style="display:none">
-        <label>URL de la lista M3U</label>
-        <input id="fM3uUrl" type="text" placeholder="http://proveedor.ejemplo.com/lista.m3u">
-        <p class="tab-hint">La app del cliente todavía no reproduce listas M3U — esto solo queda guardado en tu panel por ahora.</p>
+      <label>Fuentes de contenido para este cliente</label>
+      <p class="tab-hint">Agregá cuantos servidores Xtream y listas M3U/OTT quieras — se combinan todos en un solo catálogo para el cliente.</p>
+      <div id="serverBlocksContainer"></div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button type="button" class="ghost small" id="btnAddServerBlock">+ Agregar servidor Xtream</button>
+        <button type="button" class="ghost small" id="btnAddM3uBlock">+ Agregar lista M3U/OTT</button>
       </div>
 
       <label>Teléfono del cliente (WhatsApp, con código de país)</label>
@@ -580,10 +570,11 @@
     try{
       const res = await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`);
       const c = await res.json();
-      let connections = Array.isArray(c.connections) ? c.connections
-        : (c.server ? [{ server:c.server, username:c.username, password:c.password }] : []);
+      let allConnections = Array.isArray(c.connections) ? c.connections
+        : (c.server ? [{ type:'xtream', server:c.server, username:c.username, password:c.password }] : []);
+      let connections = allConnections.filter(cc => cc.type !== 'm3u');
       if(!connections.length){
-        container.innerHTML = '<p class="empty-msg">Este cliente no tiene servidores Xtream asignados (¿es una lista M3U?).</p>';
+        container.innerHTML = '<p class="empty-msg">Este cliente no tiene servidores Xtream asignados (las listas M3U/OTT no tienen categorías consultables de esta forma).</p>';
         return;
       }
       catCurrentConnections = connections;
@@ -658,22 +649,6 @@
     }
   };
 
-  let connType = 'xtream';
-  document.getElementById('connTypeXtream').onclick = () => {
-    connType = 'xtream';
-    document.getElementById('connTypeXtream').classList.add('active');
-    document.getElementById('connTypeM3u').classList.remove('active');
-    document.getElementById('xtreamFields').style.display = 'block';
-    document.getElementById('m3uFields').style.display = 'none';
-  };
-  document.getElementById('connTypeM3u').onclick = () => {
-    connType = 'm3u';
-    document.getElementById('connTypeM3u').classList.add('active');
-    document.getElementById('connTypeXtream').classList.remove('active');
-    document.getElementById('xtreamFields').style.display = 'none';
-    document.getElementById('m3uFields').style.display = 'block';
-  };
-
   document.getElementById('btnSave').onclick = async () => {
     const code = document.getElementById('fCode').value.trim();
     const name = document.getElementById('fName').value.trim();
@@ -683,66 +658,27 @@
 
     if(!code || code.length < 4){ showFormMsg('Escribe el código del cliente.', 'err'); return; }
 
-    if(connType === 'm3u'){
-      const m3uUrl = document.getElementById('fM3uUrl').value.trim();
-      if(!m3uUrl){ showFormMsg('Escribe la URL de la lista M3U.', 'err'); return; }
-
-      showFormMsg('Guardando…', 'info');
-      try{
-        let createdAt = Date.now();
-        try{
-          const existingRes = await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`);
-          const existing = await existingRes.json();
-          if(existing && existing.createdAt) createdAt = existing.createdAt;
-        }catch(e){}
-
-        const record = { name, phone, planValue, expiry, connType:'m3u', m3uUrl, createdAt, updatedAt: Date.now() };
-        await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, {
-          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(record)
-        });
-        // Sent for completeness, even though the app doesn't play M3U yet.
-        await fetch(`${FIREBASE_BASE}/pairs/${code}.json`, {
-          method:'PUT', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ connType:'m3u', m3uUrl, ts: Date.now() })
-        });
-
-        if(phone){
-          const digits = phone.replace(/[^\d+]/g, '').replace(/^\+/, '');
-          const lines = [
-            `¡Hola ${name || ''}! Tu cuenta de NetGo fue registrada ✅`,
-            '',
-            `📋 Lista M3U: ${m3uUrl}`,
-          ];
-          window.open(`https://wa.me/${digits}?text=${encodeURIComponent(lines.join('\n'))}`, '_blank');
-        }
-
-        loadAllLists();
-        clearForm();
-        showFormMsg('✓ Guardado. Listo para el siguiente.', 'ok');
-      }catch(err){
-        showFormMsg('Error: ' + err.message, 'err');
-      }
-      return;
-    }
-
     const connections = getServerBlocksData();
-    if(!connections.length){ showFormMsg('Agrega al menos un servidor con usuario y contraseña.', 'err'); return; }
+    if(!connections.length){ showFormMsg('Agrega al menos un servidor Xtream o una lista M3U/OTT.', 'err'); return; }
 
-    showFormMsg('Consultando datos reales del proveedor…', 'info');
+    const xtreamOnes = connections.filter(c => c.type === 'xtream');
     let maxConnections = '';
-    try{
-      // Uses the first assigned server as the reference for expiry/max
-      // connections shown to the client — with several servers, each may
-      // report its own values, but this keeps the activation message simple.
-      const info = await fetchProviderInfo(connections[0].server, connections[0].username, connections[0].password);
-      if(info.expiry){
-        expiry = info.expiry;
-        document.getElementById('fExpiry').value = expiry; // reflect the real date in the form too
+    if(xtreamOnes.length){
+      showFormMsg('Consultando datos reales del proveedor…', 'info');
+      try{
+        // Uses the first Xtream server as the reference for expiry/max
+        // connections shown to the client — with several servers, each may
+        // report its own values, but this keeps the activation message simple.
+        const info = await fetchProviderInfo(xtreamOnes[0].server, xtreamOnes[0].username, xtreamOnes[0].password);
+        if(info.expiry){
+          expiry = info.expiry;
+          document.getElementById('fExpiry').value = expiry; // reflect the real date in the form too
+        }
+        maxConnections = info.maxConnections;
+      }catch(e){
+        // Couldn't reach the provider right now — fall back to whatever
+        // date was typed manually (if any) instead of blocking the save.
       }
-      maxConnections = info.maxConnections;
-    }catch(e){
-      // Couldn't reach the provider right now — fall back to whatever
-      // date was typed manually (if any) instead of blocking the save.
     }
 
     showFormMsg('Guardando…', 'info');
@@ -773,8 +709,10 @@
         const lines = [
           `¡Hola ${name || ''}! Tu cuenta de NetGo fue activada con éxito ✅`,
           '',
-          ...connections.map((c, i) => `📺 Servidor ${i + 1} — Usuario: ${c.username} / Contraseña: ${c.password}`),
-          `🔢 Conexiones máximas: ${maxConnections || '—'}`,
+          ...connections.map((c, i) => c.type === 'm3u'
+            ? `📋 Lista ${i + 1}: ${c.url}`
+            : `📺 Servidor ${i + 1} — Usuario: ${c.username} / Contraseña: ${c.password}`),
+          ...(maxConnections ? [`🔢 Conexiones máximas: ${maxConnections}`] : []),
           `📅 Vence: ${expiry || '—'}`,
         ];
         const waText = encodeURIComponent(lines.join('\n'));
@@ -790,10 +728,9 @@
   };
 
   function clearForm(){
-    ['fCode','fName','fPhone','fPlanValue','fExpiry','fM3uUrl'].forEach(id => document.getElementById(id).value = '');
+    ['fCode','fName','fPhone','fPlanValue','fExpiry'].forEach(id => document.getElementById(id).value = '');
     resetServerBlocks();
     document.getElementById('formTitle').textContent = 'Agregar / actualizar cliente';
-    document.getElementById('connTypeXtream').click();
   }
 
   function showFormMsg(text, type){
@@ -1050,21 +987,20 @@
       document.getElementById('fPlanValue').value = c.planValue || '';
       document.getElementById('fExpiry').value = c.expiry || '';
 
-      if(c.connType === 'm3u'){
-        document.getElementById('connTypeM3u').click();
-        document.getElementById('fM3uUrl').value = c.m3uUrl || '';
+      document.getElementById('serverBlocksContainer').innerHTML = '';
+      if(Array.isArray(c.connections) && c.connections.length){
+        c.connections.forEach(conn => {
+          if(conn.type === 'm3u') addM3uBlock(conn.url);
+          else addServerBlock(conn.server, conn.username, conn.password);
+        });
+      } else if(c.connType === 'm3u' && c.m3uUrl){
+        // Oldest shape (single M3U URL, from before mixed sources existed).
+        addM3uBlock(c.m3uUrl);
+      } else if(c.server){
+        // Oldest shape (single Xtream server, from before multi-server support).
+        addServerBlock(c.server, c.username, c.password);
       } else {
-        document.getElementById('connTypeXtream').click();
-        document.getElementById('serverBlocksContainer').innerHTML = '';
-        if(Array.isArray(c.connections) && c.connections.length){
-          c.connections.forEach(conn => addServerBlock(conn.server, conn.username, conn.password));
-        } else if(c.server){
-          // Older client saved before multi-server support — show it as
-          // a single block, same as always.
-          addServerBlock(c.server, c.username, c.password);
-        } else {
-          addServerBlock();
-        }
+        addServerBlock();
       }
 
       document.getElementById('formTitle').textContent = 'Editando: ' + (c.name || code);
@@ -1140,13 +1076,14 @@
 
   let availableServers = [];
 
-  function serverBlockHtml(server, username, password){
+  function xtreamBlockHtml(server, username, password){
     const options = availableServers.map(s =>
       `<option value="${s.url}"${s.url === server ? ' selected' : ''}>${s.label}</option>`
     ).join('');
     return `
-      <div class="server-block" style="border:1px solid var(--line); border-radius:9px; padding:12px; margin-bottom:10px; position:relative;">
+      <div class="server-block" data-block-type="xtream" style="border:1px solid var(--line); border-radius:9px; padding:12px; margin-bottom:10px; position:relative;">
         <button type="button" class="server-block-remove" style="position:absolute; top:8px; right:8px; background:none; border:none; color:var(--red); cursor:pointer; font-size:13px;">✕ Quitar</button>
+        <div style="font-size:11px; font-weight:700; color:var(--amber); margin-bottom:6px;">SERVIDOR XTREAM</div>
         <label>Servidor</label>
         <select class="server-block-select">
           <option value="">Selecciona un servidor…</option>
@@ -1166,23 +1103,50 @@
     `;
   }
 
+  function m3uBlockHtml(url){
+    return `
+      <div class="server-block" data-block-type="m3u" style="border:1px solid var(--line); border-radius:9px; padding:12px; margin-bottom:10px; position:relative;">
+        <button type="button" class="server-block-remove" style="position:absolute; top:8px; right:8px; background:none; border:none; color:var(--red); cursor:pointer; font-size:13px;">✕ Quitar</button>
+        <div style="font-size:11px; font-weight:700; color:var(--amber); margin-bottom:6px;">LISTA M3U / OTT</div>
+        <label>URL de la lista</label>
+        <input type="text" class="server-block-m3u-url" placeholder="http://proveedor.ejemplo.com/lista.m3u" value="${url || ''}">
+      </div>
+    `;
+  }
+
   function addServerBlock(server, username, password){
     const container = document.getElementById('serverBlocksContainer');
     const wrapper = document.createElement('div');
-    wrapper.innerHTML = serverBlockHtml(server, username, password);
+    wrapper.innerHTML = xtreamBlockHtml(server, username, password);
+    const block = wrapper.firstElementChild;
+    block.querySelector('.server-block-remove').onclick = () => block.remove();
+    container.appendChild(block);
+  }
+
+  function addM3uBlock(url){
+    const container = document.getElementById('serverBlocksContainer');
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = m3uBlockHtml(url);
     const block = wrapper.firstElementChild;
     block.querySelector('.server-block-remove').onclick = () => block.remove();
     container.appendChild(block);
   }
 
   document.getElementById('btnAddServerBlock').onclick = () => addServerBlock();
+  document.getElementById('btnAddM3uBlock').onclick = () => addM3uBlock();
 
   function getServerBlocksData(){
-    return Array.from(document.querySelectorAll('#serverBlocksContainer .server-block')).map(block => ({
-      server: block.querySelector('.server-block-select').value.trim(),
-      username: block.querySelector('.server-block-user').value.trim(),
-      password: block.querySelector('.server-block-pass').value.trim()
-    })).filter(c => c.server && c.username && c.password);
+    return Array.from(document.querySelectorAll('#serverBlocksContainer .server-block')).map(block => {
+      if(block.dataset.blockType === 'm3u'){
+        return { type:'m3u', url: block.querySelector('.server-block-m3u-url').value.trim() };
+      }
+      return {
+        type:'xtream',
+        server: block.querySelector('.server-block-select').value.trim(),
+        username: block.querySelector('.server-block-user').value.trim(),
+        password: block.querySelector('.server-block-pass').value.trim()
+      };
+    }).filter(c => c.type === 'm3u' ? c.url : (c.server && c.username && c.password));
   }
 
   function resetServerBlocks(){
