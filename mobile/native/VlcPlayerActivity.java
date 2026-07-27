@@ -190,12 +190,14 @@ public class VlcPlayerActivity extends Activity {
         options.add("--rtsp-tcp");
         // 1200ms was tuned for a fast channel switch, but on a connection
         // that isn't perfectly steady it wasn't enough buffer to absorb
-        // brief hiccups — which showed up as freezing/stalling. 2500ms
-        // matches the buffer already used elsewhere in the app.
-        options.add("--network-caching=2500");
-        options.add("--live-caching=2500");
+        // Tuned for live IPTV/HLS specifically: big enough to absorb real
+        // network fluctuations without stalling, without adding so much
+        // delay that a channel feels slow to respond.
+        options.add("--network-caching=3000");
+        options.add("--live-caching=3000");
         options.add("--file-caching=1000");
         options.add("--http-reconnect");
+        options.add("--http-reconnect-delay=1000");
 
         libVLC = new LibVLC(this, options);
         mediaPlayer = new MediaPlayer(libVLC);
@@ -206,6 +208,8 @@ public class VlcPlayerActivity extends Activity {
                 runOnUiThread(() -> {
                     spinner.setVisibility(View.GONE);
                     selectSpanishAudioTrack();
+                    liveRetryCount = 0;
+                    cancelStallTimer();
                     if (!isLive) {
                         startProgressTicker();
                         if (pendingResumePositionMs > 0) {
@@ -214,11 +218,17 @@ public class VlcPlayerActivity extends Activity {
                         }
                     }
                 });
+            } else if (event.type == MediaPlayer.Event.Buffering) {
+                if (isLive) runOnUiThread(this::scheduleStallTimer);
             } else if (event.type == MediaPlayer.Event.EncounteredError) {
-                // No dialog, no automatic channel change — VLC's own
-                // --http-reconnect keeps trying in the background. The
-                // channel only changes when the person presses the remote.
-                runOnUiThread(() -> spinner.setVisibility(View.GONE));
+                // Silent, automatic recovery — no dialog, no channel
+                // change. Reconnects to the exact same channel, backing
+                // off a little more each time so a truly dead stream
+                // doesn't hammer the server in a tight loop.
+                runOnUiThread(() -> {
+                    spinner.setVisibility(View.GONE);
+                    if (isLive) scheduleLiveRetry();
+                });
             } else if (event.type == MediaPlayer.Event.EndReached) {
                 runOnUiThread(() -> {
                     // A live channel's connection dropping briefly can also
@@ -433,6 +443,7 @@ public class VlcPlayerActivity extends Activity {
 
     private void goToChannel(int index) {
         currentIndex = index;
+        liveRetryCount = 0; // fresh channel picked by the user — start the backoff over
         loadCurrent();
         showChannelBanner();
     }
@@ -473,7 +484,38 @@ public class VlcPlayerActivity extends Activity {
         if (chosen != null) mediaPlayer.setAudioTrack(chosen);
     }
 
+    // ---------- Silent live-channel recovery (no dialog, no channel change) ----------
+    private int liveRetryCount = 0;
+    private Runnable stallRunnable;
+    private static final long STALL_TIMEOUT_MS = 9000;
+
+    /** If a live channel starts buffering and never reaches Playing within
+     *  this window, treat it as frozen and reconnect automatically. */
+    private void scheduleStallTimer() {
+        cancelStallTimer();
+        stallRunnable = () -> {
+            if (isLive) scheduleLiveRetry();
+        };
+        handler.postDelayed(stallRunnable, STALL_TIMEOUT_MS);
+    }
+
+    private void cancelStallTimer() {
+        if (stallRunnable != null) handler.removeCallbacks(stallRunnable);
+    }
+
+    /** Reconnects to the exact same channel after a short, increasing
+     *  delay — never a different channel, never a popup. Caps out at 15s
+     *  between attempts so a genuinely dead stream retries forever
+     *  without hammering the server. */
+    private void scheduleLiveRetry() {
+        cancelStallTimer();
+        liveRetryCount++;
+        long delay = Math.min(3000L + (liveRetryCount * 2000L), 15000L);
+        handler.postDelayed(this::loadCurrent, delay);
+    }
+
     private void loadCurrent() {
+        cancelStallTimer();
         spinner.setVisibility(View.VISIBLE);
         titleView.setText(titles.get(currentIndex));
         stopProgressTicker();
@@ -984,6 +1026,7 @@ public class VlcPlayerActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
+        cancelStallTimer();
         cancelStatusCheck();
         stopProgressTicker();
         if (mediaPlayer != null) mediaPlayer.release();
