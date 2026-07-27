@@ -152,6 +152,7 @@
     <button class="tab" data-tab="expiring">Usuarios por vencer</button>
     <button class="tab" data-tab="expired">Usuarios vencidos</button>
     <button class="tab" data-tab="messages">Mensajes</button>
+    <button class="tab" data-tab="categories">Categorías</button>
     <button class="tab" data-tab="admins" id="adminsTabBtn" style="display:none">Paneles de administradores</button>
     <button class="tab" data-tab="servers" id="serversTabBtn" style="display:none">Servidores</button>
   </div>
@@ -237,21 +238,9 @@
       </div>
 
       <div id="xtreamFields">
-        <label>URL del servidor</label>
-        <select id="fServer">
-          <option value="">Selecciona un servidor…</option>
-        </select>
-
-        <div class="row2">
-          <div>
-            <label>Usuario</label>
-            <input id="fUser" type="text" placeholder="usuario">
-          </div>
-          <div>
-            <label>Contraseña</label>
-            <input id="fPass" type="text" placeholder="••••••••">
-          </div>
-        </div>
+        <label>Servidores asignados a este cliente</label>
+        <div id="serverBlocksContainer"></div>
+        <button type="button" class="ghost small" id="btnAddServerBlock" style="margin-top:8px;">+ Agregar otro servidor</button>
       </div>
 
       <div id="m3uFields" style="display:none">
@@ -327,6 +316,23 @@
       <div id="massMessageLinks" style="margin-top:16px;"></div>
     </div>
   </div>
+
+  <div class="tab-panel" id="tab-categories" style="display:none">
+    <div class="card">
+      <h2>Categorías por cliente</h2>
+      <p class="tab-hint">Elige un cliente para ver las categorías de sus servidores asignados. Destildá las que no quieras que vea — se puede aplicar solo a este cliente o a todos de una.</p>
+      <label>Cliente</label>
+      <select id="catClientSelect">
+        <option value="">Selecciona un cliente…</option>
+      </select>
+      <div id="catLoadingMsg" class="empty-msg" style="display:none">Consultando categorías del servidor…</div>
+      <div id="catGroupsContainer" style="margin-top:14px;"></div>
+      <div id="catActions" style="display:none; gap:10px; margin-top:16px;">
+        <button class="primary" id="btnSaveCatForClient">Guardar para este cliente</button>
+        <button class="ghost small" id="btnSaveCatForAll">Aplicar a TODOS los clientes de este servidor</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="qr-overlay" id="messageModalOverlay" style="display:none; position:fixed; inset:0; background:rgba(5,12,17,0.85); align-items:center; justify-content:center; z-index:300;">
@@ -395,6 +401,7 @@
       document.getElementById('tab-summary').style.display = 'block';
       loadAllLists();
       loadServerOptions();
+      resetServerBlocks();
       loadSummary();
     } else {
       gateMsg.style.display = 'block';
@@ -528,6 +535,129 @@
     return { expiry, maxConnections: info.max_connections || '' };
   }
 
+  // ---------- Category management (hide categories per client / bulk) ----------
+  async function fetchCategoriesFor(server, username, password){
+    const base = server.replace(/\/+$/,'');
+    async function call(action){
+      const url = `${base}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&action=${action}`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }
+    const [live, vod, series] = await Promise.all([
+      call('get_live_categories'), call('get_vod_categories'), call('get_series_categories')
+    ]);
+    return {
+      Vivo: (live || []).map(c => c.category_name),
+      Películas: (vod || []).map(c => c.category_name),
+      Series: (series || []).map(c => c.category_name),
+    };
+  }
+
+  let catCurrentClientCode = '';
+  let catCurrentConnections = [];
+
+  async function populateCatClientSelect(){
+    const select = document.getElementById('catClientSelect');
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/${clientsPath()}.json`);
+      const data = await res.json() || {};
+      select.innerHTML = '<option value="">Selecciona un cliente…</option>' +
+        Object.entries(data).map(([code, c]) => `<option value="${code}">${c.name || code} (${code})</option>`).join('');
+    }catch(err){}
+  }
+
+  document.getElementById('catClientSelect').onchange = async () => {
+    const code = document.getElementById('catClientSelect').value;
+    const container = document.getElementById('catGroupsContainer');
+    const actions = document.getElementById('catActions');
+    container.innerHTML = '';
+    actions.style.display = 'none';
+    if(!code) return;
+
+    catCurrentClientCode = code;
+    document.getElementById('catLoadingMsg').style.display = 'block';
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`);
+      const c = await res.json();
+      let connections = Array.isArray(c.connections) ? c.connections
+        : (c.server ? [{ server:c.server, username:c.username, password:c.password }] : []);
+      if(!connections.length){
+        container.innerHTML = '<p class="empty-msg">Este cliente no tiene servidores Xtream asignados (¿es una lista M3U?).</p>';
+        return;
+      }
+      catCurrentConnections = connections;
+      const hidden = new Set(c.hiddenCategories || []);
+
+      const results = await Promise.all(connections.map(conn =>
+        fetchCategoriesFor(conn.server, conn.username, conn.password)
+          .then(cats => ({ conn, cats }))
+          .catch(err => ({ conn, error: err.message }))
+      ));
+
+      container.innerHTML = results.map(r => {
+        if(r.error) return `<p class="empty-msg">No se pudo leer categorías de ${r.conn.server}: ${r.error}</p>`;
+        return Object.entries(r.cats).map(([group, names]) => `
+          <div style="margin-bottom:14px;">
+            <div style="font-weight:700; font-size:13px; margin-bottom:6px;">${group} — ${r.conn.server}</div>
+            ${names.map(name => `
+              <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:3px 0;">
+                <input type="checkbox" class="cat-hide-checkbox" data-name="${name}" ${hidden.has(name) ? 'checked' : ''}>
+                <span>${name}</span>
+              </label>
+            `).join('')}
+          </div>
+        `).join('');
+      }).join('');
+
+      actions.style.display = 'flex';
+    }catch(err){
+      container.innerHTML = '<p class="empty-msg">Error: ' + err.message + '</p>';
+    }finally{
+      document.getElementById('catLoadingMsg').style.display = 'none';
+    }
+  };
+
+  function getHiddenCategoryNames(){
+    return Array.from(document.querySelectorAll('.cat-hide-checkbox:checked')).map(cb => cb.dataset.name);
+  }
+
+  document.getElementById('btnSaveCatForClient').onclick = async () => {
+    const hiddenCategories = getHiddenCategoryNames();
+    await fetch(`${FIREBASE_BASE}/${clientsPath()}/${catCurrentClientCode}/hiddenCategories.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(hiddenCategories)
+    });
+    await fetch(`${FIREBASE_BASE}/status/${catCurrentClientCode}/hiddenCategories.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(hiddenCategories)
+    });
+    alert('Guardado. Se aplicará en la app de este cliente en un par de minutos.');
+  };
+
+  document.getElementById('btnSaveCatForAll').onclick = async () => {
+    const hiddenCategories = getHiddenCategoryNames();
+    const serverUrls = catCurrentConnections.map(c => c.server);
+    if(!confirm(`¿Aplicar esta configuración de categorías a TODOS los clientes que usan ${serverUrls.join(', ')}?`)) return;
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/${clientsPath()}.json`);
+      const data = await res.json() || {};
+      const targets = Object.entries(data).filter(([code, c]) => {
+        const conns = Array.isArray(c.connections) ? c.connections : (c.server ? [{ server:c.server }] : []);
+        return conns.some(cc => serverUrls.includes(cc.server));
+      });
+      await Promise.all(targets.map(([code]) => Promise.all([
+        fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}/hiddenCategories.json`, {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(hiddenCategories)
+        }),
+        fetch(`${FIREBASE_BASE}/status/${code}/hiddenCategories.json`, {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(hiddenCategories)
+        })
+      ])));
+      alert(`Aplicado a ${targets.length} cliente(s).`);
+    }catch(err){
+      alert('Error: ' + err.message);
+    }
+  };
+
   let connType = 'xtream';
   document.getElementById('connTypeXtream').onclick = () => {
     connType = 'xtream';
@@ -595,16 +725,16 @@
       return;
     }
 
-    const server = document.getElementById('fServer').value.trim();
-    const username = document.getElementById('fUser').value.trim();
-    const password = document.getElementById('fPass').value.trim();
-
-    if(!server || !username || !password){ showFormMsg('Completa URL, usuario y contraseña.', 'err'); return; }
+    const connections = getServerBlocksData();
+    if(!connections.length){ showFormMsg('Agrega al menos un servidor con usuario y contraseña.', 'err'); return; }
 
     showFormMsg('Consultando datos reales del proveedor…', 'info');
     let maxConnections = '';
     try{
-      const info = await fetchProviderInfo(server, username, password);
+      // Uses the first assigned server as the reference for expiry/max
+      // connections shown to the client — with several servers, each may
+      // report its own values, but this keeps the activation message simple.
+      const info = await fetchProviderInfo(connections[0].server, connections[0].username, connections[0].password);
       if(info.expiry){
         expiry = info.expiry;
         document.getElementById('fExpiry').value = expiry; // reflect the real date in the form too
@@ -624,14 +754,14 @@
         if(existing && existing.createdAt) createdAt = existing.createdAt;
       }catch(e){}
 
-      const record = { name, server, phone, username, password, planValue, expiry, maxConnections, createdAt, updatedAt: Date.now() };
+      const record = { name, connections, phone, planValue, expiry, maxConnections, createdAt, updatedAt: Date.now() };
 
       await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, {
         method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(record)
       });
       await fetch(`${FIREBASE_BASE}/pairs/${code}.json`, {
         method:'PUT', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ server, username, password, ts: Date.now() })
+        body: JSON.stringify({ connections, ts: Date.now() })
       });
 
       // Open WhatsApp with the activation message pre-filled and ready —
@@ -643,8 +773,7 @@
         const lines = [
           `¡Hola ${name || ''}! Tu cuenta de NetGo fue activada con éxito ✅`,
           '',
-          `📺 Usuario: ${username}`,
-          `🔑 Contraseña: ${password}`,
+          ...connections.map((c, i) => `📺 Servidor ${i + 1} — Usuario: ${c.username} / Contraseña: ${c.password}`),
           `🔢 Conexiones máximas: ${maxConnections || '—'}`,
           `📅 Vence: ${expiry || '—'}`,
         ];
@@ -661,7 +790,8 @@
   };
 
   function clearForm(){
-    ['fCode','fName','fServer','fPhone','fUser','fPass','fPlanValue','fExpiry','fM3uUrl'].forEach(id => document.getElementById(id).value = '');
+    ['fCode','fName','fPhone','fPlanValue','fExpiry','fM3uUrl'].forEach(id => document.getElementById(id).value = '');
+    resetServerBlocks();
     document.getElementById('formTitle').textContent = 'Agregar / actualizar cliente';
     document.getElementById('connTypeXtream').click();
   }
@@ -924,9 +1054,16 @@
         document.getElementById('fM3uUrl').value = c.m3uUrl || '';
       } else {
         document.getElementById('connTypeXtream').click();
-        document.getElementById('fServer').value = c.server || '';
-        document.getElementById('fUser').value = c.username || '';
-        document.getElementById('fPass').value = c.password || '';
+        document.getElementById('serverBlocksContainer').innerHTML = '';
+        if(Array.isArray(c.connections) && c.connections.length){
+          c.connections.forEach(conn => addServerBlock(conn.server, conn.username, conn.password));
+        } else if(c.server){
+          // Older client saved before multi-server support — show it as
+          // a single block, same as always.
+          addServerBlock(c.server, c.username, c.password);
+        } else {
+          addServerBlock();
+        }
       }
 
       document.getElementById('formTitle').textContent = 'Editando: ' + (c.name || code);
@@ -1000,16 +1137,71 @@
     loadServerOptions();
   };
 
+  let availableServers = [];
+
+  function serverBlockHtml(server, username, password){
+    const options = availableServers.map(s =>
+      `<option value="${s.url}"${s.url === server ? ' selected' : ''}>${s.label}</option>`
+    ).join('');
+    return `
+      <div class="server-block" style="border:1px solid var(--line); border-radius:9px; padding:12px; margin-bottom:10px; position:relative;">
+        <button type="button" class="server-block-remove" style="position:absolute; top:8px; right:8px; background:none; border:none; color:var(--red); cursor:pointer; font-size:13px;">✕ Quitar</button>
+        <label>Servidor</label>
+        <select class="server-block-select">
+          <option value="">Selecciona un servidor…</option>
+          ${options}
+        </select>
+        <div class="row2">
+          <div>
+            <label>Usuario</label>
+            <input type="text" class="server-block-user" placeholder="usuario" value="${username || ''}">
+          </div>
+          <div>
+            <label>Contraseña</label>
+            <input type="text" class="server-block-pass" placeholder="••••••••" value="${password || ''}">
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function addServerBlock(server, username, password){
+    const container = document.getElementById('serverBlocksContainer');
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = serverBlockHtml(server, username, password);
+    const block = wrapper.firstElementChild;
+    block.querySelector('.server-block-remove').onclick = () => block.remove();
+    container.appendChild(block);
+  }
+
+  document.getElementById('btnAddServerBlock').onclick = () => addServerBlock();
+
+  function getServerBlocksData(){
+    return Array.from(document.querySelectorAll('#serverBlocksContainer .server-block')).map(block => ({
+      server: block.querySelector('.server-block-select').value.trim(),
+      username: block.querySelector('.server-block-user').value.trim(),
+      password: block.querySelector('.server-block-pass').value.trim()
+    })).filter(c => c.server && c.username && c.password);
+  }
+
+  function resetServerBlocks(){
+    document.getElementById('serverBlocksContainer').innerHTML = '';
+    addServerBlock();
+  }
+
   async function loadServerOptions(){
-    const select = document.getElementById('fServer');
-    const currentValue = select.value;
     try{
       const res = await fetch(`${FIREBASE_BASE}/servers.json`);
       const data = await res.json() || {};
-      const ids = Object.keys(data);
-      select.innerHTML = '<option value="">Selecciona un servidor…</option>' +
-        ids.map(id => `<option value="${data[id].url}">${data[id].label}</option>`).join('');
-      if(currentValue) select.value = currentValue;
+      availableServers = Object.keys(data).map(id => ({ url: data[id].url, label: data[id].label }));
+      // Refresh options in any server blocks already on screen, keeping
+      // each one's current selection.
+      document.querySelectorAll('#serverBlocksContainer .server-block').forEach(block => {
+        const select = block.querySelector('.server-block-select');
+        const current = select.value;
+        select.innerHTML = '<option value="">Selecciona un servidor…</option>' +
+          availableServers.map(s => `<option value="${s.url}"${s.url === current ? ' selected' : ''}>${s.label}</option>`).join('');
+      });
     }catch(err){}
   }
 </script>
