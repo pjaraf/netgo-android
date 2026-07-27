@@ -1146,7 +1146,7 @@
         username: block.querySelector('.server-block-user').value.trim(),
         password: block.querySelector('.server-block-pass').value.trim()
       };
-    }).filter(c => c.type === 'm3u' ? c.url : (c.server && c.username && c.password));
+    }).filter(c => c.type === 'm3u' ? c.url : c.server);
   }
 
   function resetServerBlocks(){
