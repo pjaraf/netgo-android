@@ -202,6 +202,20 @@
       <button class="ghost small" id="refreshServersBtn">🔄 Actualizar</button>
       <div id="serversList"></div>
     </div>
+    <div class="card">
+      <h2>Agregar lista M3U / OTT</h2>
+      <label>Nombre / etiqueta</label>
+      <input id="newM3uLabel" type="text" placeholder="ej: Lista OTT Premium">
+      <label>URL de la lista</label>
+      <input id="newM3uUrl" type="text" placeholder="http://proveedor.ejemplo.com/lista.m3u">
+      <button id="btnAddM3uList">Agregar lista</button>
+      <p class="msg" id="m3uListMsg"></p>
+    </div>
+    <div class="card">
+      <h2>Listas M3U/OTT configuradas</h2>
+      <button class="ghost small" id="refreshM3uListsBtn">🔄 Actualizar</button>
+      <div id="m3uListsList"></div>
+    </div>
   </div>
 
   <div class="tab-panel" id="tab-admins" style="display:none">
@@ -219,6 +233,31 @@
       <h2>Administradores existentes</h2>
       <button class="ghost small" id="refreshAdminsBtn">🔄 Actualizar</button>
       <div id="adminsList"></div>
+    </div>
+    <div class="card">
+      <h2>Permisos por sub-administrador</h2>
+      <p class="tab-hint">Elegí qué servidores, listas M3U/OTT y categorías de cada uno puede usar este sub-administrador al crear clientes — no va a ver el resto.</p>
+      <label>Sub-administrador</label>
+      <select id="permAdminSelect">
+        <option value="">Selecciona un sub-administrador…</option>
+      </select>
+      <div id="permContent" style="display:none; margin-top:14px;">
+        <div style="margin-bottom:16px;">
+          <div style="font-weight:700; font-size:13px; margin-bottom:8px;">Servidores Xtream permitidos</div>
+          <div id="permServersList"></div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <div style="font-weight:700; font-size:13px; margin-bottom:8px;">Listas M3U/OTT permitidas</div>
+          <div id="permM3uList"></div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <div style="font-weight:700; font-size:13px; margin-bottom:8px;">Categorías permitidas por servidor</div>
+          <p class="tab-hint">Para traer las categorías reales de un servidor permitido, escribí credenciales de prueba (cualquier usuario/clave válido de ese servidor).</p>
+          <div id="permCategoriesArea"></div>
+        </div>
+        <button class="primary" id="btnSavePermissions">Guardar permisos</button>
+        <p class="msg" id="permMsg"></p>
+      </div>
     </div>
   </div>
 
@@ -390,7 +429,9 @@
       document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
       document.getElementById('tab-summary').style.display = 'block';
       loadAllLists();
+      await loadCurrentAdminPermissions();
       loadServerOptions();
+      loadM3uListOptions();
       resetServerBlocks();
       loadSummary();
     } else {
@@ -455,10 +496,160 @@
         return;
       }
       list.innerHTML = users.map(u => adminCardHtml(u, data[u])).join('');
+      populatePermAdminSelect(users);
     }catch(err){
       list.innerHTML = `<p class="msg err">No se pudo cargar: ${err.message}</p>`;
     }
   }
+
+  // ---------- Sub-admin permissions (which servers/lists/categories they can offer clients) ----------
+  function populatePermAdminSelect(users){
+    const select = document.getElementById('permAdminSelect');
+    const subAdmins = users.filter(u => u !== SUPER_ADMIN_USER);
+    select.innerHTML = '<option value="">Selecciona un sub-administrador…</option>' +
+      subAdmins.map(u => `<option value="${u}">${u}</option>`).join('');
+  }
+
+  let permTargetUser = '';
+  let permAllServers = [];   // full global list, from servers.json — not filtered
+  let permAllM3uLists = [];  // full global list, from m3uLists.json — not filtered
+  let permCurrentData = { allowedServers:[], allowedM3uLists:[], allowedCategories:{} };
+
+  document.getElementById('permAdminSelect').onchange = async () => {
+    permTargetUser = document.getElementById('permAdminSelect').value;
+    const content = document.getElementById('permContent');
+    if(!permTargetUser){ content.style.display = 'none'; return; }
+
+    const [serversRes, listsRes, permRes] = await Promise.all([
+      fetch(`${FIREBASE_BASE}/servers.json`),
+      fetch(`${FIREBASE_BASE}/m3uLists.json`),
+      fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(permTargetUser)}/permissions.json`)
+    ]);
+    const serversData = await serversRes.json() || {};
+    const listsData = await listsRes.json() || {};
+    const existingPerm = await permRes.json() || {};
+
+    permAllServers = Object.keys(serversData).map(id => ({ id, url: serversData[id].url, label: serversData[id].label }));
+    permAllM3uLists = Object.keys(listsData).map(id => ({ id, url: listsData[id].url, label: listsData[id].label }));
+    permCurrentData = {
+      allowedServers: existingPerm.allowedServers || [],
+      allowedM3uLists: existingPerm.allowedM3uLists || [],
+      allowedCategories: existingPerm.allowedCategories || {}
+    };
+
+    document.getElementById('permServersList').innerHTML = permAllServers.length
+      ? permAllServers.map(s => `
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:3px 0;">
+            <input type="checkbox" class="perm-server-checkbox" data-id="${s.id}" ${permCurrentData.allowedServers.includes(s.id) ? 'checked' : ''}>
+            <span>${s.label} — ${s.url}</span>
+          </label>
+        `).join('')
+      : '<p class="empty-msg">No hay servidores configurados todavía.</p>';
+
+    document.getElementById('permM3uList').innerHTML = permAllM3uLists.length
+      ? permAllM3uLists.map(m => `
+          <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:3px 0;">
+            <input type="checkbox" class="perm-m3u-checkbox" data-id="${m.id}" ${permCurrentData.allowedM3uLists.includes(m.id) ? 'checked' : ''}>
+            <span>${m.label} — ${m.url}</span>
+          </label>
+        `).join('')
+      : '<p class="empty-msg">No hay listas M3U/OTT configuradas todavía.</p>';
+
+    renderPermCategoriesArea();
+    content.style.display = 'block';
+  };
+
+  function renderPermCategoriesArea(){
+    const area = document.getElementById('permCategoriesArea');
+    const allowedServerIds = Array.from(document.querySelectorAll('.perm-server-checkbox:checked')).map(cb => cb.dataset.id);
+    if(!allowedServerIds.length){
+      area.innerHTML = '<p class="empty-msg">Marca al menos un servidor arriba para poder elegir sus categorías.</p>';
+      return;
+    }
+    area.innerHTML = allowedServerIds.map(id => {
+      const server = permAllServers.find(s => s.id === id);
+      if(!server) return '';
+      const savedCats = permCurrentData.allowedCategories[server.url] || null;
+      return `
+        <div style="border:1px solid var(--line); border-radius:9px; padding:12px; margin-bottom:10px;" data-perm-cat-block="${server.url}">
+          <div style="font-weight:700; font-size:13px; margin-bottom:8px;">${server.label}</div>
+          <div class="row2">
+            <div><label>Usuario de prueba</label><input type="text" class="perm-cat-test-user" placeholder="usuario"></div>
+            <div><label>Contraseña de prueba</label><input type="text" class="perm-cat-test-pass" placeholder="••••••••"></div>
+          </div>
+          <button type="button" class="ghost small perm-cat-fetch-btn" style="margin-top:8px;">Traer categorías</button>
+          <div class="perm-cat-checkboxes" style="margin-top:10px;">
+            ${savedCats ? '<p class="tab-hint">Ya hay categorías guardadas para este servidor — traé de nuevo si querés cambiarlas.</p>' : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    area.querySelectorAll('.perm-cat-fetch-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const block = btn.closest('[data-perm-cat-block]');
+        const serverUrl = block.dataset.permCatBlock;
+        const user = block.querySelector('.perm-cat-test-user').value.trim();
+        const pass = block.querySelector('.perm-cat-test-pass').value.trim();
+        const checkboxesDiv = block.querySelector('.perm-cat-checkboxes');
+        checkboxesDiv.innerHTML = '<p class="empty-msg">Consultando…</p>';
+        try{
+          const cats = await fetchCategoriesFor(serverUrl, user, pass);
+          const saved = new Set(permCurrentData.allowedCategories[serverUrl] || []);
+          checkboxesDiv.innerHTML = Object.entries(cats).map(([group, names]) => `
+            <div style="margin-bottom:8px;">
+              <div style="font-weight:700; font-size:12px; margin-bottom:4px;">${group}</div>
+              ${names.map(name => `
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:2px 0;">
+                  <input type="checkbox" class="perm-cat-name-checkbox" data-name="${name}" ${saved.size === 0 || saved.has(name) ? 'checked' : ''}>
+                  <span>${name}</span>
+                </label>
+              `).join('')}
+            </div>
+          `).join('');
+        }catch(err){
+          checkboxesDiv.innerHTML = '<p class="empty-msg">Error: ' + err.message + '</p>';
+        }
+      };
+    });
+  }
+
+  document.getElementById('permServersList').addEventListener('change', (e) => {
+    if(e.target.classList.contains('perm-server-checkbox')) renderPermCategoriesArea();
+  });
+
+  document.getElementById('btnSavePermissions').onclick = async () => {
+    if(!permTargetUser) return;
+    const allowedServers = Array.from(document.querySelectorAll('.perm-server-checkbox:checked')).map(cb => cb.dataset.id);
+    const allowedM3uLists = Array.from(document.querySelectorAll('.perm-m3u-checkbox:checked')).map(cb => cb.dataset.id);
+
+    const allowedCategories = { ...permCurrentData.allowedCategories };
+    document.querySelectorAll('[data-perm-cat-block]').forEach(block => {
+      const serverUrl = block.dataset.permCatBlock;
+      const checkboxes = block.querySelectorAll('.perm-cat-name-checkbox');
+      if(checkboxes.length){
+        allowedCategories[serverUrl] = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.dataset.name);
+      }
+    });
+    // Drop category permissions for servers that got un-checked above.
+    Object.keys(allowedCategories).forEach(url => {
+      const server = permAllServers.find(s => s.url === url);
+      if(server && !allowedServers.includes(server.id)) delete allowedCategories[url];
+    });
+
+    const msg = document.getElementById('permMsg');
+    msg.textContent = 'Guardando…'; msg.className = 'msg info';
+    try{
+      await fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(permTargetUser)}/permissions.json`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ allowedServers, allowedM3uLists, allowedCategories })
+      });
+      msg.textContent = '✓ Permisos guardados para ' + permTargetUser + '.'; msg.className = 'msg ok';
+    }catch(err){
+      msg.textContent = 'Error: ' + err.message; msg.className = 'msg err';
+    }
+  };
+
 
   function adminCardHtml(user, a){
     a = a || {};
@@ -588,17 +779,26 @@
 
       container.innerHTML = results.map(r => {
         if(r.error) return `<p class="empty-msg">No se pudo leer categorías de ${r.conn.server}: ${r.error}</p>`;
-        return Object.entries(r.cats).map(([group, names]) => `
+        // A sub-admin with restricted categories for this server only
+        // sees the ones they're allowed to offer — anything else stays
+        // permanently hidden for their clients regardless of this screen.
+        const allowedForThisServer = currentAdminPermissions && currentAdminPermissions.allowedCategories
+          ? currentAdminPermissions.allowedCategories[r.conn.server] : null;
+        return Object.entries(r.cats).map(([group, names]) => {
+          const visibleNames = allowedForThisServer ? names.filter(n => allowedForThisServer.includes(n)) : names;
+          if(!visibleNames.length) return '';
+          return `
           <div style="margin-bottom:14px;">
             <div style="font-weight:700; font-size:13px; margin-bottom:6px;">${group} — ${r.conn.server}</div>
-            ${names.map(name => `
+            ${visibleNames.map(name => `
               <label style="display:flex; align-items:center; gap:8px; font-size:13px; padding:3px 0;">
                 <input type="checkbox" class="cat-hide-checkbox" data-name="${name}" ${hidden.has(name) ? 'checked' : ''}>
                 <span>${name}</span>
               </label>
             `).join('')}
           </div>
-        `).join('');
+        `;
+        }).join('');
       }).join('');
 
       actions.style.display = 'flex';
@@ -1074,6 +1274,88 @@
     loadServerOptions();
   };
 
+  document.getElementById('btnAddM3uList').onclick = async () => {
+    if(currentAdminUser !== SUPER_ADMIN_USER){
+      alert('Solo el administrador principal puede agregar listas.');
+      return;
+    }
+    const label = document.getElementById('newM3uLabel').value.trim();
+    const url = document.getElementById('newM3uUrl').value.trim();
+    const msg = document.getElementById('m3uListMsg');
+    if(!label || !url){ msg.textContent = 'Completa nombre y URL.'; msg.className = 'msg err'; return; }
+    msg.textContent = 'Guardando…'; msg.className = 'msg info';
+    try{
+      await fetch(`${FIREBASE_BASE}/m3uLists.json`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ label, url, createdAt: Date.now() })
+      });
+      msg.textContent = '✓ Lista agregada.'; msg.className = 'msg ok';
+      document.getElementById('newM3uLabel').value = '';
+      document.getElementById('newM3uUrl').value = '';
+      loadM3uListsList();
+      loadM3uListOptions();
+    }catch(err){
+      msg.textContent = 'Error: ' + err.message; msg.className = 'msg err';
+    }
+  };
+
+  document.getElementById('refreshM3uListsBtn').onclick = loadM3uListsList;
+
+  async function loadM3uListsList(){
+    const list = document.getElementById('m3uListsList');
+    list.innerHTML = '<p class="msg info">Cargando…</p>';
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/m3uLists.json`);
+      const data = await res.json() || {};
+      const ids = Object.keys(data);
+      if(!ids.length){
+        list.innerHTML = '<p class="empty-msg">Todavía no agregaste ninguna lista.</p>';
+        return;
+      }
+      list.innerHTML = ids.map(id => `
+        <div class="client-card">
+          <div class="client-top">
+            <div class="client-name">${data[id].label}</div>
+          </div>
+          <div class="client-grid">
+            <div style="grid-column:1/-1;"><span>URL</span><b>${data[id].url}</b></div>
+          </div>
+          <div class="client-actions">
+            <button class="ghost small" style="color:var(--red); border-color:rgba(255,107,107,.4);" onclick="deleteM3uList('${id}')">Eliminar lista</button>
+          </div>
+        </div>
+      `).join('');
+    }catch(err){
+      list.innerHTML = `<p class="msg err">No se pudo cargar: ${err.message}</p>`;
+    }
+  }
+
+  window.deleteM3uList = async (id) => {
+    if(currentAdminUser !== SUPER_ADMIN_USER) return;
+    if(!confirm('¿Eliminar esta lista?')) return;
+    await fetch(`${FIREBASE_BASE}/m3uLists/${id}.json`, { method:'DELETE' });
+    loadM3uListsList();
+    loadM3uListOptions();
+  };
+
+  let availableM3uLists = [];
+  async function loadM3uListOptions(){
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/m3uLists.json`);
+      const data = await res.json() || {};
+      let ids = Object.keys(data);
+      if(currentAdminPermissions && Array.isArray(currentAdminPermissions.allowedM3uLists)){
+        ids = ids.filter(id => currentAdminPermissions.allowedM3uLists.includes(id));
+      }
+      availableM3uLists = ids.map(id => ({ id, url: data[id].url, label: data[id].label }));
+      document.querySelectorAll('#serverBlocksContainer [data-block-type="m3u"] .server-block-m3u-url').forEach(select => {
+        const current = select.value;
+        select.innerHTML = '<option value="">Selecciona una lista…</option>' +
+          availableM3uLists.map(m => `<option value="${m.url}"${m.url === current ? ' selected' : ''}>${m.label}</option>`).join('');
+      });
+    }catch(err){}
+  }
+
   let availableServers = [];
 
   function xtreamBlockHtml(server, username, password){
@@ -1104,12 +1386,18 @@
   }
 
   function m3uBlockHtml(url){
+    const options = availableM3uLists.map(m =>
+      `<option value="${m.url}"${m.url === url ? ' selected' : ''}>${m.label}</option>`
+    ).join('');
     return `
       <div class="server-block" data-block-type="m3u" style="border:1px solid var(--line); border-radius:9px; padding:12px; margin-bottom:10px; position:relative;">
         <button type="button" class="server-block-remove" style="position:absolute; top:8px; right:8px; background:none; border:none; color:var(--red); cursor:pointer; font-size:13px;">✕ Quitar</button>
         <div style="font-size:11px; font-weight:700; color:var(--amber); margin-bottom:6px;">LISTA M3U / OTT</div>
-        <label>URL de la lista</label>
-        <input type="text" class="server-block-m3u-url" placeholder="http://proveedor.ejemplo.com/lista.m3u" value="${url || ''}">
+        <label>Lista</label>
+        <select class="server-block-m3u-url">
+          <option value="">Selecciona una lista…</option>
+          ${options}
+        </select>
       </div>
     `;
   }
@@ -1154,11 +1442,28 @@
     addServerBlock();
   }
 
+  let currentAdminPermissions = null;
+  async function loadCurrentAdminPermissions(){
+    if(currentAdminUser === SUPER_ADMIN_USER){ currentAdminPermissions = null; return; }
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/admins/${encodeURIComponent(currentAdminUser)}/permissions.json`);
+      currentAdminPermissions = await res.json() || null;
+    }catch(err){ currentAdminPermissions = null; }
+  }
+
   async function loadServerOptions(){
     try{
       const res = await fetch(`${FIREBASE_BASE}/servers.json`);
       const data = await res.json() || {};
-      availableServers = Object.keys(data).map(id => ({ url: data[id].url, label: data[id].label }));
+      let ids = Object.keys(data);
+      // A sub-admin with permissions configured only sees the servers
+      // the super admin allowed them — an empty/missing permissions
+      // record means unrestricted (matches how it worked before this
+      // feature existed, so nobody gets locked out by accident).
+      if(currentAdminPermissions && Array.isArray(currentAdminPermissions.allowedServers)){
+        ids = ids.filter(id => currentAdminPermissions.allowedServers.includes(id));
+      }
+      availableServers = ids.map(id => ({ id, url: data[id].url, label: data[id].label }));
       // Refresh options in any server blocks already on screen, keeping
       // each one's current selection.
       document.querySelectorAll('#serverBlocksContainer .server-block').forEach(block => {
