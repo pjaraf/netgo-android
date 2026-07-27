@@ -2649,7 +2649,10 @@
     return (categories || []).filter(c => !EXCLUDED_CATEGORY_REGEX.test(c.category_name));
   }
 
-  async function connectXtream(conn){
+  // Fetches and shapes ONE server's catalog into our row format, without
+  // touching any global state — this is the shared building block for
+  // both a single-server connection and combining several servers together.
+  async function fetchXtreamServerRows(conn){
     const [liveCategoriesRaw, vodCategoriesRaw, seriesCategoriesRaw] = await Promise.all([
       xtreamFetch(conn, 'get_live_categories'),
       xtreamFetch(conn, 'get_vod_categories'),
@@ -2663,7 +2666,6 @@
       xtreamFetch(conn, 'get_vod_streams'),
       xtreamFetch(conn, 'get_series'),
     ]);
-    xtreamState = { conn, liveCategories, vodCategories, seriesCategories, live, vod, series };
 
     const base = conn.server.replace(/\/+$/,'');
     const liveRows = groupByCategory(live, liveCategories).map(row => ({
@@ -2714,20 +2716,61 @@
       })) }));
     const kidsRows = kidsVodRows.concat(kidsSeriesRows);
 
+    return {
+      liveRows, vodRows, seriesRows, animeRows, kidsRows,
+      counts: { live: live.length, vod: vod.length, series: series.length }
+    };
+  }
+
+  async function connectXtream(conn){
+    const data = await fetchXtreamServerRows(conn);
+    xtreamState = { conn };
+
     liveData = {
-      vivo: { rows: liveRows, type:'channel' },
-      peliculas: { rows: vodRows, type:'poster' },
-      series: { rows: seriesRows, type:'poster' },
-      anime: { rows: animeRows, type:'poster' },
-      kids: { rows: kidsRows, type:'poster' },
+      vivo: { rows: data.liveRows, type:'channel' },
+      peliculas: { rows: data.vodRows, type:'poster' },
+      series: { rows: data.seriesRows, type:'poster' },
+      anime: { rows: data.animeRows, type:'poster' },
+      kids: { rows: data.kidsRows, type:'poster' },
     };
 
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
     document.getElementById('heroTitle').textContent = 'Todo listo';
-    document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${live.length}</b> canales</span><span><b>${vod.length}</b> películas</span><span><b>${series.length}</b> series</span></div>`;
+    document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${data.counts.live}</b> canales</span><span><b>${data.counts.vod}</b> películas</span><span><b>${data.counts.series}</b> series</span></div>`;
     document.getElementById('heroConnect').textContent = 'Actualizar catálogo';
     renderCategory(currentCat);
   }
+
+  // Same as connectXtream, but for a client with SEVERAL servers assigned
+  // at once — fetches each one and merges their categories together under
+  // the same tabs, so the person just sees one combined catalog.
+  async function connectMultiXtream(connections){
+    const results = await Promise.all(
+      connections.map(c => fetchXtreamServerRows({ type:'xtream', server:c.server, username:c.username, password:c.password })
+        .catch(err => { console.error('One server failed to load:', c.server, err); return null; }))
+    );
+    const ok = results.filter(Boolean);
+    if(!ok.length) throw new Error('Ninguno de los servidores asignados respondió');
+
+    xtreamState = { conn: { type:'xtream', connections } };
+    liveData = {
+      vivo: { rows: [].concat(...ok.map(r => r.liveRows)), type:'channel' },
+      peliculas: { rows: [].concat(...ok.map(r => r.vodRows)), type:'poster' },
+      series: { rows: [].concat(...ok.map(r => r.seriesRows)), type:'poster' },
+      anime: { rows: [].concat(...ok.map(r => r.animeRows)), type:'poster' },
+      kids: { rows: [].concat(...ok.map(r => r.kidsRows)), type:'poster' },
+    };
+
+    const totalLive = ok.reduce((n, r) => n + r.counts.live, 0);
+    const totalVod = ok.reduce((n, r) => n + r.counts.vod, 0);
+    const totalSeries = ok.reduce((n, r) => n + r.counts.series, 0);
+    document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
+    document.getElementById('heroTitle').textContent = 'Todo listo';
+    document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${totalLive}</b> canales</span><span><b>${totalVod}</b> películas</span><span><b>${totalSeries}</b> series</span></div>`;
+    document.getElementById('heroConnect').textContent = 'Actualizar catálogo';
+    renderCategory(currentCat);
+  }
+
 
   // ---------- M3U / OTT list support ----------
   // Parses a standard M3U playlist: each channel/movie is an #EXTINF line
@@ -2850,6 +2893,9 @@
     }catch(e){ return null; }
   }
   function connCacheKey(conn){
+    if(Array.isArray(conn.connections)){
+      return `${conn.type}:multi:${conn.connections.map(c => c.server + '|' + c.username).join(',')}`;
+    }
     return `${conn.type}:${conn.server}:${conn.username||''}`;
   }
 
@@ -2876,6 +2922,7 @@
 
     try{
       if(conn.type === 'm3u') await connectM3U(conn);
+      else if(Array.isArray(conn.connections)) await connectMultiXtream(conn.connections);
       else await connectXtream(conn);
       saveCatalogCache(cacheKey, liveData); // fire-and-forget, don't block the UI on it
       if(!silent) showStatus('✓ Conectado. Cargando tu catálogo…', false);
@@ -3411,6 +3458,8 @@
         let conn = null;
         if(data && data.connType === 'm3u' && data.m3uUrl){
           conn = { type:'m3u', server:data.m3uUrl };
+        } else if(data && Array.isArray(data.connections) && data.connections.length){
+          conn = { type:'xtream', connections:data.connections };
         } else if(data && data.server && data.username && data.password){
           conn = { type:'xtream', server:data.server, username:data.username, password:data.password };
         }
