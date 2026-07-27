@@ -968,7 +968,13 @@ public class VlcPlayerActivity extends Activity {
     @Override
     protected void onStop() {
         super.onStop();
-        if (mediaPlayer != null) {
+        // Live channels must keep playing through a brief loss of
+        // foreground (a system notification, an overlay flashing, etc.) —
+        // there was no onStart/onResume to bring playback back afterwards,
+        // so stopping here meant a channel could halt permanently over a
+        // completely transient interruption. Movies/series still stop,
+        // since pausing those when backgrounded is expected behavior.
+        if (!isLive && mediaPlayer != null) {
             mediaPlayer.stop();
             mediaPlayer.detachViews();
         }
