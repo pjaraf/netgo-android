@@ -271,8 +271,12 @@ public class InlineVlcPlayerPlugin extends Plugin {
         options.add("--live-caching=2500");
         options.add("--file-caching=1000");
         options.add("--http-reconnect");
-        options.add("--clock-jitter=0");
-        options.add("--clock-synchro=0");
+        // clock-jitter=0 / clock-synchro=0 used to be set here to shave a
+        // little startup latency, but they disable VLC's own audio/video
+        // sync correction — over a longer viewing session (especially live
+        // TV) that let audio and video drift apart. Removing them lets VLC
+        // keep correcting drift the whole time, at the cost of a barely
+        // noticeable bit of extra startup time.
         options.add("--no-stats");
         libVLC = new LibVLC(activity, options);
         mediaPlayer = new MediaPlayer(libVLC);
