@@ -299,8 +299,11 @@ public class InlineVlcPlayerPlugin extends Plugin {
         topBar = new LinearLayout(activity);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundColor(0x99000000);
-        topBar.setPadding(pad, pad, pad, pad);
+        GradientDrawable topFade = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xB0000000, 0x00000000});
+        topBar.setBackground(topFade);
+        topBar.setPadding(pad, pad, pad, dp(activity, 28));
 
         titleView = new TextView(activity);
         titleView.setText("Reproduciendo");
@@ -326,8 +329,11 @@ public class InlineVlcPlayerPlugin extends Plugin {
 
         bottomBar = new LinearLayout(activity);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
-        bottomBar.setBackgroundColor(0x99000000);
-        bottomBar.setPadding(pad, pad, pad, pad);
+        GradientDrawable bottomFade = new GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                new int[]{0xC0000000, 0x00000000});
+        bottomBar.setBackground(bottomFade);
+        bottomBar.setPadding(pad, dp(activity, 30), pad, pad);
 
         LinearLayout controlsRow = new LinearLayout(activity);
         controlsRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -335,25 +341,33 @@ public class InlineVlcPlayerPlugin extends Plugin {
 
         ImageButton seekBackBtn = new ImageButton(activity);
         seekBackBtn.setImageResource(android.R.drawable.ic_media_rew);
-        seekBackBtn.setBackgroundColor(Color.TRANSPARENT);
+        GradientDrawable seekBackBg = new GradientDrawable();
+        seekBackBg.setShape(GradientDrawable.OVAL);
+        seekBackBg.setColor(0x33FFFFFF);
+        seekBackBtn.setBackground(seekBackBg);
         seekBackBtn.setOnClickListener(v -> { doSeekBy(-10); scheduleAutoHide(); });
 
         playPauseBtn = new ImageButton(activity);
         playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
-        GradientDrawable circle = new GradientDrawable();
+        GradientDrawable circle = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFFFFC98A, 0xFFFF8A3D});
         circle.setShape(GradientDrawable.OVAL);
-        circle.setColor(0xFFFF8A3D);
         playPauseBtn.setBackground(circle);
+        playPauseBtn.setElevation(dp(activity, 6));
         playPauseBtn.setOnClickListener(v -> { togglePlayPause(); scheduleAutoHide(); });
 
         ImageButton seekFwdBtn = new ImageButton(activity);
         seekFwdBtn.setImageResource(android.R.drawable.ic_media_ff);
-        seekFwdBtn.setBackgroundColor(Color.TRANSPARENT);
+        GradientDrawable seekFwdBg = new GradientDrawable();
+        seekFwdBg.setShape(GradientDrawable.OVAL);
+        seekFwdBg.setColor(0x33FFFFFF);
+        seekFwdBtn.setBackground(seekFwdBg);
         seekFwdBtn.setOnClickListener(v -> { doSeekBy(10); scheduleAutoHide(); });
 
         LinearLayout.LayoutParams sideBtnLp = new LinearLayout.LayoutParams(dp(activity, 44), dp(activity, 44));
         sideBtnLp.setMargins(dp(activity, 16), 0, dp(activity, 16), 0);
-        LinearLayout.LayoutParams mainBtnLp = new LinearLayout.LayoutParams(dp(activity, 54), dp(activity, 54));
+        LinearLayout.LayoutParams mainBtnLp = new LinearLayout.LayoutParams(dp(activity, 58), dp(activity, 58));
 
         controlsRow.addView(seekBackBtn, sideBtnLp);
         controlsRow.addView(playPauseBtn, mainBtnLp);
