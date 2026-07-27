@@ -283,12 +283,12 @@ public class InlineVlcPlayerPlugin extends Plugin {
                 getActivity().runOnUiThread(this::advanceOrNotifyEnd);
             } else if (event.type == MediaPlayer.Event.Playing) {
                 getActivity().runOnUiThread(() -> {
-                    playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
+                    if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
                     cancelMaintenanceTimer();
                     if (maintenanceView != null) maintenanceView.setVisibility(View.GONE);
                 });
             } else if (event.type == MediaPlayer.Event.Paused) {
-                getActivity().runOnUiThread(() -> playPauseBtn.setImageResource(android.R.drawable.ic_media_play));
+                getActivity().runOnUiThread(() -> { if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_play); });
             }
         });
 
@@ -489,7 +489,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         if (savedLp != null) container.setLayoutParams(savedLp);
         activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         showSystemBars(activity);
-        fullscreenBtn.setText("⤢");
+        if (fullscreenBtn != null) fullscreenBtn.setText("⤢");
         isFullscreen = false;
     }
 
@@ -518,10 +518,10 @@ public class InlineVlcPlayerPlugin extends Plugin {
         if (mediaPlayer == null) return;
         if (mediaPlayer.isPlaying()) {
             mediaPlayer.pause();
-            playPauseBtn.setImageResource(android.R.drawable.ic_media_play);
+            if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_play);
         } else {
             mediaPlayer.play();
-            playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
+            if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
         }
     }
 
