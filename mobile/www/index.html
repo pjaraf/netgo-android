@@ -648,6 +648,20 @@
   }
   #lockoutScreen{ z-index:9999; }
 
+  /* Always-visible toast for connection status/errors — unlike the old
+     status line (which lived inside a screen that gets hidden right
+     before a connection attempt even starts), this shows regardless of
+     which screen is currently active. */
+  .global-status-toast{
+    position:fixed; top:24px; left:50%; transform:translateX(-50%);
+    z-index:99999; max-width:90vw; padding:13px 20px; border-radius:12px;
+    font-size:13.5px; font-weight:600; text-align:center;
+    background:var(--card); border:1px solid var(--line);
+    box-shadow:0 10px 30px rgba(0,0,0,0.4);
+  }
+  .global-status-toast.error{ color:#FF6B6B; border-color:rgba(255,107,107,0.4); }
+  .global-status-toast.ok{ color:var(--green); border-color:rgba(61,220,132,0.3); }
+
   /* ---------- Admin message (dismissible, unlike the lockout screen) ---------- */
   .admin-message-overlay{
     position:fixed; inset:0; z-index:9998;
@@ -982,6 +996,8 @@
 <body>
 
 <!-- Startup screen: shown before the app if no provider is connected yet -->
+<div id="globalStatusToast" class="global-status-toast" style="display:none"></div>
+
 <div id="startScreen" class="start-screen">
   <img class="start-logo" src="logo.png" alt="NetGo">
   <h1 class="start-title">NetGo</h1>
@@ -2874,11 +2890,26 @@
     }
   }
 
+  let globalToastTimer = null;
   function showStatus(text, isError){
     const el = document.getElementById('statusLine');
-    el.textContent = text;
-    el.style.color = isError ? '#FF6B6B' : 'var(--green)';
-    el.classList.add('show');
+    if(el){
+      el.textContent = text;
+      el.style.color = isError ? '#FF6B6B' : 'var(--green)';
+      el.classList.add('show');
+    }
+    // The legacy line above lives inside a screen that's often hidden by
+    // the time a connection attempt actually resolves — this toast is
+    // always visible, so errors (like an M3U list that failed to load)
+    // are never silently invisible.
+    const toast = document.getElementById('globalStatusToast');
+    if(toast){
+      if(globalToastTimer) clearTimeout(globalToastTimer);
+      toast.textContent = text;
+      toast.className = 'global-status-toast ' + (isError ? 'error' : 'ok');
+      toast.style.display = 'block';
+      globalToastTimer = setTimeout(() => { toast.style.display = 'none'; }, isError ? 9000 : 4000);
+    }
   }
 
   if(isTV()){
