@@ -812,6 +812,7 @@
       if(tab.dataset.tab === 'admins') loadAdminsList();
       else if(tab.dataset.tab === 'servers') loadServersList();
       else if(tab.dataset.tab === 'summary') loadSummary();
+      else if(tab.dataset.tab === 'categories') populateCatClientSelect();
       else if(tab.dataset.tab !== 'activate') loadAllLists();
     };
   });
