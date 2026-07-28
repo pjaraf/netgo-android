@@ -211,7 +211,20 @@ public class VlcPlayerActivity extends Activity {
         // fluctuations without stalling, without adding so much delay
         // that a channel feels slow to respond.
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(3000, 30000, 1500, 3000)
+                // The first two numbers (min/max buffer) were already
+                // generous — the real fix for micro-stutters is the third
+                // and fourth ones: how much buffer is required before
+                // starting/resuming playback. 1500/3000ms left very little
+                // cushion, so any tiny network hiccup during otherwise
+                // smooth playback immediately caused a visible micro-cut.
+                // minBufferMs MUST be >= bufferForPlaybackAfterRebufferMs (and
+                // >= bufferForPlaybackMs) or ExoPlayer throws an
+                // IllegalArgumentException the moment it's built — which is
+                // exactly what was crashing the app right after the
+                // catalog/pairing screen, since that's when the first
+                // player gets constructed (the TV home screen preview).
+                .setBufferDurationsMs(5000, 30000, 2500, 4000)
+                .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
 
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
@@ -236,7 +249,7 @@ public class VlcPlayerActivity extends Activity {
                 .build();
         videoLayout.setPlayer(player);
         videoLayout.setUseController(false);
-        videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+        videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM); // auto-fill the screen 16:9 by default
 
         player.addListener(new Player.Listener() {
             @Override
@@ -603,19 +616,22 @@ public class VlcPlayerActivity extends Activity {
             progressBarContainer.setVisibility(View.GONE);
             seekBar.setProgress(0);
         }
-        zoomIndex = 0;
-        if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+        zoomIndex = 1; // matches the auto-applied RESIZE_MODE_ZOOM below
+        if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM); // auto-fill the screen 16:9 by default
         String playUrl = (usingFallbackFormat && currentIndex < tsUrls.size() && !tsUrls.get(currentIndex).isEmpty())
                 ? tsUrls.get(currentIndex) : urls.get(currentIndex);
         MediaItem.Builder itemBuilder = new MediaItem.Builder().setUri(Uri.parse(playUrl));
         if (isLive) {
-            // Lets ExoPlayer nudge playback speed by a few percent to stay
-            // near a comfortable buffer target instead of ever having to
-            // hard-stall when the network dips briefly.
+            // A narrower speed range than before (was 0.96–1.04, now
+            // 0.99–1.01) — nudging playback speed too aggressively to stay
+            // near the buffer target can itself introduce tiny audible
+            // artifacts, which was likely showing up as its own kind of
+            // micro-cut. This is barely perceptible but still gives some
+            // cushion against network jitter.
             itemBuilder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
-                    .setTargetOffsetMs(8000)
-                    .setMinPlaybackSpeed(0.96f)
-                    .setMaxPlaybackSpeed(1.04f)
+                    .setTargetOffsetMs(10000)
+                    .setMinPlaybackSpeed(0.99f)
+                    .setMaxPlaybackSpeed(1.01f)
                     .build());
         }
         MediaItem item = itemBuilder.build();
