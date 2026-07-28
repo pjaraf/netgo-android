@@ -82,6 +82,11 @@ public class MainActivity extends BridgeActivity {
             homeIntent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(homeIntent);
             finishAffinity();
+            // finishAffinity() alone closes every screen but can still
+            // leave the process sitting in memory in the background —
+            // this makes sure it's fully gone, not just off-screen.
+            android.os.Process.killProcess(android.os.Process.myPid());
+            System.exit(0);
         } else {
             lastBackPressTime = now;
             android.widget.Toast.makeText(this, "Presiona atrás de nuevo para salir", android.widget.Toast.LENGTH_SHORT).show();
