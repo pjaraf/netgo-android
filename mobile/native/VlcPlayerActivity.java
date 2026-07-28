@@ -35,6 +35,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
@@ -239,7 +240,19 @@ public class VlcPlayerActivity extends Activity {
                 // improves compatibility with those servers.
                 .setUserAgent("NetGo/1.0 (Linux;Android) ExoPlayerLib/1.4.1");
 
-        trackSelector = new DefaultTrackSelector(this);
+        // Tuned for IPTV specifically: slower to bump UP in quality (avoids
+        // flip-flopping right after a brief bandwidth spike), quicker to
+        // drop down when the network really can't keep up (better a
+        // seamless step down than a stall), and uses a bit more of the
+        // measured bandwidth than the library default since live TV
+        // benefits more from steady quality than from a large safety
+        // margin.
+        AdaptiveTrackSelection.Factory adaptiveFactory = new AdaptiveTrackSelection.Factory(
+                15_000,  // minDurationForQualityIncreaseMs
+                12_000,  // maxDurationForQualityDecreaseMs
+                25_000,  // minDurationToRetainAfterDiscardMs
+                0.75f);  // bandwidthFraction
+        trackSelector = new DefaultTrackSelector(this, adaptiveFactory);
         // No cap on resolution/bitrate — always eligible to play at
         // whatever quality the channel's own stream actually offers. For
         // channels with multiple quality variants (adaptive HLS), this is
@@ -389,6 +402,7 @@ public class VlcPlayerActivity extends Activity {
         nums.addAll(catNums.get(currentCatIndex));
         imgUrls.addAll(catImgUrls.get(currentCatIndex));
         epgUrls.addAll(catEpgUrls.get(currentCatIndex));
+        prefetchChannelLogos(imgUrls); // so the banner shows every logo in this category instantly, not just the current one
     }
 
     // ---------- Remote control ----------
@@ -801,9 +815,56 @@ public class VlcPlayerActivity extends Activity {
     /** Shared logo-loading helper — used by both the channel browse list
      *  and the OSD banner, so a logo only needs to be fetched/decoded
      *  once per implementation instead of two separate copies. */
+    // Shared, in-memory cache of already-decoded channel logos — keyed by
+    // URL. Lets the banner show a logo instantly on channel change instead
+    // of waiting on a fresh network fetch every single time. Capped at 80
+    // entries (small icons, this stays well under a few MB).
+    private static final android.util.LruCache<String, android.graphics.Bitmap> logoCache = new android.util.LruCache<>(80);
+
+    /** Fetches and decodes every channel logo for the given URLs into the
+     *  shared cache, in the background, without touching any UI — called
+     *  once a category's channel list is known, so by the time the person
+     *  actually lands on a given channel its logo is already sitting in
+     *  memory and the banner can show it immediately. */
+    private void prefetchChannelLogos(List<String> imgUrls) {
+        for (String url : imgUrls) {
+            if (url == null || url.isEmpty() || logoCache.get(url) != null) continue;
+            new Thread(() -> {
+                try {
+                    URL u = new URL(url);
+                    HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                    conn.setConnectTimeout(6000);
+                    conn.setReadTimeout(6000);
+                    conn.connect();
+                    if (conn.getResponseCode() != 200) return;
+                    android.graphics.Bitmap bmp;
+                    try (InputStream in = conn.getInputStream()) {
+                        bmp = android.graphics.BitmapFactory.decodeStream(in);
+                    }
+                    if (bmp != null) logoCache.put(url, bmp);
+                } catch (Exception ignored) { /* that one logo just won't be pre-warmed — falls back to a live fetch */ }
+            }).start();
+        }
+    }
+
     private void loadImageIntoBox(FrameLayout box, TextView fallback, String url) {
         fallback.setVisibility(View.VISIBLE);
         if (url == null || url.isEmpty()) return;
+
+        android.graphics.Bitmap cached = logoCache.get(url);
+        if (cached != null) {
+            // Already have it — show it right away, no network round trip.
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setImageBitmap(cached);
+            iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            int pad = dp(4);
+            iv.setPadding(pad, pad, pad, pad);
+            box.addView(iv, 0, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            fallback.setVisibility(View.GONE);
+            return;
+        }
+
         new Thread(() -> {
             try {
                 URL u = new URL(url);
@@ -817,6 +878,7 @@ public class VlcPlayerActivity extends Activity {
                     bmp = android.graphics.BitmapFactory.decodeStream(in);
                 }
                 if (bmp == null) return;
+                logoCache.put(url, bmp);
                 final android.graphics.Bitmap finalBmp = bmp;
                 runOnUiThread(() -> {
                     android.widget.ImageView iv = new android.widget.ImageView(this);
@@ -1061,14 +1123,29 @@ public class VlcPlayerActivity extends Activity {
         handler.postDelayed(hideBannerRunnable, 4500);
     }
 
-    /** Loads the channel logo into the banner's logo box on a background
-     *  thread — no image library dependency, just a plain HTTP decode,
-     *  which is all a small icon needs. Falls back to the channel's first
-     *  letter if there's no logo URL or it fails to load. */
+    /** Loads the channel logo into the banner's logo box — checks the
+     *  shared cache first (instant, since channels are pre-warmed as soon
+     *  as the list is known), only falling back to a fresh network fetch
+     *  if it genuinely isn't cached yet. Falls back to the channel's
+     *  first letter if there's no logo URL or it fails to load. */
     private void loadBannerLogo(String url) {
         bannerLogoBox.removeViews(0, Math.max(0, bannerLogoBox.getChildCount() - 1));
         bannerLogoFallback.setVisibility(View.VISIBLE);
         if (url == null || url.isEmpty()) return;
+
+        android.graphics.Bitmap cached = logoCache.get(url);
+        if (cached != null) {
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setImageBitmap(cached);
+            iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            int pad = dp(6);
+            iv.setPadding(pad, pad, pad, pad);
+            bannerLogoBox.addView(iv, 0, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            bannerLogoFallback.setVisibility(View.GONE);
+            return;
+        }
+
         final long token = ++epgFetchToken; // reuse the same "is this still current" pattern
         new Thread(() -> {
             try {
@@ -1083,6 +1160,7 @@ public class VlcPlayerActivity extends Activity {
                     bmp = android.graphics.BitmapFactory.decodeStream(in);
                 }
                 if (bmp == null) return;
+                logoCache.put(url, bmp);
                 runOnUiThread(() -> {
                     if (token != epgFetchToken) return; // channel changed again before this arrived
                     android.widget.ImageView iv = new android.widget.ImageView(this);
