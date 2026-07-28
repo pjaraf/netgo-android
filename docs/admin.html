@@ -265,7 +265,18 @@
     <div class="card">
       <h2 id="formTitle">Agregar / actualizar cliente</h2>
       <label>Código del cliente</label>
-      <input id="fCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456">
+      <div style="display:flex; gap:8px;">
+        <input id="fCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456" style="flex:1;">
+        <button type="button" class="ghost small" id="btnGenerateCode">🎲 Generar</button>
+      </div>
+      <p class="tab-hint">Este es el código que le vas a dar al cliente — lo escribe en su TV o teléfono para conectarse.</p>
+
+      <label>Cantidad de dispositivos simultáneos</label>
+      <div class="conn-type-toggle" id="deviceLimitToggle">
+        <button type="button" class="conn-type-btn device-limit-btn active" data-limit="1">1 dispositivo</button>
+        <button type="button" class="conn-type-btn device-limit-btn" data-limit="3">3 dispositivos</button>
+        <button type="button" class="conn-type-btn device-limit-btn" data-limit="5">5 dispositivos</button>
+      </div>
 
       <label>Nombre del cliente</label>
       <input id="fName" type="text" placeholder="Juan Pérez">
@@ -890,7 +901,7 @@
         if(existing && existing.createdAt) createdAt = existing.createdAt;
       }catch(e){}
 
-      const record = { name, connections, phone, planValue, expiry, maxConnections, createdAt, updatedAt: Date.now() };
+      const record = { name, connections, phone, planValue, expiry, maxConnections, maxDevices: selectedDeviceLimit, createdAt, updatedAt: Date.now() };
 
       await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, {
         method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(record)
@@ -909,10 +920,9 @@
         const lines = [
           `¡Hola ${name || ''}! Tu cuenta de NetGo fue activada con éxito ✅`,
           '',
-          ...connections.map((c, i) => c.type === 'm3u'
-            ? `📋 Lista ${i + 1}: ${c.url}`
-            : `📺 Servidor ${i + 1} — Usuario: ${c.username} / Contraseña: ${c.password}`),
-          ...(maxConnections ? [`🔢 Conexiones máximas: ${maxConnections}`] : []),
+          `🔑 Código: ${code}`,
+          `📱 Instala la app NetGo, abrila, y escribí ese código cuando te lo pida`,
+          `🔢 Dispositivos permitidos al mismo tiempo: ${selectedDeviceLimit}`,
           `📅 Vence: ${expiry || '—'}`,
         ];
         const waText = encodeURIComponent(lines.join('\n'));
@@ -927,9 +937,30 @@
     }
   };
 
+  let selectedDeviceLimit = 1;
+  document.querySelectorAll('.device-limit-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.device-limit-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedDeviceLimit = parseInt(btn.dataset.limit, 10);
+    };
+  });
+
+  document.getElementById('btnGenerateCode').onclick = () => {
+    document.getElementById('fCode').value = String(Math.floor(100000 + Math.random() * 900000));
+  };
+
+  function setDeviceLimitUI(limit){
+    selectedDeviceLimit = limit || 1;
+    document.querySelectorAll('.device-limit-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.limit, 10) === selectedDeviceLimit);
+    });
+  }
+
   function clearForm(){
     ['fCode','fName','fPhone','fPlanValue','fExpiry'].forEach(id => document.getElementById(id).value = '');
     resetServerBlocks();
+    setDeviceLimitUI(1);
     document.getElementById('formTitle').textContent = 'Agregar / actualizar cliente';
   }
 
@@ -1186,6 +1217,7 @@
       document.getElementById('fPhone').value = c.phone || '';
       document.getElementById('fPlanValue').value = c.planValue || '';
       document.getElementById('fExpiry').value = c.expiry || '';
+      setDeviceLimitUI(c.maxDevices || 1);
 
       document.getElementById('serverBlocksContainer').innerHTML = '';
       if(Array.isArray(c.connections) && c.connections.length){
