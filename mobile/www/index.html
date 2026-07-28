@@ -1629,12 +1629,13 @@
 
     const frag = document.createDocumentFragment();
     rows.forEach((row, idx) => {
+      const rowType = row.cardType || d.type;
       const section = document.createElement('section');
       section.className = 'row';
       section.dataset.rowIndex = idx;
       section.innerHTML = `
-        <div class="row-head"><h2>${row.title}</h2><span class="count mono">${row.items.length} ${d.type === 'channel' ? 'canales' : 'títulos'}</span></div>
-        <div class="row-scroll" style="min-height:${placeholderHeight}"></div>
+        <div class="row-head"><h2>${row.title}</h2><span class="count mono">${row.items.length} ${rowType === 'channel' ? 'canales' : 'títulos'}</span></div>
+        <div class="row-scroll" style="min-height:${rowType === 'channel' ? '158px' : '198px'}"></div>
       `;
       frag.appendChild(section);
     });
@@ -1645,12 +1646,13 @@
       const idx = +section.dataset.rowIndex;
       const scrollEl = section.querySelector('.row-scroll');
       const items = rows[idx].items;
+      const rowCardFn = rows[idx].cardType === 'channel' ? channelCard : (rows[idx].cardType === 'poster' ? posterCard : cardFn);
       const BATCH = (isTV() || isLowPower()) ? 10 : 24;
       let loaded = 0;
       function loadMore(){
         if(loaded >= items.length) return;
         const next = items.slice(loaded, loaded + BATCH);
-        scrollEl.insertAdjacentHTML('beforeend', next.map(cardFn).join(''));
+        scrollEl.insertAdjacentHTML('beforeend', next.map(rowCardFn).join(''));
         loaded += BATCH;
       }
       loadMore();
@@ -2867,7 +2869,20 @@
         t:s.name, meta: s.releaseDate || '', badge:'HD', r:s.rating||'—', img:s.cover||'',
         kind:'series', series_id:s.series_id
       })) }));
-    const kidsRows = kidsVodRows.concat(kidsSeriesRows);
+    // Live kids channels — all merged into a single scrollable row at the
+    // top of Kids, above the movies/series, styled as channel cards
+    // (cardType overrides the category's default poster-card look for
+    // just this one row).
+    const kidsLiveItems = [].concat(...categoriesByKeyword(live, liveCategories, /kids|infantil|ni[ñn]os|cartoon|toon|disney|junior/i)
+      .map(row => row.items.map(s => ({
+        t: s.name, program:'', num: s.num || '', img: s.stream_icon || '',
+        url: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.m3u8`,
+        tsUrl: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.ts`
+      }))));
+    const kidsLiveRows = kidsLiveItems.length
+      ? [{ title:'Canales infantiles', items: kidsLiveItems, cardType:'channel' }]
+      : [];
+    const kidsRows = kidsLiveRows.concat(kidsVodRows).concat(kidsSeriesRows);
 
     return {
       liveRows, vodRows, seriesRows, animeRows, kidsRows,
