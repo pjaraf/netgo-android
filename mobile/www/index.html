@@ -216,6 +216,30 @@
   @keyframes spin{ to{ transform:rotate(360deg); } }
 
   .hp-bottom{ padding:10px 14px 14px; background:linear-gradient(0deg, rgba(6,14,20,.8), transparent); }
+  .hp-osd-banner{
+    position:absolute; left:12px; right:12px; bottom:12px; z-index:5;
+    display:flex; align-items:center; gap:12px;
+    background:linear-gradient(90deg, rgba(11,27,38,0.95), rgba(20,40,56,0.95));
+    border:1px solid rgba(255,255,255,0.2); border-radius:12px; padding:10px 12px;
+  }
+  .hp-osd-logo{
+    flex-shrink:0; width:44px; height:44px; border-radius:8px;
+    background:var(--bg); border:1px solid rgba(255,255,255,0.25);
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+    color:#fff; font-weight:700; font-size:15px;
+  }
+  .hp-osd-logo img{ width:100%; height:100%; object-fit:contain; padding:3px; box-sizing:border-box; }
+  .hp-osd-info{ flex:1; min-width:0; }
+  .hp-osd-channel-name{ color:#fff; font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hp-osd-program{ color:#EAF2F5; font-size:11.5px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hp-osd-progress-track{ height:4px; background:rgba(255,255,255,0.2); border-radius:2px; margin-top:6px; overflow:hidden; }
+  .hp-osd-progress-fill{ height:100%; width:0%; background:linear-gradient(90deg,#FFC98A,var(--amber)); border-radius:2px; }
+  .hp-osd-times{ color:var(--text-dim); font-size:9.5px; margin-top:3px; }
+  .hp-osd-next{ color:#7C93A1; font-size:10px; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hp-osd-right{ flex-shrink:0; text-align:right; }
+  .hp-osd-num{ color:var(--amber); font-weight:700; font-size:19px; }
+  .hp-osd-clock{ color:var(--text-dim); font-size:11px; margin-top:1px; }
+
   .hp-controls{ display:flex; align-items:center; justify-content:center; gap:22px; margin-bottom:10px; }
   .hp-btn{
     background:rgba(6,14,20,.55); border:1px solid rgba(255,255,255,.15); color:#fff;
@@ -1172,6 +1196,26 @@
       <span class="hp-close" id="hpClose">✕</span>
     </div>
     <div class="hp-spinner-wrap" id="hpSpinnerWrap"><div class="hp-spinner"></div></div>
+
+    <!-- Live TV only: same OSD banner as the TV app — logo, channel
+         number + clock, current programme with a progress bar, and what's
+         next. Movies/series use the controls below instead, since seeking
+         and play/pause don't apply to a live stream. -->
+    <div class="hp-osd-banner" id="hpOsdBanner" style="display:none">
+      <div class="hp-osd-logo" id="hpOsdLogo"><span id="hpOsdLogoFallback">?</span></div>
+      <div class="hp-osd-info">
+        <div class="hp-osd-channel-name" id="hpOsdChannelName">—</div>
+        <div class="hp-osd-program" id="hpOsdProgram">Cargando programación…</div>
+        <div class="hp-osd-progress-track"><div class="hp-osd-progress-fill" id="hpOsdProgressFill"></div></div>
+        <div class="hp-osd-times" id="hpOsdTimes"></div>
+        <div class="hp-osd-next" id="hpOsdNext"></div>
+      </div>
+      <div class="hp-osd-right">
+        <div class="hp-osd-num" id="hpOsdNum">—</div>
+        <div class="hp-osd-clock" id="hpOsdClock">--:--</div>
+      </div>
+    </div>
+
     <div class="hp-bottom">
       <div class="hp-controls">
         <button class="hp-btn" id="hpSeekBack">⏪ 10</button>
@@ -1578,7 +1622,7 @@
     const art = c.img
       ? `<img class="channel-cover-img" src="${c.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : c.icon||'📡';
-    return `<div class="channel-card" tabindex="0" data-kind="live" data-url="${c.url||''}" data-title="${c.t}" data-num="${c.num||''}">
+    return `<div class="channel-card" tabindex="0" data-kind="live" data-url="${c.url||''}" data-title="${c.t}" data-num="${c.num||''}" data-img="${c.img||''}" data-epg="${c.epgUrl||''}">
       <div class="channel-thumb" style="background:${c.grad||'linear-gradient(155deg,#123,#456)'}">
         ${art}
         <div class="channel-live mono"><span class="live-dot"></span>EN VIVO</div>
@@ -2181,22 +2225,29 @@
   window.addEventListener('scroll', schedulePositionUpdate, { passive:true });
   window.addEventListener('resize', schedulePositionUpdate);
 
+  let currentInlineQueue = [];
+  let currentInlineIsLive = false;
   async function playInline(queue, startIndex, kind, resumeMs){
     if(!inlineAvailable()){
       const item = queue[startIndex || 0];
       playStreamWeb(item.url, item.title);
       return;
     }
+    currentInlineQueue = queue;
+    currentInlineIsLive = kind === 'channel';
     heroBox.classList.add('playing');
-    hpProgress.style.display = kind === 'channel' ? 'none' : 'flex';
-    hpLiveBadge.style.display = kind === 'channel' ? 'block' : 'none';
+    hpProgress.style.display = currentInlineIsLive ? 'none' : 'flex';
+    hpLiveBadge.style.display = 'none'; // replaced by the full OSD banner for live content
+    document.querySelector('.hp-controls').style.display = currentInlineIsLive ? 'none' : 'flex';
+    document.getElementById('hpOsdBanner').style.display = currentInlineIsLive ? 'flex' : 'none';
     hpSpinnerWrap.classList.add('loading');
     hpPlayPause.textContent = '⏸';
     window.scrollTo({ top:0, behavior:'smooth' });
 
     const P = window.Capacitor.Plugins.InlineVlcPlayer;
-    await P.mount(getHeroRect());
+    await P.mount({ ...getHeroRect(), showControls: !currentInlineIsLive });
     await P.loadQueue({ queue, startIndex: startIndex || 0 });
+    if(currentInlineIsLive) updatePhoneOsdBanner(queue[startIndex || 0]);
     if(resumeMs && resumeMs > 0){
       setTimeout(() => P.seekTo({ positionMs: resumeMs }).catch(()=>{}), 700);
     }
@@ -2204,6 +2255,71 @@
     // scroll or layout is still settling.
     setTimeout(positionInlinePlayer, 150);
     setTimeout(positionInlinePlayer, 500);
+  }
+
+  // Same OSD banner concept as the Android TV app — channel logo, number,
+  // clock, current programme with a progress bar, and what's next.
+  let osdEpgFetchToken = 0;
+  async function updatePhoneOsdBanner(item){
+    document.getElementById('hpOsdChannelName').textContent = item.title || '—';
+    document.getElementById('hpOsdNum').textContent = item.num || '•';
+    document.getElementById('hpOsdClock').textContent = new Date().toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
+
+    const logoBox = document.getElementById('hpOsdLogo');
+    const fallback = document.getElementById('hpOsdLogoFallback');
+    fallback.textContent = (item.title || '?').charAt(0).toUpperCase();
+    logoBox.querySelectorAll('img').forEach(el => el.remove());
+    fallback.style.display = 'block';
+    if(item.img){
+      const img = document.createElement('img');
+      img.src = item.img;
+      img.onload = () => { fallback.style.display = 'none'; };
+      img.onerror = () => { img.remove(); };
+      logoBox.appendChild(img);
+    }
+
+    document.getElementById('hpOsdProgram').textContent = 'Cargando programación…';
+    document.getElementById('hpOsdProgressFill').style.width = '0%';
+    document.getElementById('hpOsdTimes').textContent = '';
+    document.getElementById('hpOsdNext').textContent = '';
+
+    if(!item.epgUrl){
+      document.getElementById('hpOsdProgram').textContent = 'Sin información de programación';
+      return;
+    }
+    const token = ++osdEpgFetchToken;
+    try{
+      const res = await fetch(item.epgUrl);
+      const data = await res.json();
+      const listings = data.epg_listings || [];
+      if(token !== osdEpgFetchToken) return; // a newer channel change already superseded this
+      if(!listings.length){
+        document.getElementById('hpOsdProgram').textContent = 'Sin información de programación';
+        return;
+      }
+      const decode = (b64) => { try{ return decodeURIComponent(escape(atob(b64))).trim(); }catch(e){ return ''; } };
+      const current = listings[0];
+      const next = listings[1];
+      const fmt = (ts) => ts ? new Date(ts * 1000).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '';
+      const currentTitle = decode(current.title || '');
+      document.getElementById('hpOsdProgram').textContent = currentTitle || item.title || '';
+      const start = parseInt(current.start_timestamp || 0, 10);
+      const stop = parseInt(current.stop_timestamp || 0, 10);
+      if(start && stop > start){
+        const pct = Math.max(0, Math.min(100, (Date.now()/1000 - start) * 100 / (stop - start)));
+        document.getElementById('hpOsdProgressFill').style.width = pct + '%';
+        document.getElementById('hpOsdTimes').textContent = `${fmt(start)} hrs. – ${fmt(stop)} hrs.`;
+      }
+      if(next){
+        const nextTitle = decode(next.title || '');
+        if(nextTitle){
+          document.getElementById('hpOsdNext').textContent =
+            `Siguiente: ${nextTitle} | ${fmt(next.start_timestamp)} hrs. / ${fmt(next.stop_timestamp)} hrs.`;
+        }
+      }
+    }catch(err){
+      if(token === osdEpgFetchToken) document.getElementById('hpOsdProgram').textContent = 'Sin información de programación';
+    }
   }
 
   async function closeInlinePlayer(){
@@ -2251,6 +2367,7 @@
     });
     window.Capacitor.Plugins.InlineVlcPlayer.addListener('trackChanged', (data) => {
       hpTitle.textContent = data.title || 'Reproduciendo';
+      if(currentInlineIsLive && currentInlineQueue[data.index]) updatePhoneOsdBanner(currentInlineQueue[data.index]);
     });
     window.Capacitor.Plugins.InlineVlcPlayer.addListener('ended', () => {
       if(currentPlayingItem) removeFromContinue(currentPlayingItem.url);
@@ -2295,7 +2412,7 @@
         // Build the queue from sibling channel cards in the same row so
         // swiping left/right in the native player moves between them.
         const siblings = Array.from(card.parentElement.querySelectorAll('.channel-card'));
-        const queue = siblings.map(c => ({ url: c.dataset.url, title: c.dataset.title, num: c.dataset.num }));
+        const queue = siblings.map(c => ({ url: c.dataset.url, title: c.dataset.title, num: c.dataset.num, img: c.dataset.img, epgUrl: c.dataset.epg }));
         const startIndex = Math.max(0, siblings.indexOf(card));
         playQueue(queue, startIndex, title, 'channel');
       } else {
