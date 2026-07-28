@@ -44,13 +44,19 @@ if (!manifest.includes('VlcPlayerActivity')) {
   fs.writeFileSync(manifestPath, manifest);
 }
 
-// 4) Add libVLC dependency (published on Maven Central by VideoLAN)
+// 4) Add ExoPlayer (Media3, Google's official player — same engine family
+// TiviMate and most major IPTV apps use) dependencies.
 const gradlePath = path.join(androidAppDir, 'build.gradle');
 let gradle = fs.readFileSync(gradlePath, 'utf8');
-if (!gradle.includes('libvlc-all')) {
+if (!gradle.includes('media3-exoplayer')) {
   gradle = gradle.replace(
     /dependencies\s*\{/,
-    "dependencies {\n    implementation 'org.videolan.android:libvlc-all:3.5.1'"
+    "dependencies {\n" +
+    "    implementation 'androidx.media3:media3-exoplayer:1.4.1'\n" +
+    "    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'\n" +
+    "    implementation 'androidx.media3:media3-exoplayer-rtsp:1.4.1'\n" +
+    "    implementation 'androidx.media3:media3-datasource-okhttp:1.4.1'\n" +
+    "    implementation 'androidx.media3:media3-ui:1.4.1'"
   );
   fs.writeFileSync(gradlePath, gradle);
 }
