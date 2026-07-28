@@ -725,6 +725,9 @@
   .profile-tile.add-profile .profile-avatar{
     background:transparent; border:2px dashed var(--line); color:var(--text-dim); font-size:32px;
   }
+  .profile-limit-note{
+    color:var(--text-dim); font-size:12.5px; width:100%; text-align:center; margin-top:8px;
+  }
 
   .profile-edit-overlay{
     position:fixed; inset:0; z-index:220; background:rgba(5,12,17,0.85);
@@ -830,6 +833,44 @@
     font-family:'Inter'; font-weight:600; font-size:12.5px; padding:11px 8px; border-radius:9px;
     cursor:pointer;
   }
+  /* ---------- Configuración: full page, not a floating popup ---------- */
+  .settings-page{
+    position:fixed; inset:0; z-index:400;
+    background:var(--bg); overflow-y:auto;
+  }
+  .settings-page-inner{
+    max-width:640px; margin:0 auto; padding:24px 22px 60px;
+  }
+  .settings-back-btn{
+    background:none; border:1px solid var(--line); color:var(--text);
+    font-size:14px; padding:9px 16px; border-radius:9px; cursor:pointer; margin-bottom:18px;
+  }
+  .settings-page-title{
+    font-family:'Space Grotesk'; font-size:26px; font-weight:700; margin-bottom:22px;
+  }
+  .settings-section{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:20px; margin-bottom:16px;
+  }
+  .settings-section h2{
+    font-family:'Space Grotesk'; font-size:15px; font-weight:700; margin-bottom:12px;
+  }
+  .settings-toggle-row{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:14px; cursor:pointer; padding:4px 0;
+  }
+  .settings-toggle-row input[type="checkbox"]{ width:22px; height:22px; accent-color:var(--amber); }
+  .settings-hint{ color:var(--text-dim); font-size:12.5px; margin-top:10px; line-height:1.5; }
+  .settings-actions{ display:flex; flex-direction:column; gap:10px; }
+  .settings-actions .qr-close-btn{ width:100%; box-sizing:border-box; }
+
+  body.tv-mode .settings-page-inner{ max-width:760px; padding:40px; }
+  body.tv-mode .settings-back-btn:focus-visible,
+  body.tv-mode .settings-toggle-row:focus-within,
+  .settings-back-btn:focus-visible{
+    outline:3px solid var(--amber); outline-offset:2px;
+  }
+
   .qr-overlay{
     position:fixed; inset:0; z-index:90; background:rgba(5,12,17,0.92); backdrop-filter:blur(4px);
     display:flex; align-items:center; justify-content:center; flex-direction:column; padding:24px;
@@ -1282,19 +1323,40 @@
 </div>
 
 <!-- Account info panel (opened from the gear icon) -->
-<div class="qr-overlay" id="accountInfoOverlay" style="display:none">
-  <div class="qr-card">
-    <div class="account-icon">👤</div>
-    <h3 class="account-title">Tu cuenta</h3>
-    <div class="account-rows">
-      <div class="account-row"><span>Usuario</span><b id="accInfoUser">—</b></div>
-      <div class="account-row"><span>Conexiones máximas</span><b id="accInfoMaxConn">—</b></div>
-      <div class="account-row"><span>Vence el</span><b id="accInfoExpiry">—</b></div>
+<div class="settings-page" id="accountInfoOverlay" style="display:none">
+  <div class="settings-page-inner">
+    <button class="settings-back-btn" id="accountInfoClose" tabindex="0">← Volver</button>
+    <h1 class="settings-page-title">Configuración</h1>
+
+    <div class="settings-section">
+      <h2>Tu cuenta</h2>
+      <div class="account-rows">
+        <div class="account-row"><span>Código de activación</span><b id="accInfoCode">—</b></div>
+        <div class="account-row"><span>Plan contratado</span><b id="accInfoPlan">—</b></div>
+        <div class="account-row"><span>Conexiones máximas</span><b id="accInfoMaxConn">—</b></div>
+        <div class="account-row"><span>Dispositivos conectados</span><b id="accInfoDevicesUsed">—</b></div>
+        <div class="account-row"><span>Dispositivos disponibles</span><b id="accInfoDevicesLeft">—</b></div>
+        <div class="account-row"><span>Vence el</span><b id="accInfoExpiry">—</b></div>
+      </div>
     </div>
-    <button class="qr-close-btn" id="accountInfoClose">Cerrar</button>
-    <button class="qr-close-btn" id="accountSwitchProfileBtn">Cambiar de perfil</button>
-    <button class="qr-close-btn" id="accountCheckUpdateBtn">Buscar actualizaciones</button>
-    <button class="qr-close-btn qr-close-btn-danger" id="accountLogoutBtn">Cerrar sesión</button>
+
+    <div class="settings-section">
+      <h2>Control parental</h2>
+      <label class="settings-toggle-row">
+        <span>Ocultar canales para adultos</span>
+        <input type="checkbox" id="parentalControlToggle">
+      </label>
+      <p class="settings-hint">Al activarlo, se ocultan automáticamente las categorías de contenido para adultos en toda la app. Para desactivarlo, se pide el PIN.</p>
+    </div>
+
+    <div class="settings-section">
+      <h2>Acciones</h2>
+      <div class="settings-actions">
+        <button class="qr-close-btn" id="accountSwitchProfileBtn" tabindex="0">Cambiar de perfil</button>
+        <button class="qr-close-btn" id="accountCheckUpdateBtn" tabindex="0">Buscar actualizaciones</button>
+        <button class="qr-close-btn qr-close-btn-danger" id="accountLogoutBtn" tabindex="0">Cerrar sesión</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1326,7 +1388,7 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #accountCheckUpdateBtn, #adminMessageClose';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #accountCheckUpdateBtn, #adminMessageClose, #accountInfoClose, #parentalControlToggle, #accountLogoutBtn';
 
   // If a modal (series detail, account info, PIN, QR screens) is open,
   // navigation must stay inside it — otherwise focus could jump to
@@ -2237,6 +2299,11 @@
 
   // ---------- Hidden categories (set per-client by the admin) ----------
   let hiddenCategoryNames = [];
+  // Cached from the client's record once known — profiles are capped at
+  // this number (1 device → 1 profile, 3 → 3, 5 → 5), read from
+  // localStorage first so it survives an app restart before the network
+  // catches up.
+  let clientMaxDevices = parseInt(localStorage.getItem('netgo_max_devices') || '1', 10);
   try{ hiddenCategoryNames = JSON.parse(localStorage.getItem('netgo_hidden_categories') || '[]'); }catch(e){}
 
   function filterHiddenCategories(data){
@@ -2328,12 +2395,14 @@
         </div>
         <div class="profile-name">${p.name}</div>
       </div>
-    `).join('') + `
+    `).join('') + (profiles.length < clientMaxDevices ? `
       <div class="profile-tile add-profile" tabindex="0" id="profileAddTile">
         <div class="profile-avatar">+</div>
         <div class="profile-name">Agregar perfil</div>
       </div>
-    `;
+    ` : `
+      <div class="profile-limit-note">Máximo de ${clientMaxDevices} perfil(es) para tu plan.</div>
+    `);
 
     grid.querySelectorAll('.profile-tile:not(.add-profile)').forEach(tile => {
       tile.onclick = (e) => {
@@ -2355,7 +2424,8 @@
         onDone();
       };
     });
-    document.getElementById('profileAddTile').onclick = () => openProfileEditor(null);
+    const addTile = document.getElementById('profileAddTile');
+    if(addTile) addTile.onclick = () => openProfileEditor(null);
 
     screen.style.display = 'flex';
   }
@@ -2816,7 +2886,7 @@
       anime: { rows: data.animeRows, type:'poster' },
       kids: { rows: data.kidsRows, type:'poster' },
     };
-    liveData = filterHiddenCategories(rawLiveData);
+    liveData = filterAdultCategories(filterHiddenCategories(rawLiveData));
 
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
     document.getElementById('heroTitle').textContent = 'Todo listo';
@@ -2852,7 +2922,7 @@
       anime: { rows: [].concat(...ok.map(r => r.animeRows)), type:'poster' },
       kids: { rows: [].concat(...ok.map(r => r.kidsRows)), type:'poster' },
     };
-    liveData = filterHiddenCategories(rawLiveData);
+    liveData = filterAdultCategories(filterHiddenCategories(rawLiveData));
 
     const totalLive = ok.reduce((n, r) => n + (r.counts.live || 0), 0);
     const totalVod = ok.reduce((n, r) => n + (r.counts.vod || 0), 0);
@@ -2958,7 +3028,7 @@
       anime: { rows: data.animeRows, type:'poster' },
       kids: { rows: data.kidsRows, type:'poster' },
     };
-    liveData = filterHiddenCategories(rawLiveData);
+    liveData = filterAdultCategories(filterHiddenCategories(rawLiveData));
     xtreamState = { conn }; // minimal — enough for the account panel to know we're connected
 
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
@@ -3023,7 +3093,7 @@
       if(cached && cached.data){
         hadCache = true;
         rawLiveData = cached.data;
-        liveData = filterHiddenCategories(cached.data);
+        liveData = filterAdultCategories(filterHiddenCategories(cached.data));
         xtreamState = { conn };
         document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
         document.getElementById('heroTitle').textContent = 'Todo listo';
@@ -3195,7 +3265,7 @@
           hiddenCategoryNames = data.hiddenCategories;
           localStorage.setItem('netgo_hidden_categories', JSON.stringify(hiddenCategoryNames));
           if(rawLiveData){
-            liveData = filterHiddenCategories(rawLiveData);
+            liveData = filterAdultCategories(filterHiddenCategories(rawLiveData));
             renderCategory(currentCat);
           }
         }
@@ -3300,42 +3370,46 @@
   const overlay = document.getElementById('overlay');
   async function showAccountInfo(){
     const overlay = document.getElementById('accountInfoOverlay');
-    const userEl = document.getElementById('accInfoUser');
+    const codeEl = document.getElementById('accInfoCode');
+    const planEl = document.getElementById('accInfoPlan');
     const maxConnEl = document.getElementById('accInfoMaxConn');
+    const usedEl = document.getElementById('accInfoDevicesUsed');
+    const leftEl = document.getElementById('accInfoDevicesLeft');
     const expiryEl = document.getElementById('accInfoExpiry');
-    userEl.textContent = 'Cargando…';
-    maxConnEl.textContent = '—';
-    expiryEl.textContent = '—';
+    [codeEl, planEl, maxConnEl, usedEl, leftEl, expiryEl].forEach(el => el.textContent = 'Cargando…');
+    document.getElementById('parentalControlToggle').checked = isParentalControlOn();
     overlay.style.display = 'flex';
 
-    const conn = getConn();
-    if(!conn){
-      userEl.textContent = 'Sin proveedor conectado';
+    const clientCode = getClientCode();
+    codeEl.textContent = clientCode || '—';
+    if(!clientCode){
+      [planEl, maxConnEl, usedEl, leftEl, expiryEl].forEach(el => el.textContent = '—');
       return;
     }
-    if(conn.type === 'm3u'){
-      userEl.textContent = 'Lista M3U';
-      maxConnEl.textContent = '—';
-      expiryEl.textContent = 'No disponible para listas M3U';
-      return;
-    }
+
     try{
-      const base = conn.server.replace(/\/+$/,'');
-      const url = `${base}/player_api.php?username=${encodeURIComponent(conn.username)}&password=${encodeURIComponent(conn.password)}`;
-      const res = await fetch(url);
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const info = data.user_info || {};
-      userEl.textContent = info.username || conn.username;
-      maxConnEl.textContent = info.max_connections || '—';
-      if(info.exp_date){
-        const d = new Date(parseInt(info.exp_date, 10) * 1000);
-        expiryEl.textContent = d.toLocaleDateString('es-ES', { year:'numeric', month:'long', day:'numeric' });
+      const res = await fetch(`${FIREBASE_BASE}/clients/${clientCode}.json`);
+      const c = await res.json();
+      if(!c){
+        [planEl, maxConnEl, usedEl, leftEl, expiryEl].forEach(el => el.textContent = 'No disponible');
+        return;
+      }
+      const maxDevices = c.maxDevices || 1;
+      const usedDevices = Object.keys(c.registeredDevices || {}).length;
+      clientMaxDevices = maxDevices;
+      localStorage.setItem('netgo_max_devices', String(maxDevices));
+      planEl.textContent = c.planValue || '—';
+      maxConnEl.textContent = String(maxDevices);
+      usedEl.textContent = String(usedDevices);
+      leftEl.textContent = String(Math.max(0, maxDevices - usedDevices));
+      if(c.expiry){
+        const d = new Date(c.expiry + 'T00:00:00');
+        expiryEl.textContent = isNaN(d) ? c.expiry : d.toLocaleDateString('es-ES', { year:'numeric', month:'long', day:'numeric' });
       } else {
         expiryEl.textContent = 'Sin vencimiento';
       }
     }catch(err){
-      userEl.textContent = 'No se pudo obtener la información';
+      [planEl, maxConnEl, usedEl, leftEl, expiryEl].forEach(el => el.textContent = 'No se pudo obtener la información');
     }
   }
   document.getElementById('accountInfoClose').onclick = () => {
@@ -3634,6 +3708,8 @@
       // needs to be a free slot for it.
       const physicalId = await initDeviceCode();
       const maxDevices = c.maxDevices || 1;
+      clientMaxDevices = maxDevices;
+      localStorage.setItem('netgo_max_devices', String(maxDevices));
       const registered = c.registeredDevices || {};
       const alreadyRegistered = !!registered[physicalId];
 
@@ -3676,13 +3752,27 @@
   }
 
   const ADMIN_PIN = '1286';
+  let pinSuccessCallback = null;
+  function openPinPrompt(onSuccess){
+    pinSuccessCallback = onSuccess;
+    document.getElementById('pinError').style.display = 'none';
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinOverlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('pinInput').focus(), 100);
+  }
   function submitPin(){
     const val = document.getElementById('pinInput').value.trim();
     if(val === ADMIN_PIN){
       document.getElementById('pinOverlay').style.display = 'none';
-      stopStartScreenPolling();
-      document.getElementById('startScreen').style.display = 'none';
-      overlay.classList.add('open');
+      if(pinSuccessCallback){
+        const cb = pinSuccessCallback;
+        pinSuccessCallback = null;
+        cb();
+      } else {
+        stopStartScreenPolling();
+        document.getElementById('startScreen').style.display = 'none';
+        overlay.classList.add('open');
+      }
     } else {
       document.getElementById('pinError').style.display = 'block';
       document.getElementById('pinInput').value = '';
@@ -3693,8 +3783,50 @@
     if(e.key === 'Enter') submitPin();
   });
   document.getElementById('pinCancel').onclick = () => {
+    pinSuccessCallback = null;
     document.getElementById('pinOverlay').style.display = 'none';
   };
+</script>
+
+<script>
+  // ---------- Control parental (hide adult categories) ----------
+  const PARENTAL_CONTROL_KEY = 'netgo_parental_control';
+  const ADULT_CATEGORY_REGEX = /adult|xxx|porn|\+\s?18|18\s?\+|para adultos/i;
+
+  function isParentalControlOn(){
+    return localStorage.getItem(PARENTAL_CONTROL_KEY) === 'true';
+  }
+
+  function filterAdultCategories(data){
+    if(!data || !isParentalControlOn()) return data;
+    const filtered = {};
+    for(const key of Object.keys(data)){
+      const section = data[key];
+      filtered[key] = {
+        ...section,
+        rows: (section.rows || []).filter(row => !ADULT_CATEGORY_REGEX.test(row.title))
+      };
+    }
+    return filtered;
+  }
+
+  document.getElementById('parentalControlToggle').addEventListener('change', (e) => {
+    if(e.target.checked){
+      localStorage.setItem(PARENTAL_CONTROL_KEY, 'true');
+      if(rawLiveData){ liveData = filterAdultCategories(filterHiddenCategories(rawLiveData)); renderCategory(currentCat); }
+    } else {
+      // Turning parental control OFF needs the PIN — put the checkbox
+      // back to checked immediately, and only actually turn it off if the
+      // PIN is confirmed. This is on purpose: a kid shouldn't be able to
+      // just uncheck a box to get around it.
+      e.target.checked = true;
+      openPinPrompt(() => {
+        e.target.checked = false;
+        localStorage.setItem(PARENTAL_CONTROL_KEY, 'false');
+        if(rawLiveData){ liveData = filterAdultCategories(filterHiddenCategories(rawLiveData)); renderCategory(currentCat); }
+      });
+    }
+  });
 </script>
 
 </body>
