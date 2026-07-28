@@ -821,6 +821,42 @@ public class VlcPlayerActivity extends Activity {
     // entries (small icons, this stays well under a few MB).
     private static final android.util.LruCache<String, android.graphics.Bitmap> logoCache = new android.util.LruCache<>(80);
 
+    /** Downloads and decodes a small icon at roughly the size it'll
+     *  actually be shown at, instead of decoding the source image at full
+     *  resolution and only THEN scaling it down on screen. Some provider
+     *  logos come in surprisingly large (500px+), and decoding those at
+     *  full size on a generic/uncertified TV box with 1-2GB of RAM adds
+     *  up fast across dozens of channels — this keeps the memory cost of
+     *  each one down to what a ~48-64dp icon actually needs. */
+    private android.graphics.Bitmap downloadAndDecodeBitmap(String urlStr, int targetSizePx) throws Exception {
+        URL u = new URL(urlStr);
+        HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+        conn.setConnectTimeout(6000);
+        conn.setReadTimeout(6000);
+        conn.connect();
+        if (conn.getResponseCode() != 200) return null;
+
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (InputStream in = conn.getInputStream()) {
+            byte[] buf = new byte[2048];
+            int n;
+            while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+        }
+        byte[] bytes = bos.toByteArray();
+
+        android.graphics.BitmapFactory.Options boundsOpts = new android.graphics.BitmapFactory.Options();
+        boundsOpts.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, boundsOpts);
+
+        int sample = 1;
+        while ((boundsOpts.outWidth / (sample * 2)) >= targetSizePx && (boundsOpts.outHeight / (sample * 2)) >= targetSizePx) {
+            sample *= 2;
+        }
+        android.graphics.BitmapFactory.Options decodeOpts = new android.graphics.BitmapFactory.Options();
+        decodeOpts.inSampleSize = sample;
+        return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, decodeOpts);
+    }
+
     /** Fetches and decodes every channel logo for the given URLs into the
      *  shared cache, in the background, without touching any UI — called
      *  once a category's channel list is known, so by the time the person
@@ -831,16 +867,7 @@ public class VlcPlayerActivity extends Activity {
             if (url == null || url.isEmpty() || logoCache.get(url) != null) continue;
             new Thread(() -> {
                 try {
-                    URL u = new URL(url);
-                    HttpURLConnection conn = (HttpURLConnection) u.openConnection();
-                    conn.setConnectTimeout(6000);
-                    conn.setReadTimeout(6000);
-                    conn.connect();
-                    if (conn.getResponseCode() != 200) return;
-                    android.graphics.Bitmap bmp;
-                    try (InputStream in = conn.getInputStream()) {
-                        bmp = android.graphics.BitmapFactory.decodeStream(in);
-                    }
+                    android.graphics.Bitmap bmp = downloadAndDecodeBitmap(url, 96);
                     if (bmp != null) logoCache.put(url, bmp);
                 } catch (Exception ignored) { /* that one logo just won't be pre-warmed — falls back to a live fetch */ }
             }).start();
@@ -867,16 +894,7 @@ public class VlcPlayerActivity extends Activity {
 
         new Thread(() -> {
             try {
-                URL u = new URL(url);
-                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
-                conn.setConnectTimeout(6000);
-                conn.setReadTimeout(6000);
-                conn.connect();
-                if (conn.getResponseCode() != 200) return;
-                android.graphics.Bitmap bmp;
-                try (InputStream in = conn.getInputStream()) {
-                    bmp = android.graphics.BitmapFactory.decodeStream(in);
-                }
+                android.graphics.Bitmap bmp = downloadAndDecodeBitmap(url, 96);
                 if (bmp == null) return;
                 logoCache.put(url, bmp);
                 final android.graphics.Bitmap finalBmp = bmp;
@@ -1149,16 +1167,7 @@ public class VlcPlayerActivity extends Activity {
         final long token = ++epgFetchToken; // reuse the same "is this still current" pattern
         new Thread(() -> {
             try {
-                URL u = new URL(url);
-                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
-                conn.setConnectTimeout(6000);
-                conn.setReadTimeout(6000);
-                conn.connect();
-                if (conn.getResponseCode() != 200) return;
-                android.graphics.Bitmap bmp;
-                try (InputStream in = conn.getInputStream()) {
-                    bmp = android.graphics.BitmapFactory.decodeStream(in);
-                }
+                android.graphics.Bitmap bmp = downloadAndDecodeBitmap(url, 128); // bigger box here, so a bit more headroom
                 if (bmp == null) return;
                 logoCache.put(url, bmp);
                 runOnUiThread(() -> {
