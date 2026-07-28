@@ -34,6 +34,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
@@ -295,7 +296,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
                 .setReadTimeoutMs(10000)
                 .setAllowCrossProtocolRedirects(true)
                 .setUserAgent("NetGo/1.0 (Linux;Android) ExoPlayerLib/1.4.1");
-        trackSelector = new DefaultTrackSelector(activity);
+        AdaptiveTrackSelection.Factory adaptiveFactory = new AdaptiveTrackSelection.Factory(
+                15_000, 12_000, 25_000, 0.75f);
+        trackSelector = new DefaultTrackSelector(activity, adaptiveFactory);
         // Same as the TV player — no artificial cap, so playback always
         // aims for each channel's real/native quality.
         trackSelector.setParameters(trackSelector.buildUponParameters()
