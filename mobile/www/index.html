@@ -1459,15 +1459,15 @@
   // agent string (Android puts it there, e.g. "...Android 11; MIBOX4...")
   // — used so "enviar a la TV" can show which physical device is which
   // instead of a generic "TV 1"/"TV 2".
-  function getDeviceLabel(){
+  async function getDeviceLabel(){
     try{
-      const match = navigator.userAgent.match(/Android[^;]*;\s*([^)]+)\)/);
-      let model = match ? match[1].replace(/Build\/.*/, '').trim() : '';
-      // Some WebViews list "wv" or the app's own package name here instead
-      // of anything useful — fall back to a generic label in that case.
-      if(!model || /^wv$| Build$/i.test(model)) model = '';
-      if(model) return model;
+      if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceId){
+        const info = await window.Capacitor.Plugins.DeviceId.getDeviceInfo();
+        if(info && info.label) return info.label;
+      }
     }catch(e){}
+    // Not running as the native app (e.g. previewed in a desktop browser) —
+    // there's no real device to identify.
     return isTV() ? 'TV / TV Box' : 'Teléfono';
   }
 
@@ -2603,7 +2603,7 @@
     if(!code) return;
     try{
       const myId = await initDeviceCode();
-      const label = getDeviceLabel();
+      const label = await getDeviceLabel();
       const res = await fetch(`${FIREBASE_BASE}/clients/${code}/registeredDevices/${myId}.json`);
       const existing = await res.json();
       if(existing && existing.label === label) return; // already up to date
@@ -4122,7 +4122,7 @@
       if(!alreadyRegistered){
         await fetch(`${FIREBASE_BASE}/clients/${enteredCode}/registeredDevices/${physicalId}.json`, {
           method:'PUT', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ type: isTV() ? 'tv' : 'phone', label: getDeviceLabel(), registeredAt: Date.now() })
+          body: JSON.stringify({ type: isTV() ? 'tv' : 'phone', label: await getDeviceLabel(), registeredAt: Date.now() })
         });
       }
 
