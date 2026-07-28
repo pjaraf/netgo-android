@@ -590,6 +590,12 @@
     color:var(--text-dim); font-size:11.5px; text-align:center; padding:10px;
     background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
   }
+  /* When an entire category has no content — centered in the middle of
+     the screen instead of sitting as a small placeholder card. */
+  .empty-card-fullscreen{
+    flex:none; width:min(360px, 84vw); height:auto; min-height:0;
+    margin:18vh auto 0; padding:26px 24px; font-size:14px; line-height:1.5;
+  }
 
   /* ---------- Poster cards (movies) ---------- */
   .poster-card{
@@ -1837,7 +1843,7 @@
       d = activeData()[cat];
     }
     if(!d || !d.rows.length){
-      rowsContainer.innerHTML = `<section class="row"><div class="row-scroll"><div class="empty-card">${cat === 'continuar' ? 'Todavía no tienes nada para seguir viendo' : 'Tu proveedor no tiene contenido en esta categoría'}</div></div></section>`;
+      rowsContainer.innerHTML = `<section class="row"><div class="row-scroll" style="overflow:visible;"><div class="empty-card empty-card-fullscreen">${cat === 'continuar' ? 'Todavía no tienes nada para seguir viendo' : 'Tu proveedor no tiene contenido en esta categoría'}</div></div></section>`;
       return;
     }
 
