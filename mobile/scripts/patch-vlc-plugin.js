@@ -21,7 +21,7 @@ const packagePath = appId.split('.').join(path.sep);
 // 1) Java sources
 const javaDir = path.join(androidAppDir, 'src', 'main', 'java', packagePath);
 fs.mkdirSync(javaDir, { recursive: true });
-['VlcPlayerPlugin.java', 'VlcPlayerActivity.java', 'InlineVlcPlayerPlugin.java', 'MainActivity.java', 'UpdateInstallerPlugin.java', 'DeviceIdPlugin.java'].forEach(file => {
+['VlcPlayerPlugin.java', 'VlcPlayerActivity.java', 'InlineVlcPlayerPlugin.java', 'IptvLoadErrorPolicy.java', 'MainActivity.java', 'UpdateInstallerPlugin.java', 'DeviceIdPlugin.java'].forEach(file => {
   fs.copyFileSync(path.join(nativeDir, file), path.join(javaDir, file));
 });
 
