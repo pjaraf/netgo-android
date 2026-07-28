@@ -87,6 +87,8 @@ public class VlcPlayerActivity extends Activity {
     private final List<String> tsUrls = new ArrayList<>();
     private final List<String> titles = new ArrayList<>();
     private final List<String> nums = new ArrayList<>();
+    private final List<String> imgUrls = new ArrayList<>();
+    private final List<String> epgUrls = new ArrayList<>();
     private int currentIndex = 0;
     private long pendingResumePositionMs = 0;
     private String continueItemJson = "";
@@ -103,6 +105,8 @@ public class VlcPlayerActivity extends Activity {
     private final List<List<String>> catTsUrls = new ArrayList<>();
     private final List<List<String>> catTitlesPerItem = new ArrayList<>();
     private final List<List<String>> catNums = new ArrayList<>();
+    private final List<List<String>> catImgUrls = new ArrayList<>();
+    private final List<List<String>> catEpgUrls = new ArrayList<>();
     private int currentCatIndex = 0;
 
     private static final int BROWSE_NONE = 0;
@@ -123,7 +127,6 @@ public class VlcPlayerActivity extends Activity {
     private FrameLayout bannerRoot;
     private TextView bannerNum;
     private TextView bannerName;
-    private TextView bannerCount;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     // ---- Remote lock (paused/blocked by the admin) — checked directly by
@@ -313,17 +316,22 @@ public class VlcPlayerActivity extends Activity {
                     catTitles.add(cat.optString("title", "Categoría"));
                     JSONArray items = cat.getJSONArray("items");
                     List<String> u = new ArrayList<>(), ts = new ArrayList<>(), t = new ArrayList<>(), n = new ArrayList<>();
+                    List<String> im = new ArrayList<>(), eg = new ArrayList<>();
                     for (int i = 0; i < items.length(); i++) {
                         JSONObject it = items.getJSONObject(i);
                         u.add(it.getString("url"));
                         ts.add(it.optString("tsUrl", ""));
                         t.add(it.optString("title", "Canal"));
                         n.add(it.optString("num", ""));
+                        im.add(it.optString("img", ""));
+                        eg.add(it.optString("epgUrl", ""));
                     }
                     catUrls.add(u);
                     catTsUrls.add(ts);
                     catTitlesPerItem.add(t);
                     catNums.add(n);
+                    catImgUrls.add(im);
+                    catEpgUrls.add(eg);
                 }
                 currentCatIndex = getIntent().getIntExtra("catIndex", 0);
                 if (currentCatIndex < 0 || currentCatIndex >= catTitles.size()) currentCatIndex = 0;
@@ -340,6 +348,8 @@ public class VlcPlayerActivity extends Activity {
                     urls.add(obj.getString("url"));
                     titles.add(obj.optString("title", "Reproduciendo"));
                     nums.add(obj.optString("num", ""));
+                    imgUrls.add("");
+                    epgUrls.add("");
                 }
                 pendingResumePositionMs = getIntent().getLongExtra("startPositionMs", 0);
                 continueItemJson = getIntent().getStringExtra("contPlayingItem");
@@ -354,11 +364,13 @@ public class VlcPlayerActivity extends Activity {
 
     /** Copies the current category's channels into the flat urls/titles/nums lists used for playback. */
     private void loadActiveCategoryIntoFlatLists() {
-        urls.clear(); tsUrls.clear(); titles.clear(); nums.clear();
+        urls.clear(); tsUrls.clear(); titles.clear(); nums.clear(); imgUrls.clear(); epgUrls.clear();
         urls.addAll(catUrls.get(currentCatIndex));
         tsUrls.addAll(catTsUrls.get(currentCatIndex));
         titles.addAll(catTitlesPerItem.get(currentCatIndex));
         nums.addAll(catNums.get(currentCatIndex));
+        imgUrls.addAll(catImgUrls.get(currentCatIndex));
+        epgUrls.addAll(catEpgUrls.get(currentCatIndex));
     }
 
     // ---------- Remote control ----------
@@ -773,6 +785,17 @@ public class VlcPlayerActivity extends Activity {
     }
 
     // ---------- Channel change banner (native, attractive, auto-hides) ----------
+    // ---------- OSD channel banner (logo, number+clock, program + progress, next) ----------
+    private FrameLayout bannerLogoBox;
+    private TextView bannerLogoFallback;
+    private TextView bannerProgramTitle;
+    private View bannerProgressFill;
+    private View bannerProgressTrack;
+    private TextView bannerProgramTimes;
+    private TextView bannerNextLine;
+    private TextView bannerClock;
+    private long epgFetchToken = 0; // lets a slow/late EPG response be ignored if the channel changed again meanwhile
+
     private void buildChannelBanner() {
         FrameLayout root = findViewById(android.R.id.content);
 
@@ -783,60 +806,123 @@ public class VlcPlayerActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
-        int padV = dp(14), padH = dp(18);
+        int padV = dp(16), padH = dp(18);
         card.setPadding(padH, padV, padH, padV);
 
         GradientDrawable bg = new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{0xF0142838, 0xE0142838});
-        bg.setCornerRadius(dp(18));
+                new int[]{0xF20B1B26, 0xF2142838});
+        bg.setCornerRadius(dp(16));
         bg.setStroke(dp(1), 0x33FFFFFF);
         card.setBackground(bg);
 
-        FrameLayout badge = new FrameLayout(this);
-        GradientDrawable badgeBg = new GradientDrawable();
-        badgeBg.setShape(GradientDrawable.OVAL);
-        badgeBg.setColor(0xFFFF8A3D);
-        badge.setBackground(badgeBg);
-        bannerNum = new TextView(this);
-        bannerNum.setTextColor(0xFF1A0E00);
-        bannerNum.setTextSize(20);
-        bannerNum.setTypeface(bannerNum.getTypeface(), android.graphics.Typeface.BOLD);
-        bannerNum.setGravity(Gravity.CENTER);
-        FrameLayout.LayoutParams numLp = new FrameLayout.LayoutParams(dp(52), dp(52));
-        badge.addView(bannerNum, numLp);
-        card.addView(badge, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        // ---- Left: channel logo box ----
+        bannerLogoBox = new FrameLayout(this);
+        GradientDrawable logoBg = new GradientDrawable();
+        logoBg.setColor(0xFF0B1B26);
+        logoBg.setCornerRadius(dp(10));
+        logoBg.setStroke(dp(1), 0x40FFFFFF);
+        bannerLogoBox.setBackground(logoBg);
+        bannerLogoFallback = new TextView(this);
+        bannerLogoFallback.setTextColor(Color.WHITE);
+        bannerLogoFallback.setTextSize(20);
+        bannerLogoFallback.setTypeface(bannerLogoFallback.getTypeface(), android.graphics.Typeface.BOLD);
+        bannerLogoFallback.setGravity(Gravity.CENTER);
+        bannerLogoBox.addView(bannerLogoFallback, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        card.addView(bannerLogoBox, new LinearLayout.LayoutParams(dp(64), dp(64)));
 
+        // ---- Center: channel/program name, progress bar, next programme ----
         LinearLayout textCol = new LinearLayout(this);
         textCol.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         textLp.setMargins(dp(16), 0, dp(16), 0);
-
-        TextView liveLabel = new TextView(this);
-        liveLabel.setText("● EN VIVO");
-        liveLabel.setTextColor(0xFFFF6B6B);
-        liveLabel.setTextSize(11);
 
         bannerName = new TextView(this);
         bannerName.setTextColor(Color.WHITE);
-        bannerName.setTextSize(19);
+        bannerName.setTextSize(17);
         bannerName.setTypeface(bannerName.getTypeface(), android.graphics.Typeface.BOLD);
         bannerName.setMaxLines(1);
-
-        textCol.addView(liveLabel);
         textCol.addView(bannerName);
+
+        bannerProgramTitle = new TextView(this);
+        bannerProgramTitle.setTextColor(0xFFEAF2F5);
+        bannerProgramTitle.setTextSize(13);
+        bannerProgramTitle.setMaxLines(1);
+        LinearLayout.LayoutParams programLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        programLp.topMargin = dp(2);
+        textCol.addView(bannerProgramTitle, programLp);
+
+        // Progress bar: a thin track with an amber fill sized to the
+        // programme's elapsed fraction.
+        bannerProgressTrack = new View(this);
+        GradientDrawable trackBg = new GradientDrawable();
+        trackBg.setColor(0x33FFFFFF);
+        trackBg.setCornerRadius(dp(3));
+        bannerProgressTrack.setBackground(trackBg);
+        FrameLayout progressWrap = new FrameLayout(this);
+        progressWrap.addView(bannerProgressTrack, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(5)));
+        bannerProgressFill = new View(this);
+        GradientDrawable fillBg = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xFFFFC98A, 0xFFFF8A3D});
+        fillBg.setCornerRadius(dp(3));
+        bannerProgressFill.setBackground(fillBg);
+        FrameLayout.LayoutParams fillLp = new FrameLayout.LayoutParams(0, dp(5));
+        fillLp.gravity = Gravity.START;
+        progressWrap.addView(bannerProgressFill, fillLp);
+        LinearLayout.LayoutParams progressWrapLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        progressWrapLp.topMargin = dp(8);
+        textCol.addView(progressWrap, progressWrapLp);
+
+        bannerProgramTimes = new TextView(this);
+        bannerProgramTimes.setTextColor(0xFF9FB6C4);
+        bannerProgramTimes.setTextSize(10.5f);
+        LinearLayout.LayoutParams timesLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        timesLp.topMargin = dp(4);
+        textCol.addView(bannerProgramTimes, timesLp);
+
+        bannerNextLine = new TextView(this);
+        bannerNextLine.setTextColor(0xFF7C93A1);
+        bannerNextLine.setTextSize(11.5f);
+        bannerNextLine.setMaxLines(1);
+        LinearLayout.LayoutParams nextLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        nextLp.topMargin = dp(6);
+        textCol.addView(bannerNextLine, nextLp);
+
         card.addView(textCol, textLp);
 
-        bannerCount = new TextView(this);
-        bannerCount.setTextColor(0xFF9FB6C4);
-        bannerCount.setTextSize(13);
-        card.addView(bannerCount);
+        // ---- Right: channel number (big) + current system clock ----
+        LinearLayout rightCol = new LinearLayout(this);
+        rightCol.setOrientation(LinearLayout.VERTICAL);
+        rightCol.setGravity(Gravity.END);
+
+        bannerNum = new TextView(this);
+        bannerNum.setTextColor(0xFFFF8A3D);
+        bannerNum.setTextSize(30);
+        bannerNum.setTypeface(bannerNum.getTypeface(), android.graphics.Typeface.BOLD);
+        bannerNum.setGravity(Gravity.END);
+        rightCol.addView(bannerNum);
+
+        bannerClock = new TextView(this);
+        bannerClock.setTextColor(0xFF9FB6C4);
+        bannerClock.setTextSize(13);
+        bannerClock.setGravity(Gravity.END);
+        LinearLayout.LayoutParams clockLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        clockLp.topMargin = dp(2);
+        rightCol.addView(bannerClock, clockLp);
+
+        card.addView(rightCol);
 
         FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardLp.gravity = Gravity.BOTTOM | Gravity.START;
-        cardLp.setMargins(dp(40), 0, 0, dp(48));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardLp.gravity = Gravity.BOTTOM;
+        cardLp.setMargins(dp(40), 0, dp(40), dp(40));
         bannerRoot.addView(card, cardLp);
 
         root.addView(bannerRoot, new FrameLayout.LayoutParams(
@@ -845,14 +931,22 @@ public class VlcPlayerActivity extends Activity {
 
     private void showChannelBanner() {
         String num = nums.get(currentIndex);
+        String name = titles.get(currentIndex);
         bannerNum.setText(num == null || num.isEmpty() ? "•" : num);
-        bannerName.setText(titles.get(currentIndex));
-        if (urls.size() > 1) {
-            bannerCount.setText((currentIndex + 1) + " / " + urls.size());
-            bannerCount.setVisibility(View.VISIBLE);
-        } else {
-            bannerCount.setVisibility(View.GONE);
-        }
+        bannerName.setText(name);
+        bannerLogoFallback.setText(name != null && !name.isEmpty() ? name.substring(0, 1).toUpperCase() : "?");
+        bannerClock.setText(new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(new java.util.Date()));
+
+        // Reset programme info to a loading state while the EPG request is
+        // in flight — it usually resolves well within the banner's
+        // on-screen window.
+        bannerProgramTitle.setText("Cargando programación…");
+        bannerProgressFill.getLayoutParams().width = 0;
+        bannerProgressFill.requestLayout();
+        bannerProgramTimes.setText("");
+        bannerNextLine.setText("");
+        loadBannerLogo(currentIndex < imgUrls.size() ? imgUrls.get(currentIndex) : "");
+        fetchEpgForBanner(currentIndex < epgUrls.size() ? epgUrls.get(currentIndex) : "");
 
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
 
@@ -860,9 +954,140 @@ public class VlcPlayerActivity extends Activity {
         bannerRoot.setTranslationY(dp(24));
         bannerRoot.animate().alpha(1f).translationY(0).setDuration(180).start();
 
-        hideBannerRunnable = () -> bannerRoot.animate().alpha(0f).setDuration(220)
+        // On screen for ~4.5s (within the 3–5s window asked for), then a
+        // smooth fade-out.
+        hideBannerRunnable = () -> bannerRoot.animate().alpha(0f).setDuration(280)
                 .withEndAction(() -> bannerRoot.setVisibility(View.GONE)).start();
-        handler.postDelayed(hideBannerRunnable, 3800);
+        handler.postDelayed(hideBannerRunnable, 4500);
+    }
+
+    /** Loads the channel logo into the banner's logo box on a background
+     *  thread — no image library dependency, just a plain HTTP decode,
+     *  which is all a small icon needs. Falls back to the channel's first
+     *  letter if there's no logo URL or it fails to load. */
+    private void loadBannerLogo(String url) {
+        bannerLogoBox.removeViews(0, Math.max(0, bannerLogoBox.getChildCount() - 1));
+        bannerLogoFallback.setVisibility(View.VISIBLE);
+        if (url == null || url.isEmpty()) return;
+        final long token = ++epgFetchToken; // reuse the same "is this still current" pattern
+        new Thread(() -> {
+            try {
+                URL u = new URL(url);
+                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.connect();
+                if (conn.getResponseCode() != 200) return;
+                android.graphics.Bitmap bmp;
+                try (InputStream in = conn.getInputStream()) {
+                    bmp = android.graphics.BitmapFactory.decodeStream(in);
+                }
+                if (bmp == null) return;
+                runOnUiThread(() -> {
+                    if (token != epgFetchToken) return; // channel changed again before this arrived
+                    android.widget.ImageView iv = new android.widget.ImageView(this);
+                    iv.setImageBitmap(bmp);
+                    iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+                    int pad = dp(6);
+                    iv.setPadding(pad, pad, pad, pad);
+                    bannerLogoBox.addView(iv, 0, new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    bannerLogoFallback.setVisibility(View.GONE);
+                });
+            } catch (Exception ignored) {
+                // No logo available — the fallback letter stays visible.
+            }
+        }).start();
+    }
+
+    /** Fetches the current + next programme for the channel showing in the
+     *  banner right now, and fills in the title, progress bar and
+     *  "Siguiente" line once it arrives. */
+    private void fetchEpgForBanner(String epgUrl) {
+        if (epgUrl == null || epgUrl.isEmpty()) {
+            bannerProgramTitle.setText("Sin información de programación");
+            return;
+        }
+        final long token = ++epgFetchToken;
+        new Thread(() -> {
+            try {
+                URL u = new URL(epgUrl);
+                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.connect();
+                if (conn.getResponseCode() != 200) return;
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try (InputStream in = conn.getInputStream()) {
+                    byte[] buf = new byte[1024];
+                    int n;
+                    while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+                }
+                JSONObject root = new JSONObject(bos.toString("UTF-8"));
+                JSONArray listings = root.optJSONArray("epg_listings");
+                if (listings == null || listings.length() == 0) {
+                    runOnUiThread(() -> {
+                        if (token == epgFetchToken) bannerProgramTitle.setText("Sin información de programación");
+                    });
+                    return;
+                }
+
+                JSONObject current = listings.getJSONObject(0);
+                JSONObject next = listings.length() > 1 ? listings.getJSONObject(1) : null;
+
+                String currentTitle = decodeEpgText(current.optString("title", ""));
+                long startTs = current.optLong("start_timestamp", 0) * 1000L;
+                long stopTs = current.optLong("stop_timestamp", 0) * 1000L;
+                String nextTitle = next != null ? decodeEpgText(next.optString("title", "")) : "";
+                long nextStartTs = next != null ? next.optLong("start_timestamp", 0) * 1000L : 0;
+                long nextStopTs = next != null ? next.optLong("stop_timestamp", 0) * 1000L : 0;
+
+                java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+                String startStr = startTs > 0 ? fmt.format(new java.util.Date(startTs)) : "";
+                String stopStr = stopTs > 0 ? fmt.format(new java.util.Date(stopTs)) : "";
+                int progressPct = 0;
+                if (startTs > 0 && stopTs > startTs) {
+                    long now = System.currentTimeMillis();
+                    progressPct = (int) Math.max(0, Math.min(100, (now - startTs) * 100 / (stopTs - startTs)));
+                }
+                final int finalProgressPct = progressPct;
+                final String finalNextLine = (next != null && !nextTitle.isEmpty())
+                        ? "Siguiente: " + nextTitle + " | " + fmt.format(new java.util.Date(nextStartTs)) + " hrs. / " + fmt.format(new java.util.Date(nextStopTs)) + " hrs."
+                        : "";
+
+                runOnUiThread(() -> {
+                    if (token != epgFetchToken) return; // a newer channel change already superseded this
+                    bannerProgramTitle.setText(currentTitle.isEmpty() ? titles.get(currentIndex) : currentTitle);
+                    bannerProgramTimes.setText(startStr.isEmpty() ? "" : startStr + " hrs. – " + stopStr + " hrs.");
+                    bannerNextLine.setText(finalNextLine);
+                    int trackWidth = bannerProgressTrack.getWidth();
+                    if (trackWidth > 0) {
+                        bannerProgressFill.getLayoutParams().width = trackWidth * finalProgressPct / 100;
+                    } else {
+                        // Track hasn't been laid out yet — set it once it has.
+                        bannerProgressTrack.post(() -> {
+                            bannerProgressFill.getLayoutParams().width =
+                                    bannerProgressTrack.getWidth() * finalProgressPct / 100;
+                            bannerProgressFill.requestLayout();
+                        });
+                    }
+                    bannerProgressFill.requestLayout();
+                });
+            } catch (Exception ignored) {
+                runOnUiThread(() -> {
+                    if (token == epgFetchToken) bannerProgramTitle.setText("Sin información de programación");
+                });
+            }
+        }).start();
+    }
+
+    private String decodeEpgText(String base64){
+        if (base64 == null || base64.isEmpty()) return "";
+        try {
+            return new String(android.util.Base64.decode(base64, android.util.Base64.DEFAULT), "UTF-8").trim();
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     // ---------- Progress bar (movies/series only — live TV has no fixed duration) ----------
