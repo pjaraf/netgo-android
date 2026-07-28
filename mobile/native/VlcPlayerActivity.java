@@ -84,16 +84,23 @@ public class VlcPlayerActivity extends Activity {
 
     // ---- Flat-queue mode (movies / series / single channel list) ----
     private final List<String> urls = new ArrayList<>();
+    private final List<String> tsUrls = new ArrayList<>();
     private final List<String> titles = new ArrayList<>();
     private final List<String> nums = new ArrayList<>();
     private int currentIndex = 0;
     private long pendingResumePositionMs = 0;
     private String continueItemJson = "";
+    // If a channel's HLS (.m3u8) stream keeps failing, automatically try
+    // its raw MPEG-TS (.ts) URL instead — some Xtream panels' HLS output
+    // is unreliable (plays briefly, then stalls) even though the exact
+    // same channel works fine as a direct stream.
+    private boolean usingFallbackFormat = false;
 
     // ---- Live TV mode (categories + browsing) ----
     private boolean isLive = false;
     private final List<String> catTitles = new ArrayList<>();
     private final List<List<String>> catUrls = new ArrayList<>();
+    private final List<List<String>> catTsUrls = new ArrayList<>();
     private final List<List<String>> catTitlesPerItem = new ArrayList<>();
     private final List<List<String>> catNums = new ArrayList<>();
     private int currentCatIndex = 0;
@@ -292,14 +299,16 @@ public class VlcPlayerActivity extends Activity {
                     JSONObject cat = cats.getJSONObject(c);
                     catTitles.add(cat.optString("title", "Categoría"));
                     JSONArray items = cat.getJSONArray("items");
-                    List<String> u = new ArrayList<>(), t = new ArrayList<>(), n = new ArrayList<>();
+                    List<String> u = new ArrayList<>(), ts = new ArrayList<>(), t = new ArrayList<>(), n = new ArrayList<>();
                     for (int i = 0; i < items.length(); i++) {
                         JSONObject it = items.getJSONObject(i);
                         u.add(it.getString("url"));
+                        ts.add(it.optString("tsUrl", ""));
                         t.add(it.optString("title", "Canal"));
                         n.add(it.optString("num", ""));
                     }
                     catUrls.add(u);
+                    catTsUrls.add(ts);
                     catTitlesPerItem.add(t);
                     catNums.add(n);
                 }
@@ -332,8 +341,9 @@ public class VlcPlayerActivity extends Activity {
 
     /** Copies the current category's channels into the flat urls/titles/nums lists used for playback. */
     private void loadActiveCategoryIntoFlatLists() {
-        urls.clear(); titles.clear(); nums.clear();
+        urls.clear(); tsUrls.clear(); titles.clear(); nums.clear();
         urls.addAll(catUrls.get(currentCatIndex));
+        tsUrls.addAll(catTsUrls.get(currentCatIndex));
         titles.addAll(catTitlesPerItem.get(currentCatIndex));
         nums.addAll(catNums.get(currentCatIndex));
     }
@@ -486,6 +496,7 @@ public class VlcPlayerActivity extends Activity {
     private void goToChannel(int index) {
         currentIndex = index;
         liveRetryCount = 0; // fresh channel picked by the user — start the backoff over
+        usingFallbackFormat = false; // new channel always starts on the primary format
         loadCurrent();
         showChannelBanner();
     }
@@ -567,10 +578,18 @@ public class VlcPlayerActivity extends Activity {
     /** Reconnects to the exact same channel after a short, increasing
      *  delay — never a different channel, never a popup. Caps out at 15s
      *  between attempts so a genuinely dead stream retries forever
-     *  without hammering the server. */
+     *  without hammering the server. After a couple of failed attempts on
+     *  the primary HLS (.m3u8) format, automatically switches to the raw
+     *  MPEG-TS (.ts) format instead — some servers' HLS output is
+     *  unreliable even though the same channel works fine as a direct
+     *  stream. */
     private void scheduleLiveRetry() {
         cancelStallTimer();
         liveRetryCount++;
+        if (!usingFallbackFormat && liveRetryCount >= 2
+                && currentIndex < tsUrls.size() && !tsUrls.get(currentIndex).isEmpty()) {
+            usingFallbackFormat = true;
+        }
         long delay = Math.min(3000L + (liveRetryCount * 2000L), 15000L);
         handler.postDelayed(this::loadCurrent, delay);
     }
@@ -586,7 +605,9 @@ public class VlcPlayerActivity extends Activity {
         }
         zoomIndex = 0;
         if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
-        MediaItem.Builder itemBuilder = new MediaItem.Builder().setUri(Uri.parse(urls.get(currentIndex)));
+        String playUrl = (usingFallbackFormat && currentIndex < tsUrls.size() && !tsUrls.get(currentIndex).isEmpty())
+                ? tsUrls.get(currentIndex) : urls.get(currentIndex);
+        MediaItem.Builder itemBuilder = new MediaItem.Builder().setUri(Uri.parse(playUrl));
         if (isLive) {
             // Lets ExoPlayer nudge playback speed by a few percent to stay
             // near a comfortable buffer target instead of ever having to
