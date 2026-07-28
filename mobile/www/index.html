@@ -1455,6 +1455,22 @@
   }
   if(isTV()) document.body.classList.add('tv-mode');
 
+  // Identifies the real TV/TV box brand+model from the WebView's own user
+  // agent string (Android puts it there, e.g. "...Android 11; MIBOX4...")
+  // — used so "enviar a la TV" can show which physical device is which
+  // instead of a generic "TV 1"/"TV 2".
+  function getDeviceLabel(){
+    try{
+      const match = navigator.userAgent.match(/Android[^;]*;\s*([^)]+)\)/);
+      let model = match ? match[1].replace(/Build\/.*/, '').trim() : '';
+      // Some WebViews list "wv" or the app's own package name here instead
+      // of anything useful — fall back to a generic label in that case.
+      if(!model || /^wv$| Build$/i.test(model)) model = '';
+      if(model) return model;
+    }catch(e){}
+    return isTV() ? 'TV / TV Box' : 'Teléfono';
+  }
+
   // Old/weak phones benefit from the same "cheap rendering" mode we built
   // for TV (no blur, no scale-on-tap animation) — detected via the
   // Device Memory / CPU core count the browser exposes, when available.
@@ -2385,7 +2401,7 @@
         showStatus('No hay ninguna TV registrada con este código todavía.', true);
         return;
       }
-      targetId = tvIds.length === 1 ? tvIds[0] : await pickCastTargetDevice(tvIds);
+      targetId = await pickCastTargetDevice(tvIds, registered);
       if(!targetId) return; // person cancelled the picker
     }catch(err){
       showStatus('No se pudo revisar los dispositivos registrados.', true);
@@ -2427,7 +2443,7 @@
   // Simple picker overlay — one button per registered TV, in the order
   // they were registered ("TV 1", "TV 2"...). Resolves with the chosen
   // device id, or null if the person backs out.
-  function pickCastTargetDevice(tvIds){
+  function pickCastTargetDevice(tvIds, registered){
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,12,17,0.85);display:flex;align-items:center;justify-content:center;';
@@ -2435,8 +2451,9 @@
       card.style.cssText = 'background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;min-width:260px;text-align:center;';
       card.innerHTML = `<div style="font-weight:700;font-size:15px;margin-bottom:14px;">¿A cuál TV enviar?</div>`;
       tvIds.forEach((id, i) => {
+        const label = (registered[id] && registered[id].label) || `TV ${i + 1}`;
         const btn = document.createElement('button');
-        btn.textContent = `📺 TV ${i + 1}`;
+        btn.textContent = `📺 ${label}`;
         btn.style.cssText = 'display:block;width:100%;background:var(--amber);color:#1A0E00;border:none;font-weight:700;padding:12px;border-radius:10px;margin-bottom:8px;cursor:pointer;';
         btn.onclick = () => { document.body.removeChild(overlay); resolve(id); };
         card.appendChild(btn);
@@ -2579,6 +2596,22 @@
         localStorage.setItem('netgo_max_devices', String(val));
       }
     }catch(err){ /* keep the last-known cached value if this fails */ }
+  }
+
+  async function backfillDeviceLabel(){
+    const code = getClientCode();
+    if(!code) return;
+    try{
+      const myId = await initDeviceCode();
+      const label = getDeviceLabel();
+      const res = await fetch(`${FIREBASE_BASE}/clients/${code}/registeredDevices/${myId}.json`);
+      const existing = await res.json();
+      if(existing && existing.label === label) return; // already up to date
+      await fetch(`${FIREBASE_BASE}/clients/${code}/registeredDevices/${myId}.json`, {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ type: isTV() ? 'tv' : 'phone', label, registeredAt: (existing && existing.registeredAt) || Date.now() })
+      });
+    }catch(err){ /* not critical — the picker just falls back to a generic label */ }
   }
   try{ hiddenCategoryNames = JSON.parse(localStorage.getItem('netgo_hidden_categories') || '[]'); }catch(e){}
 
@@ -3376,6 +3409,7 @@
     if(!silent) showStatus('Conectando…', false);
     const cacheKey = connCacheKey(conn);
     refreshClientMaxDevices(); // fire-and-forget — fixes "casting requires 3/5 devices" showing wrong for returning sessions
+    backfillDeviceLabel(); // fire-and-forget — gives already-registered devices their real name too, not just newly-paired ones
 
     // Show the last-known catalog immediately (if we have one) so the
     // screen is never empty/blank while fresh data loads in the
@@ -4088,7 +4122,7 @@
       if(!alreadyRegistered){
         await fetch(`${FIREBASE_BASE}/clients/${enteredCode}/registeredDevices/${physicalId}.json`, {
           method:'PUT', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ type: isTV() ? 'tv' : 'phone', registeredAt: Date.now() })
+          body: JSON.stringify({ type: isTV() ? 'tv' : 'phone', label: getDeviceLabel(), registeredAt: Date.now() })
         });
       }
 
