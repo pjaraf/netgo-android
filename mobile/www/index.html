@@ -925,7 +925,7 @@
     background:transparent; color:var(--text-dim); border:1px solid var(--line);
     margin-top:8px;
   }
-  #pinOverlay{ z-index:210; }
+  #pinOverlay{ z-index:450; }
 
   .account-icon{ font-size:34px; margin-bottom:6px; }
   .account-title{ color:#0B1B26; font-size:16px; margin:0 0 16px; }
@@ -4399,18 +4399,24 @@
     return filtered;
   }
 
-  document.getElementById('parentalControlToggle').addEventListener('change', (e) => {
-    if(e.target.checked){
+  function setCustomToggle(id, on){
+    const el = document.getElementById(id);
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-checked', on ? 'true' : 'false');
+  }
+  document.getElementById('parentalControlToggle').addEventListener('click', () => {
+    const el = document.getElementById('parentalControlToggle');
+    const turningOn = !el.classList.contains('on');
+    if(turningOn){
+      setCustomToggle('parentalControlToggle', true);
       localStorage.setItem(PARENTAL_CONTROL_KEY, 'true');
       if(rawLiveData){ liveData = filterAdultCategories(filterHiddenCategories(rawLiveData)); renderCategory(currentCat); }
     } else {
-      // Turning parental control OFF needs the PIN — put the checkbox
-      // back to checked immediately, and only actually turn it off if the
-      // PIN is confirmed. This is on purpose: a kid shouldn't be able to
-      // just uncheck a box to get around it.
-      e.target.checked = true;
+      // Turning parental control OFF needs the PIN — the toggle stays ON
+      // visually until the PIN is confirmed. This is on purpose: a kid
+      // shouldn't be able to just tap it to get around it.
       openPinPrompt(() => {
-        e.target.checked = false;
+        setCustomToggle('parentalControlToggle', false);
         localStorage.setItem(PARENTAL_CONTROL_KEY, 'false');
         if(rawLiveData){ liveData = filterAdultCategories(filterHiddenCategories(rawLiveData)); renderCategory(currentCat); }
       });
