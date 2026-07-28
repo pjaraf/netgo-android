@@ -388,13 +388,39 @@ public class InlineVlcPlayerPlugin extends Plugin {
         topBar.setBackground(topFade);
         topBar.setPadding(pad, pad, pad, dp(activity, 28));
 
+        // Title, cast, and close all have to be native views (not HTML) —
+        // the video's native layer always renders above the WebView's own
+        // content as a sibling view added later, so any web-based element
+        // in this same strip ends up invisible/unclickable underneath it,
+        // no matter how it's styled. This was the actual bug behind the
+        // "TV" button, the title, and the close (✕) all being hidden.
         titleView = new TextView(activity);
         titleView.setText("Reproduciendo");
         titleView.setTextColor(Color.WHITE);
         titleView.setTextSize(13);
         titleView.setMaxLines(1);
-        // Kept as a field (other code sets its text when a new item loads)
-        // but no longer shown — the top bar UI was removed per request.
+        titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titleLp.setMarginStart(dp(activity, 4));
+        topBar.addView(titleView, titleLp);
+
+        // "Enviar a TV" — the actual send logic still lives in JS (it
+        // already talks to Firebase) — this just notifies it.
+        TextView castBtn = new TextView(activity);
+        castBtn.setText("TV");
+        castBtn.setTextColor(Color.WHITE);
+        castBtn.setTextSize(12);
+        castBtn.setTypeface(castBtn.getTypeface(), android.graphics.Typeface.BOLD);
+        castBtn.setGravity(Gravity.CENTER);
+        GradientDrawable castBg = new GradientDrawable();
+        castBg.setColor(0x40FF8A3D);
+        castBg.setStroke(dp(activity, 1), 0xFFFF8A3D);
+        castBg.setCornerRadius(dp(activity, 14));
+        castBtn.setBackground(castBg);
+        castBtn.setOnClickListener(v -> { notifyListeners("castRequested", new JSObject()); scheduleAutoHide(); });
+        LinearLayout.LayoutParams castLp = new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 28));
+        castLp.setMargins(dp(activity, 8), 0, dp(activity, 8), 0);
+        topBar.addView(castBtn, castLp);
 
         fullscreenBtn = new TextView(activity);
         fullscreenBtn.setText("⤢");
@@ -404,6 +430,20 @@ public class InlineVlcPlayerPlugin extends Plugin {
         fullscreenBtn.setPadding(pad, 0, pad, 0);
         fullscreenBtn.setOnClickListener(v -> { toggleFullscreen(activity); scheduleAutoHide(); });
         topBar.addView(fullscreenBtn, new LinearLayout.LayoutParams(dp(activity, 40), dp(activity, 36)));
+
+        TextView nativeCloseBtn = new TextView(activity);
+        nativeCloseBtn.setText("✕");
+        nativeCloseBtn.setTextColor(Color.WHITE);
+        nativeCloseBtn.setTextSize(15);
+        nativeCloseBtn.setGravity(Gravity.CENTER);
+        GradientDrawable closeBg = new GradientDrawable();
+        closeBg.setShape(GradientDrawable.OVAL);
+        closeBg.setColor(0x99060E14);
+        nativeCloseBtn.setBackground(closeBg);
+        nativeCloseBtn.setOnClickListener(v -> closeIfOpen());
+        LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(dp(activity, 28), dp(activity, 28));
+        closeLp.setMarginStart(dp(activity, 8));
+        topBar.addView(nativeCloseBtn, closeLp);
 
         FrameLayout.LayoutParams topLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
