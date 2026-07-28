@@ -1936,7 +1936,7 @@
     const d = activeData().vivo;
     const categories = d.rows.map(row => ({
       title: row.title,
-      items: row.items.map(c => ({ url: c.url, title: c.t, num: c.num || '' }))
+      items: row.items.map(c => ({ url: c.url, title: c.t, num: c.num || '', tsUrl: c.tsUrl || '' }))
     }));
     const itemIndex = Math.max(0, d.rows[vivoActiveCatIndex].items.findIndex(c => c.url === vivoPreviewSelected.url));
     window.Capacitor.Plugins.VlcPlayer.playLive({
@@ -2742,7 +2742,12 @@
       items: row.items.map(s => ({
         t: s.name, program:'', num: s.num || '',
         img: s.stream_icon || '',
-        url: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.m3u8`
+        url: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.m3u8`,
+        // Some servers' HLS output is unreliable (plays briefly, then
+        // stalls) even though the same channel works fine as a raw
+        // MPEG-TS stream — the native player automatically falls back to
+        // this if the main URL keeps failing.
+        tsUrl: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.ts`
       }))
     }));
     const vodRows = groupByCategory(vod, vodCategories).map(row => ({
