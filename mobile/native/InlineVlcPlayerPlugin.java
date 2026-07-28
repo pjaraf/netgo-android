@@ -124,6 +124,12 @@ public class InlineVlcPlayerPlugin extends Plugin {
     public void mount(PluginCall call) {
         controlsEnabled = call.getData().optBoolean("showControls", true);
         getActivity().runOnUiThread(() -> {
+            // Every fresh mount starts clean — never inherits a landscape/
+            // fullscreen state left over from a previous video, so a new
+            // selection from Películas/Series always begins in the
+            // normal (portrait, on phone) view.
+            if (isFullscreen) exitFullscreen(getActivity());
+            else getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
             ensureViewsCreated();
             applyRect(call);
             call.resolve();
