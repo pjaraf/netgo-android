@@ -906,9 +906,20 @@
       await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, {
         method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(record)
       });
-      await fetch(`${FIREBASE_BASE}/pairs/${code}.json`, {
+
+      // The app has no way to know which admin's namespace to search when
+      // someone types in a code, so every client also needs a flat, public
+      // mirror at the top level — this is what the app actually looks up.
+      // Preserve any devices already registered against this code.
+      let existingRegisteredDevices = {};
+      try{
+        const existingFlatRes = await fetch(`${FIREBASE_BASE}/clients/${code}.json`);
+        const existingFlat = await existingFlatRes.json();
+        if(existingFlat && existingFlat.registeredDevices) existingRegisteredDevices = existingFlat.registeredDevices;
+      }catch(e){}
+      await fetch(`${FIREBASE_BASE}/clients/${code}.json`, {
         method:'PUT', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ connections, ts: Date.now() })
+        body: JSON.stringify({ ...record, registeredDevices: existingRegisteredDevices })
       });
 
       // Open WhatsApp with the activation message pre-filled and ready —
@@ -1028,8 +1039,20 @@
 
   async function loadAllLists(){
     try{
-      const res = await fetch(`${FIREBASE_BASE}/${clientsPath()}.json`);
+      const [res, flatRes] = await Promise.all([
+        fetch(`${FIREBASE_BASE}/${clientsPath()}.json`),
+        fetch(`${FIREBASE_BASE}/clients.json`)
+      ]);
       const data = await res.json() || {};
+      const flatData = await flatRes.json() || {};
+      // registeredDevices only ever gets updated on the flat mirror (the
+      // app has no concept of which admin owns a code) — merge it in here
+      // so the device count shown per client is accurate.
+      Object.keys(data).forEach(code => {
+        if(flatData[code] && flatData[code].registeredDevices){
+          data[code].registeredDevices = flatData[code].registeredDevices;
+        }
+      });
       const codes = Object.keys(data);
       const now = Date.now();
       const today = new Date().toISOString().slice(0,10);
@@ -1143,13 +1166,14 @@
 
   window.releaseDevices = async (code, name) => {
     if(!confirm(`¿Liberar todos los dispositivos registrados de "${name || code}"? El próximo dispositivo (o los próximos, hasta el límite) que escriba este código podrá conectarse de nuevo.`)) return;
-    await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}/registeredDevices.json`, { method:'DELETE' });
+    await fetch(`${FIREBASE_BASE}/clients/${code}/registeredDevices.json`, { method:'DELETE' });
     loadAllLists();
   };
 
   window.deleteClient = async (code, name) => {
     if(!confirm(`¿Eliminar al cliente "${name || code}"? Esto no se puede deshacer.`)) return;
     await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}.json`, { method:'DELETE' });
+    await fetch(`${FIREBASE_BASE}/clients/${code}.json`, { method:'DELETE' });
     // Lock the client's app out too, since their record no longer exists.
     await fetch(`${FIREBASE_BASE}/status/${code}.json`, {
       method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ blocked:true })
