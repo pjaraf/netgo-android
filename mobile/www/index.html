@@ -2033,7 +2033,7 @@
     const d = activeData().vivo;
     const categories = d.rows.map(row => ({
       title: row.title,
-      items: row.items.map(c => ({ url: c.url, title: c.t, num: c.num || '', tsUrl: c.tsUrl || '' }))
+      items: row.items.map(c => ({ url: c.url, title: c.t, num: c.num || '', tsUrl: c.tsUrl || '', img: c.img || '', epgUrl: c.epgUrl || '' }))
     }));
     const itemIndex = Math.max(0, d.rows[vivoActiveCatIndex].items.findIndex(c => c.url === vivoPreviewSelected.url));
     window.Capacitor.Plugins.VlcPlayer.playLive({
@@ -2852,7 +2852,9 @@
         // stalls) even though the same channel works fine as a raw
         // MPEG-TS stream — the native player automatically falls back to
         // this if the main URL keeps failing.
-        tsUrl: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.ts`
+        tsUrl: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.ts`,
+        // Current/next programme info for the on-screen channel banner.
+        epgUrl: `${base}/player_api.php?username=${conn.username}&password=${conn.password}&action=get_short_epg&stream_id=${s.stream_id}&limit=2`
       }))
     }));
     const vodRows = groupByCategory(vod, vodCategories).map(row => ({
@@ -2901,7 +2903,8 @@
       .map(row => row.items.map(s => ({
         t: s.name, program:'', num: s.num || '', img: s.stream_icon || '',
         url: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.m3u8`,
-        tsUrl: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.ts`
+        tsUrl: `${base}/live/${conn.username}/${conn.password}/${s.stream_id}.ts`,
+        epgUrl: `${base}/player_api.php?username=${conn.username}&password=${conn.password}&action=get_short_epg&stream_id=${s.stream_id}&limit=2`
       }))));
     const kidsLiveRows = kidsLiveItems.length
       ? [{ title:'Canales infantiles', items: kidsLiveItems, cardType:'channel' }]
