@@ -1104,12 +1104,14 @@
           <div><span>Valor del plan</span><b>${c.planValue || '—'}</b></div>
           <div><span>Creado</span><b>${fmtDate(c.createdAt)}</b></div>
           <div><span>Vence</span><b>${c.expiry || '—'}</b></div>
+          <div><span>Dispositivos</span><b>${Object.keys(c.registeredDevices || {}).length} / ${c.maxDevices || 1}</b></div>
         </div>
         <div class="client-actions" style="flex-wrap:wrap;">
           <button class="ghost small" onclick="editClient('${code}')">Editar</button>
           <button class="ghost small" onclick="toggleClientPause('${code}', ${!!c.paused})">${c.paused ? 'Reactivar' : 'Pausar'}</button>
           <button class="ghost small" onclick="toggleClientBlock('${code}', ${!!c.blocked})">${c.blocked ? 'Desbloquear' : 'Bloquear'}</button>
           <button class="ghost small" onclick="openMessageModal('${code}', '${(c.name||'').replace(/'/g,"")}')">💬 Mensaje</button>
+          <button class="ghost small" onclick="releaseDevices('${code}', '${(c.name||'').replace(/'/g,"")}')">🔓 Liberar dispositivos</button>
           <button class="ghost small" style="color:var(--red); border-color:rgba(255,107,107,.4);" onclick="deleteClient('${code}', '${(c.name||'').replace(/'/g,"")}')">Eliminar cliente</button>
         </div>
       </div>
@@ -1136,6 +1138,12 @@
     await fetch(`${FIREBASE_BASE}/status/${code}.json`, {
       method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ blocked: nowBlocked })
     });
+    loadAllLists();
+  };
+
+  window.releaseDevices = async (code, name) => {
+    if(!confirm(`¿Liberar todos los dispositivos registrados de "${name || code}"? El próximo dispositivo (o los próximos, hasta el límite) que escriba este código podrá conectarse de nuevo.`)) return;
+    await fetch(`${FIREBASE_BASE}/${clientsPath()}/${code}/registeredDevices.json`, { method:'DELETE' });
     loadAllLists();
   };
 
