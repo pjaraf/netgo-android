@@ -282,6 +282,36 @@
   .vivo-tab.active::after{ content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--amber); border-radius:2px; }
 
   .vivo-body{ display:flex; height:56vh; min-height:380px; }
+  .category-panel-btn{
+    position:fixed; top:78px; right:18px; z-index:45;
+    background:rgba(20,40,56,0.92); border:1px solid var(--line); color:var(--text);
+    font-size:12.5px; font-weight:600; padding:9px 14px; border-radius:20px; cursor:pointer;
+  }
+  body.tv-mode .category-panel-btn{ top:96px; right:34px; font-size:14px; padding:10px 18px; }
+  .category-panel-btn:focus-visible{ outline:2.5px solid var(--amber); }
+  .category-panel-overlay{
+    position:fixed; inset:0; z-index:500; background:rgba(5,12,17,0.6);
+    display:flex; justify-content:flex-end;
+  }
+  .category-panel{
+    width:min(300px, 78vw); height:100%; background:var(--bg-raise);
+    border-left:1px solid var(--line); display:flex; flex-direction:column;
+    animation: categoryPanelSlideIn .18s ease;
+  }
+  @keyframes categoryPanelSlideIn{ from{ transform:translateX(100%); } to{ transform:translateX(0); } }
+  .category-panel-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 18px 14px; font-weight:700; font-size:15px; border-bottom:1px solid var(--line);
+  }
+  .category-panel-close{ cursor:pointer; color:var(--text-dim); font-size:16px; }
+  .category-panel-list{ flex:1; overflow-y:auto; padding:10px; }
+  .category-panel-item{
+    padding:13px 14px; border-radius:10px; font-size:13.5px; cursor:pointer;
+    color:var(--text); margin-bottom:4px;
+  }
+  .category-panel-item:hover, .category-panel-item:focus-visible{ background:rgba(255,255,255,0.06); outline:none; }
+  .category-panel-item.active{ background:var(--amber); color:#1A0E00; font-weight:700; }
+
   .vivo-sidebar{
     width:118px; flex-shrink:0; overflow-y:auto; border-right:1px solid var(--line);
     background: rgba(255,255,255,0.015);
@@ -1296,6 +1326,20 @@
 </div>
 <div id="rowsContainer"></div>
 
+<!-- Category side panel — quick jump to a category within Películas/Series
+     (and any other poster-style tab) instead of scrolling through every
+     row one by one. -->
+<button id="categoryPanelBtn" class="category-panel-btn" style="display:none" tabindex="0">☰ Categorías</button>
+<div id="categoryPanelOverlay" class="category-panel-overlay" style="display:none">
+  <div class="category-panel" id="categoryPanel">
+    <div class="category-panel-head">
+      <span>Categorías</span>
+      <span class="category-panel-close" id="categoryPanelClose" tabindex="0">✕</span>
+    </div>
+    <div class="category-panel-list" id="categoryPanelList"></div>
+  </div>
+</div>
+
 <div id="seriesDetailOverlay" class="series-detail-overlay" style="display:none">
   <div class="sd-backdrop" id="sdBackdrop">
     <div class="sd-topbar">
@@ -1486,13 +1530,13 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #accountCheckUpdateBtn, #adminMessageClose, #accountInfoClose, #parentalControlToggle, #accountLogoutBtn, .tv-key';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #accountCheckUpdateBtn, #adminMessageClose, #accountInfoClose, #parentalControlToggle, #accountLogoutBtn, .tv-key, #categoryPanelBtn, #categoryPanelClose, .category-panel-item';
 
   // If a modal (series detail, account info, PIN, QR screens) is open,
   // navigation must stay inside it — otherwise focus could jump to
   // elements on the screen behind it that are only visually covered, not
   // actually hidden (offsetParent stays non-null for those).
-  const MODAL_OVERLAY_IDS = ['seriesDetailOverlay', 'qrShowOverlay', 'qrScanOverlay', 'pairOverlay', 'pinOverlay', 'accountInfoOverlay', 'profileEditOverlay', 'profileScreen', 'adminMessageOverlay'];
+  const MODAL_OVERLAY_IDS = ['seriesDetailOverlay', 'qrShowOverlay', 'qrScanOverlay', 'pairOverlay', 'pinOverlay', 'accountInfoOverlay', 'profileEditOverlay', 'profileScreen', 'adminMessageOverlay', 'categoryPanelOverlay'];
   function getActiveOverlayScope(){
     for(const id of MODAL_OVERLAY_IDS){
       const el = document.getElementById(id);
@@ -1665,6 +1709,43 @@
 
   let renderGen = 0;
   let rowObserver = null;
+  // ---------- Category side panel (Películas/Series: jump to a category
+  // instead of scrolling through every row) ----------
+  const CATEGORY_PANEL_TABS = ['peliculas', 'series'];
+  function updateCategoryPanel(cat, rows){
+    const btn = document.getElementById('categoryPanelBtn');
+    if(!CATEGORY_PANEL_TABS.includes(cat) || !rows || rows.length < 2){
+      btn.style.display = 'none';
+      closeCategoryPanel();
+      return;
+    }
+    btn.style.display = 'block';
+    const list = document.getElementById('categoryPanelList');
+    list.innerHTML = rows.map((row, idx) => `
+      <div class="category-panel-item" data-row-index="${idx}" tabindex="0">${row.title}</div>
+    `).join('');
+    list.querySelectorAll('.category-panel-item').forEach(item => {
+      item.onclick = () => jumpToCategoryRow(+item.dataset.rowIndex);
+    });
+  }
+  function jumpToCategoryRow(idx){
+    const section = document.querySelector(`#rowsContainer .row[data-row-index="${idx}"]`);
+    if(section) section.scrollIntoView({ behavior:'smooth', block:'start' });
+    document.querySelectorAll('.category-panel-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+    closeCategoryPanel();
+  }
+  function openCategoryPanel(){
+    document.getElementById('categoryPanelOverlay').style.display = 'flex';
+  }
+  function closeCategoryPanel(){
+    document.getElementById('categoryPanelOverlay').style.display = 'none';
+  }
+  document.getElementById('categoryPanelBtn').onclick = openCategoryPanel;
+  document.getElementById('categoryPanelClose').onclick = closeCategoryPanel;
+  document.getElementById('categoryPanelOverlay').addEventListener('click', (e) => {
+    if(e.target.id === 'categoryPanelOverlay') closeCategoryPanel(); // clicking the dimmed backdrop closes it
+  });
+
   function renderCategory(cat){
     currentCat = cat;
     const myGen = ++renderGen;
@@ -1676,6 +1757,8 @@
     if(cat === 'vivo'){
       rowsContainer.style.display = 'none';
       vivoView.style.display = 'block';
+      document.getElementById('categoryPanelBtn').style.display = 'none';
+      closeCategoryPanel();
       renderVivoView();
       return;
     }
@@ -1739,6 +1822,7 @@
       frag.appendChild(section);
     });
     rowsContainer.appendChild(frag);
+    updateCategoryPanel(cat, rows);
 
     function populateRow(section){
       if(myGen !== renderGen) return;
