@@ -795,6 +795,21 @@
     letter-spacing:10px; color:var(--amber);
   }
   .code-entry-input:focus{ outline:none; border-color:var(--amber); }
+
+  .tv-code-digits{
+    font-family:'JetBrains Mono', monospace; font-size:34px; font-weight:700;
+    letter-spacing:12px; color:var(--amber); margin-bottom:18px; text-align:center;
+  }
+  .tv-code-keypad{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:16px;
+  }
+  .tv-key{
+    background:var(--bg); border:2px solid var(--line); border-radius:12px;
+    color:var(--text); font-size:22px; font-weight:700; padding:18px 0;
+    text-align:center; cursor:pointer;
+  }
+  .tv-key:focus-visible, .tv-key:hover{ border-color:var(--amber); outline:none; }
+  .tv-key.tv-key-wide{ grid-column:span 3; font-size:15px; padding:14px 0; }
   .start-code-digits{
     font-family:'JetBrains Mono', monospace; font-size:38px; font-weight:700;
     letter-spacing:10px; color:var(--amber); margin-bottom:10px;
@@ -1053,6 +1068,14 @@
 
   <div id="startCodeBox" class="start-code-box">
     <input id="codeEntryInput" class="code-entry-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off">
+
+    <!-- TV-only: a custom on-screen keypad, since the system keyboard
+         over the WebView on some Android TV boxes reacted very slowly to
+         input and could hang the app entirely. Built and navigated
+         entirely with our own D-pad system instead. -->
+    <div id="tvCodeDigitsDisplay" class="tv-code-digits" style="display:none">— — — — — —</div>
+    <div id="tvCodeKeypad" class="tv-code-keypad" style="display:none"></div>
+
     <button class="start-generate-btn" id="codeEntrySubmit" tabindex="0">Conectar</button>
     <p class="start-status" id="startStatus" style="display:none"></p>
   </div>
@@ -1388,7 +1411,7 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #accountCheckUpdateBtn, #adminMessageClose, #accountInfoClose, #parentalControlToggle, #accountLogoutBtn';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #accountCheckUpdateBtn, #adminMessageClose, #accountInfoClose, #parentalControlToggle, #accountLogoutBtn, .tv-key';
 
   // If a modal (series detail, account info, PIN, QR screens) is open,
   // navigation must stay inside it — otherwise focus could jump to
@@ -1584,6 +1607,7 @@
     vivoView.style.display = 'none';
     rowsContainer.style.display = 'block';
     if(typeof stopVivoPreview === 'function') stopVivoPreview();
+    if(typeof closeInlinePlayer === 'function') closeInlinePlayer(); // the mini/inline player should only ever play while on TV en vivo
     if(typeof recommendCarouselTimer !== 'undefined' && recommendCarouselTimer){ clearInterval(recommendCarouselTimer); recommendCarouselTimer = null; }
     if(typeof logoCarouselTimer !== 'undefined' && logoCarouselTimer){ clearInterval(logoCarouselTimer); logoCarouselTimer = null; }
 
@@ -3682,11 +3706,50 @@
     localStorage.setItem(CLIENT_CODE_KEY, code);
   }
 
+  let tvEnteredDigits = '';
   function showStartScreenPairing(){
     document.getElementById('startScreen').style.display = 'flex';
-    document.getElementById('codeEntryInput').value = '';
     document.getElementById('startStatus').style.display = 'none';
-    setTimeout(() => document.getElementById('codeEntryInput').focus(), 200);
+
+    if(isTV()){
+      document.getElementById('codeEntryInput').style.display = 'none';
+      document.getElementById('tvCodeDigitsDisplay').style.display = 'block';
+      document.getElementById('tvCodeKeypad').style.display = 'grid';
+      tvEnteredDigits = '';
+      renderTvCodeKeypad();
+    } else {
+      document.getElementById('codeEntryInput').value = '';
+      setTimeout(() => document.getElementById('codeEntryInput').focus(), 200);
+    }
+  }
+
+  function renderTvCodeKeypad(){
+    const display = document.getElementById('tvCodeDigitsDisplay');
+    const padded = tvEnteredDigits.padEnd(6, '—').split('').join(' ');
+    display.textContent = padded;
+
+    const keypad = document.getElementById('tvCodeKeypad');
+    if(keypad.childElementCount === 0){
+      // Built once — pressing a key just updates the digits display
+      // afterwards, no need to rebuild the whole keypad every time.
+      const keys = ['1','2','3','4','5','6','7','8','9','⌫','0','OK'];
+      keypad.innerHTML = keys.map(k => `<div class="tv-key" tabindex="0" data-key="${k}">${k}</div>`).join('');
+      keypad.querySelectorAll('.tv-key').forEach(btn => {
+        btn.onclick = () => {
+          const key = btn.dataset.key;
+          if(key === '⌫'){
+            tvEnteredDigits = tvEnteredDigits.slice(0, -1);
+          } else if(key === 'OK'){
+            submitClientCode();
+            return;
+          } else if(tvEnteredDigits.length < 6){
+            tvEnteredDigits += key;
+          }
+          renderTvCodeKeypad();
+          if(tvEnteredDigits.length === 6) submitClientCode();
+        };
+      });
+    }
   }
 
   document.getElementById('codeEntrySubmit').onclick = submitClientCode;
@@ -3695,7 +3758,7 @@
   });
 
   async function submitClientCode(){
-    const enteredCode = document.getElementById('codeEntryInput').value.trim();
+    const enteredCode = isTV() ? tvEnteredDigits : document.getElementById('codeEntryInput').value.trim();
     const statusEl = document.getElementById('startStatus');
     if(!/^\d{6}$/.test(enteredCode)){
       statusEl.textContent = 'Escribe los 6 dígitos del código.';
@@ -3714,6 +3777,7 @@
       if(!c){
         statusEl.textContent = 'Ese código no existe. Revísalo con tu proveedor.';
         statusEl.style.color = '#FF6B6B';
+        resetTvKeypadOnError();
         return;
       }
 
@@ -3731,6 +3795,7 @@
       if(!alreadyRegistered && Object.keys(registered).length >= maxDevices){
         statusEl.textContent = `Ya se alcanzó el límite de ${maxDevices} dispositivo(s) para este código. Contacta a tu proveedor para ampliarlo.`;
         statusEl.style.color = '#FF6B6B';
+        resetTvKeypadOnError();
         return;
       }
 
@@ -3751,6 +3816,7 @@
       if(!conn){
         statusEl.textContent = 'Este código no tiene contenido asignado todavía. Contacta a tu proveedor.';
         statusEl.style.color = '#FF6B6B';
+        resetTvKeypadOnError();
         return;
       }
 
@@ -3763,7 +3829,13 @@
     }catch(err){
       statusEl.textContent = 'No se pudo verificar el código. Revisa tu conexión e intenta de nuevo.';
       statusEl.style.color = '#FF6B6B';
+      resetTvKeypadOnError();
     }
+  }
+  function resetTvKeypadOnError(){
+    if(!isTV()) return;
+    tvEnteredDigits = '';
+    renderTvCodeKeypad();
   }
 
   const ADMIN_PIN = '1286';
