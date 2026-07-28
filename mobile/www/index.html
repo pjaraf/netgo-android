@@ -199,8 +199,11 @@
   .hero.playing .hero-player{ display:flex; }
 
   .hp-top{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:12px 14px; background:linear-gradient(180deg, rgba(6,14,20,.75), transparent);
+    /* Hidden — the video's native layer always renders above the
+       WebView's own content, so this whole strip was invisible/
+       unclickable underneath it. Title, cast, and close are now built
+       natively instead (see InlineVlcPlayerPlugin.java's buildControls). */
+    display:none;
   }
   .hp-title{ color:#fff; font-size:12.5px; font-weight:600; max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .hp-close{
@@ -1205,10 +1208,8 @@
   <div class="hero-player" id="heroPlayer">
     <div class="hp-top">
       <span class="hp-title mono" id="hpTitle">—</span>
-      <span class="hp-cast-btn" id="hpCastBtn" title="Enviar a la TV">TV</span>
       <span class="hp-close" id="hpClose">✕</span>
     </div>
-    <div class="hp-cast-status" id="hpCastStatus" style="display:none"></div>
     <div class="hp-spinner-wrap" id="hpSpinnerWrap"><div class="hp-spinner"></div></div>
 
     <!-- Live TV only: same OSD banner as the TV app — logo, channel
@@ -2348,18 +2349,24 @@
   // ---------- "Enviar a TV" (custom, Firebase-based — see conversation
   // for why this replaces Google Cast: no LAN device discovery needed,
   // works over the same connection already used for pause/block/messages,
-  // and doesn't need a registered Cast receiver app). ----------
-  document.getElementById('hpCastBtn').onclick = async () => {
+  // and doesn't need a registered Cast receiver app).
+  //
+  // Triggered by the NATIVE cast button (not a web one) — the video's
+  // native layer always renders above the WebView's own content within
+  // the hero box area, so any web-based button placed there is invisible
+  // no matter how it's styled. The native button just notifies this. ----------
+  if(inlineAvailable()){
+    window.Capacitor.Plugins.InlineVlcPlayer.addListener('castRequested', sendCurrentToTv);
+  }
+
+  async function sendCurrentToTv(){
     const code = getClientCode();
     const item = currentInlineQueue[0]; // the item currently loaded in the hero player
     if(!code || !item){
       showStatus('No hay nada para enviar a la TV todavía.', true);
       return;
     }
-    const statusEl = document.getElementById('hpCastStatus');
-    statusEl.textContent = 'Enviando a la TV…';
-    statusEl.style.display = 'block';
-    document.getElementById('hpCastBtn').classList.add('hp-cast-active');
+    showStatus('Enviando a la TV…', false);
     try{
       await fetch(`${FIREBASE_BASE}/castCommand/${code}.json`, {
         method:'PUT', headers:{'Content-Type':'application/json'},
@@ -2368,7 +2375,6 @@
           kind: currentInlineIsLive ? 'channel' : 'poster', ts: Date.now()
         })
       });
-      statusEl.textContent = 'Enviado — esperando que la TV lo tome…';
       // Briefly poll for the TV's own confirmation (it writes this back
       // once it actually starts playing) to upgrade the status message.
       let attempts = 0;
@@ -2378,23 +2384,19 @@
           const res = await fetch(`${FIREBASE_BASE}/castStatus/${code}.json`);
           const st = await res.json();
           if(st && st.ts && Date.now() - st.ts < 20000){
-            statusEl.textContent = '✓ Reproduciendo en la TV';
+            showStatus('✓ Reproduciendo en la TV', false);
             clearInterval(poll);
-            setTimeout(() => { statusEl.style.display = 'none'; document.getElementById('hpCastBtn').classList.remove('hp-cast-active'); }, 3000);
           }
         }catch(e){}
         if(attempts >= 8){
           clearInterval(poll);
-          statusEl.textContent = 'Enviado — si no aparece en la TV, revisa que esté encendida y con la app abierta.';
-          setTimeout(() => { statusEl.style.display = 'none'; document.getElementById('hpCastBtn').classList.remove('hp-cast-active'); }, 4000);
+          showStatus('Enviado — si no aparece en la TV, revisa que esté encendida y con la app abierta.', true);
         }
       }, 2000);
     }catch(err){
-      statusEl.textContent = 'No se pudo enviar a la TV. Revisa tu conexión.';
-      document.getElementById('hpCastBtn').classList.remove('hp-cast-active');
-      setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+      showStatus('No se pudo enviar a la TV. Revisa tu conexión.', true);
     }
-  };
+  }
   hpPlayPause.onclick = async () => {
     if(!inlineAvailable()) return;
     const r = await window.Capacitor.Plugins.InlineVlcPlayer.playPause();
