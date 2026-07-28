@@ -287,18 +287,28 @@
     background:rgba(20,40,56,0.92); border:1px solid var(--line); color:var(--text);
     font-size:12.5px; font-weight:600; padding:9px 14px; border-radius:20px; cursor:pointer;
   }
-  body.tv-mode .category-panel-btn{ top:96px; right:34px; font-size:14px; padding:10px 18px; }
+  body.tv-mode .category-panel-btn{ top:96px; right:34px; font-size:14px; padding:10px 18px;
+    /* Hidden on TV — opened with the remote's Left arrow instead, so it
+       doesn't sit as a permanent on-screen button. */
+    display:none !important;
+  }
   .category-panel-btn:focus-visible{ outline:2.5px solid var(--amber); }
   .category-panel-overlay{
     position:fixed; inset:0; z-index:500; background:rgba(5,12,17,0.6);
     display:flex; justify-content:flex-end;
   }
+  body.tv-mode .category-panel-overlay{ justify-content:flex-start; }
   .category-panel{
     width:min(300px, 78vw); height:100%; background:var(--bg-raise);
     border-left:1px solid var(--line); display:flex; flex-direction:column;
     animation: categoryPanelSlideIn .18s ease;
   }
+  body.tv-mode .category-panel{
+    width:340px; border-left:none; border-right:1px solid var(--line);
+    animation: categoryPanelSlideInLeft .18s ease;
+  }
   @keyframes categoryPanelSlideIn{ from{ transform:translateX(100%); } to{ transform:translateX(0); } }
+  @keyframes categoryPanelSlideInLeft{ from{ transform:translateX(-100%); } to{ transform:translateX(0); } }
   .category-panel-head{
     display:flex; align-items:center; justify-content:space-between;
     padding:18px 18px 14px; font-weight:700; font-size:15px; border-bottom:1px solid var(--line);
@@ -1560,14 +1570,14 @@
   // nothing (which is what made the remote feel "stuck").
   function moveFocus(direction){
     let candidates = focusableEls();
-    if(!candidates.length) return;
+    if(!candidates.length) return false;
     const current = document.activeElement && document.activeElement.matches(NAV_SELECTOR)
       ? document.activeElement
       : null;
 
     if(!current){
       candidates[0].focus();
-      return;
+      return true;
     }
 
     // For card grids specifically: only consider cards from the current
@@ -1615,6 +1625,7 @@
       // what make navigation feel laggy on underpowered TV hardware.
       best.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'auto' });
     }
+    return !!best;
   }
 
   let lastMoveFocusTime = 0;
@@ -1643,7 +1654,11 @@
     const now = performance.now();
     if(now - lastMoveFocusTime < 80) return;
     lastMoveFocusTime = now;
-    moveFocus(dir);
+    const moved = moveFocus(dir);
+    if(!moved && dir === 'left' && CATEGORY_PANEL_TABS.includes(currentCat)
+        && document.getElementById('categoryPanelOverlay').style.display !== 'flex'){
+      openCategoryPanel();
+    }
   });
 
   // Start with something focused on TV so the very first D-pad press
@@ -1721,7 +1736,8 @@
     }
     btn.style.display = 'block';
     const list = document.getElementById('categoryPanelList');
-    list.innerHTML = rows.map((row, idx) => `
+    list.innerHTML = `<div class="category-panel-item active" data-row-index="-1" tabindex="0">Todas</div>` +
+      rows.map((row, idx) => `
       <div class="category-panel-item" data-row-index="${idx}" tabindex="0">${row.title}</div>
     `).join('');
     list.querySelectorAll('.category-panel-item').forEach(item => {
@@ -1729,9 +1745,15 @@
     });
   }
   function jumpToCategoryRow(idx){
-    const section = document.querySelector(`#rowsContainer .row[data-row-index="${idx}"]`);
-    if(section) section.scrollIntoView({ behavior:'smooth', block:'start' });
-    document.querySelectorAll('.category-panel-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+    // idx === -1 means "Todas" (show every category again)
+    document.querySelectorAll('#rowsContainer .row').forEach(section => {
+      const rowIdx = +section.dataset.rowIndex;
+      section.style.display = (idx === -1 || rowIdx === idx) ? '' : 'none';
+    });
+    document.querySelectorAll('.category-panel-item').forEach(el => {
+      el.classList.toggle('active', +el.dataset.rowIndex === idx);
+    });
+    document.getElementById('rowsContainer').scrollTo({ top:0, behavior:'smooth' });
     closeCategoryPanel();
   }
   function openCategoryPanel(){
