@@ -275,13 +275,16 @@ public class InlineVlcPlayerPlugin extends Plugin {
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                 .setConnectTimeoutMs(10000)
                 .setReadTimeoutMs(10000)
-                .setAllowCrossProtocolRedirects(true);
+                .setAllowCrossProtocolRedirects(true)
+                .setUserAgent("NetGo/1.0 (Linux;Android) ExoPlayerLib/1.4.1");
         trackSelector = new DefaultTrackSelector(activity);
 
         player = new ExoPlayer.Builder(activity)
                 .setRenderersFactory(new DefaultRenderersFactory(activity)
                         .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
-                .setMediaSourceFactory(new DefaultMediaSourceFactory(activity).setDataSourceFactory(httpFactory))
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(activity)
+                        .setDataSourceFactory(httpFactory)
+                        .setLoadErrorHandlingPolicy(new IptvLoadErrorPolicy()))
                 .setLoadControl(loadControl)
                 .setTrackSelector(trackSelector)
                 .build();
@@ -634,7 +637,14 @@ public class InlineVlcPlayerPlugin extends Plugin {
         if (titleView != null) titleView.setText(titles.get(currentIndex));
 
         if (player != null) {
-            MediaItem item = MediaItem.fromUri(Uri.parse(urls.get(currentIndex)));
+            MediaItem item = new MediaItem.Builder()
+                    .setUri(Uri.parse(urls.get(currentIndex)))
+                    .setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
+                            .setTargetOffsetMs(8000)
+                            .setMinPlaybackSpeed(0.96f)
+                            .setMaxPlaybackSpeed(1.04f)
+                            .build())
+                    .build();
             player.setMediaItem(item);
             player.prepare();
             player.play();
