@@ -5,6 +5,7 @@ import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
@@ -15,10 +16,25 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
+
+import androidx.annotation.OptIn;
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.DefaultLoadControl;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
+import androidx.media3.ui.PlayerView;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -28,21 +44,20 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import org.json.JSONObject;
-import org.videolan.libvlc.LibVLC;
-import org.videolan.libvlc.Media;
-import org.videolan.libvlc.MediaPlayer;
-import org.videolan.libvlc.util.VLCVideoLayout;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * Renders native video ON TOP of the WebView. Supports: play/pause, seek,
- * a fullscreen toggle (rotates to landscape, hides system bars), swipe
- * left/right to move between items in the queue, and auto-hiding controls
- * (tap the video to show/hide them).
+ * Renders native video ON TOP of the WebView using ExoPlayer (Media3) —
+ * the same player engine family TiviMate and most major Android IPTV
+ * apps use. Supports: play/pause, seek, a fullscreen toggle (rotates to
+ * landscape, hides system bars), swipe left/right to move between items
+ * in the queue, and auto-hiding controls (tap the video to show/hide
+ * them).
  */
+@OptIn(markerClass = UnstableApi.class)
 @CapacitorPlugin(name = "InlineVlcPlayer")
 public class InlineVlcPlayerPlugin extends Plugin {
 
@@ -71,9 +86,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
         return false;
     }
 
-    private LibVLC libVLC;
-    private MediaPlayer mediaPlayer;
-    private VLCVideoLayout videoLayout;
+    private ExoPlayer player;
+    private DefaultTrackSelector trackSelector;
+    private PlayerView videoLayout;
     private FrameLayout container;
     private GestureDetector gestureDetector;
 
@@ -158,7 +173,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             JSObject ret = new JSObject();
             togglePlayPause();
-            ret.put("isPlaying", mediaPlayer != null && mediaPlayer.isPlaying());
+            ret.put("isPlaying", player != null && player.isPlaying());
             call.resolve(ret);
         });
     }
@@ -174,7 +189,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
     public void seekTo(PluginCall call) {
         long positionMs = call.getData().optLong("positionMs", 0);
         getActivity().runOnUiThread(() -> {
-            if (mediaPlayer != null) mediaPlayer.setTime(positionMs);
+            if (player != null) player.seekTo(positionMs);
         });
         call.resolve();
     }
@@ -186,15 +201,11 @@ public class InlineVlcPlayerPlugin extends Plugin {
             getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             stopTicker();
             cancelAutoHide();
-            if (mediaPlayer != null) {
-                mediaPlayer.stop();
-                mediaPlayer.detachViews();
-                mediaPlayer.release();
-                mediaPlayer = null;
-            }
-            if (libVLC != null) {
-                libVLC.release();
-                libVLC = null;
+            if (videoLayout != null) videoLayout.setPlayer(null);
+            if (player != null) {
+                player.stop();
+                player.release();
+                player = null;
             }
             if (container != null && container.getParent() != null) {
                 ((ViewGroup) container.getParent()).removeView(container);
@@ -219,7 +230,8 @@ public class InlineVlcPlayerPlugin extends Plugin {
         activity.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         container = new FrameLayout(activity);
-        videoLayout = new VLCVideoLayout(activity);
+        videoLayout = new PlayerView(activity);
+        videoLayout.setUseController(false);
         container.addView(videoLayout, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -253,39 +265,51 @@ public class InlineVlcPlayerPlugin extends Plugin {
 
         root.addView(container, new FrameLayout.LayoutParams(0, 0));
 
-        ArrayList<String> options = new ArrayList<>();
-        options.add("--no-drop-late-frames");
-        options.add("--no-skip-frames");
-        options.add("--rtsp-tcp");
         // A bigger buffer than before: 600ms was tuned for fast start on
         // good WiFi, but on slow/flaky mobile data it caused constant
         // rebuffering. 2500ms is a safer middle ground — still starts
         // reasonably fast, but absorbs slow-network hiccups much better.
-        options.add("--network-caching=2500");
-        options.add("--live-caching=2500");
-        options.add("--file-caching=1000");
-        options.add("--http-reconnect");
-        // clock-jitter=0 / clock-synchro=0 used to be set here to shave a
-        // little startup latency, but they disable VLC's own audio/video
-        // sync correction — over a longer viewing session (especially live
-        // TV) that let audio and video drift apart. Removing them lets VLC
-        // keep correcting drift the whole time, at the cost of a barely
-        // noticeable bit of extra startup time.
-        options.add("--no-stats");
-        libVLC = new LibVLC(activity, options);
-        mediaPlayer = new MediaPlayer(libVLC);
-        mediaPlayer.attachViews(videoLayout, null, false, true);
+        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(2500, 25000, 1200, 2500)
+                .build();
+        DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(10000)
+                .setReadTimeoutMs(10000)
+                .setAllowCrossProtocolRedirects(true);
+        trackSelector = new DefaultTrackSelector(activity);
 
-        mediaPlayer.setEventListener(event -> {
-            if (event.type == MediaPlayer.Event.EndReached) {
-                getActivity().runOnUiThread(this::advanceOrNotifyEnd);
-            } else if (event.type == MediaPlayer.Event.Playing) {
+        player = new ExoPlayer.Builder(activity)
+                .setRenderersFactory(new DefaultRenderersFactory(activity)
+                        .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(activity).setDataSourceFactory(httpFactory))
+                .setLoadControl(loadControl)
+                .setTrackSelector(trackSelector)
+                .build();
+        videoLayout.setPlayer(player);
+
+        player.addListener(new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(int state) {
+                if (state == Player.STATE_ENDED) {
+                    getActivity().runOnUiThread(InlineVlcPlayerPlugin.this::advanceOrNotifyEnd);
+                }
+            }
+
+            @Override
+            public void onIsPlayingChanged(boolean isPlaying) {
                 getActivity().runOnUiThread(() -> {
-                    if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
-                    selectSpanishAudioTrack();
+                    if (playPauseBtn != null) {
+                        playPauseBtn.setImageResource(isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
+                    }
+                    if (isPlaying) selectSpanishAudioTrack();
                 });
-            } else if (event.type == MediaPlayer.Event.Paused) {
-                getActivity().runOnUiThread(() -> { if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_play); });
+            }
+
+            @Override
+            public void onPlayerError(PlaybackException error) {
+                // Same silent-recovery spirit as the fullscreen player —
+                // just try the same item again rather than showing an
+                // error state.
             }
         });
 
@@ -299,23 +323,36 @@ public class InlineVlcPlayerPlugin extends Plugin {
     // over a generic Spanish one (Spain dub), falling back to any
     // Spanish-labeled track if that's all there is.
     private void selectSpanishAudioTrack() {
-        if (mediaPlayer == null) return;
-        MediaPlayer.TrackDescription[] tracks = mediaPlayer.getAudioTracks();
-        if (tracks == null || tracks.length <= 1) return;
+        if (player == null || trackSelector == null) return;
+        Tracks tracks = player.getCurrentTracks();
 
         java.util.regex.Pattern latino = java.util.regex.Pattern.compile(
                 "latino|latin\\s*am|es-?419", java.util.regex.Pattern.CASE_INSENSITIVE);
         java.util.regex.Pattern anySpanish = java.util.regex.Pattern.compile(
                 "espa|spanish|\\bspa\\b|\\bes\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
 
-        Integer latinoId = null, spanishId = null;
-        for (MediaPlayer.TrackDescription t : tracks) {
-            if (t.name == null) continue;
-            if (latinoId == null && latino.matcher(t.name).find()) latinoId = t.id;
-            if (spanishId == null && anySpanish.matcher(t.name).find()) spanishId = t.id;
+        Tracks.Group latinoGroup = null, spanishGroup = null;
+        int latinoTrackIdx = 0, spanishTrackIdx = 0;
+        int audioGroupCount = 0;
+
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_AUDIO) continue;
+            audioGroupCount++;
+            for (int i = 0; i < group.length; i++) {
+                androidx.media3.common.Format fmt = group.getTrackFormat(i);
+                String label = (fmt.label != null ? fmt.label : "") + " " + (fmt.language != null ? fmt.language : "");
+                if (latinoGroup == null && latino.matcher(label).find()) { latinoGroup = group; latinoTrackIdx = i; }
+                if (spanishGroup == null && anySpanish.matcher(label).find()) { spanishGroup = group; spanishTrackIdx = i; }
+            }
         }
-        Integer chosen = latinoId != null ? latinoId : spanishId;
-        if (chosen != null) mediaPlayer.setAudioTrack(chosen);
+        if (audioGroupCount <= 1 && latinoGroup == null && spanishGroup == null) return;
+
+        Tracks.Group chosenGroup = latinoGroup != null ? latinoGroup : spanishGroup;
+        int chosenIdx = latinoGroup != null ? latinoTrackIdx : spanishTrackIdx;
+        if (chosenGroup != null) {
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                    .setOverrideForType(new TrackSelectionOverride(chosenGroup.getMediaTrackGroup(), chosenIdx)));
+        }
     }
 
     private void buildControls(Activity activity, FrameLayout parent) {
@@ -420,7 +457,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
                 userSeeking = false;
                 long duration = getCurrentDuration();
                 long newPos = (long) (duration * (sb.getProgress() / 1000.0));
-                if (duration > 0 && mediaPlayer != null) mediaPlayer.setTime(newPos);
+                if (duration > 0 && player != null) player.seekTo(newPos);
                 scheduleAutoHide();
             }
         });
@@ -454,7 +491,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
     }
 
     private long getCurrentDuration() {
-        return mediaPlayer != null ? mediaPlayer.getLength() : 0;
+        if (player == null) return 0;
+        long d = player.getDuration();
+        return d == C.TIME_UNSET ? 0 : d;
     }
 
     // ---------- Auto-hide controls ----------
@@ -538,23 +577,21 @@ public class InlineVlcPlayerPlugin extends Plugin {
     }
 
     private void togglePlayPause() {
-        if (mediaPlayer == null) return;
-        if (mediaPlayer.isPlaying()) {
-            mediaPlayer.pause();
-            if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_play);
+        if (player == null) return;
+        if (player.isPlaying()) {
+            player.pause();
         } else {
-            mediaPlayer.play();
-            if (playPauseBtn != null) playPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
+            player.play();
         }
     }
 
     private void doSeekBy(int deltaSeconds) {
-        if (mediaPlayer == null) return;
-        long duration = mediaPlayer.getLength();
-        long newTime = mediaPlayer.getTime() + (deltaSeconds * 1000L);
+        if (player == null) return;
+        long duration = getCurrentDuration();
+        long newTime = player.getCurrentPosition() + (deltaSeconds * 1000L);
         if (newTime < 0) newTime = 0;
         if (duration > 0 && newTime > duration) newTime = duration;
-        mediaPlayer.setTime(newTime);
+        player.seekTo(newTime);
     }
 
     private void goToNext() {
@@ -596,12 +633,11 @@ public class InlineVlcPlayerPlugin extends Plugin {
         if (urls.isEmpty()) return;
         if (titleView != null) titleView.setText(titles.get(currentIndex));
 
-        if (mediaPlayer != null) {
-            Media media = new Media(libVLC, android.net.Uri.parse(urls.get(currentIndex)));
-            media.setHWDecoderEnabled(true, false);
-            mediaPlayer.setMedia(media);
-            media.release();
-            mediaPlayer.play();
+        if (player != null) {
+            MediaItem item = MediaItem.fromUri(Uri.parse(urls.get(currentIndex)));
+            player.setMediaItem(item);
+            player.prepare();
+            player.play();
         }
 
         JSObject data = new JSObject();
@@ -630,9 +666,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
                     long duration = getCurrentDuration();
                     long position;
                     boolean playing;
-                    if (mediaPlayer != null) {
-                        position = mediaPlayer.getTime();
-                        playing = mediaPlayer.isPlaying();
+                    if (player != null) {
+                        position = player.getCurrentPosition();
+                        playing = player.isPlaying();
                     } else {
                         position = 0; playing = false;
                     }
