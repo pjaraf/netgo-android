@@ -34,6 +34,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
+import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
 import com.getcapacitor.JSArray;
@@ -276,7 +277,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
         // rebuffering. 2500ms is a safer middle ground — still starts
         // reasonably fast, but absorbs slow-network hiccups much better.
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(2500, 25000, 2000, 3500)
+                // Same fix as the TV player: minBufferMs must be >= the
+                // other two values or ExoPlayer throws at construction time.
+                .setBufferDurationsMs(4000, 25000, 2000, 3500)
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
@@ -551,6 +554,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
             activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
             hideSystemBars(activity);
             fullscreenBtn.setText("⤡");
+            if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM); // fill the screen 16:9
             isFullscreen = true;
         } else {
             exitFullscreen(activity);
@@ -562,6 +566,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         showSystemBars(activity);
         if (fullscreenBtn != null) fullscreenBtn.setText("⤢");
+        if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT); // back to the small preview box's normal fit
         isFullscreen = false;
     }
 
