@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,19 +15,31 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import androidx.annotation.OptIn;
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionOverride;
+import androidx.media3.common.Tracks;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.DefaultLoadControl;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
+import androidx.media3.ui.AspectRatioFrameLayout;
+import androidx.media3.ui.PlayerView;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.videolan.libvlc.LibVLC;
-import org.videolan.libvlc.Media;
-import org.videolan.libvlc.MediaPlayer;
-import org.videolan.libvlc.util.VLCVideoLayout;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -38,7 +49,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Fullscreen native video player using libVLC.
+ * Fullscreen native video player using ExoPlayer (Media3) — the same
+ * player engine family TiviMate and most major Android IPTV apps use,
+ * chosen for its broad HLS/format compatibility and robust reconnect
+ * handling versus the previous libVLC-based player.
  *
  * Two ways to launch it:
  *  - play(queue, startIndex): a flat queue (movies, series episodes, or a
@@ -50,6 +64,7 @@ import java.util.List;
  *    category), and pressing Right again opens a category list next to it
  *    (switch category without leaving fullscreen).
  */
+@OptIn(markerClass = UnstableApi.class)
 public class VlcPlayerActivity extends Activity {
 
     @Override
@@ -61,8 +76,9 @@ public class VlcPlayerActivity extends Activity {
         overridePendingTransition(0, 0);
     }
 
-    private LibVLC libVLC;
-    private MediaPlayer mediaPlayer;
+    private ExoPlayer player;
+    private PlayerView videoLayout;
+    private DefaultTrackSelector trackSelector;
     private TextView titleView;
     private ProgressBar spinner;
 
@@ -138,7 +154,7 @@ public class VlcPlayerActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         setContentView(R.layout.activity_vlc_player);
 
-        VLCVideoLayout videoLayout = findViewById(R.id.video_layout);
+        videoLayout = findViewById(R.id.video_layout);
         titleView = findViewById(R.id.player_title);
         ImageButton closeBtn = findViewById(R.id.player_close);
         spinner = findViewById(R.id.player_spinner);
@@ -159,7 +175,7 @@ public class VlcPlayerActivity extends Activity {
             @Override public void onStartTrackingTouch(SeekBar sb) { userSeeking = true; }
             @Override public void onStopTrackingTouch(SeekBar sb) {
                 userSeeking = false;
-                if (mediaPlayer != null) mediaPlayer.setTime(sb.getProgress());
+                if (player != null) player.seekTo(sb.getProgress());
             }
         });
         closeBtn.setOnClickListener(v -> finish());
@@ -184,40 +200,65 @@ public class VlcPlayerActivity extends Activity {
         }
         deviceCode = getIntent().getStringExtra("deviceCode");
 
-        ArrayList<String> options = new ArrayList<>();
-        options.add("--no-drop-late-frames");
-        options.add("--no-skip-frames");
-        options.add("--rtsp-tcp");
         // Tuned for live IPTV/HLS: big enough to absorb real network
         // fluctuations without stalling, without adding so much delay
         // that a channel feels slow to respond.
-        options.add("--network-caching=3000");
-        options.add("--live-caching=3000");
-        options.add("--file-caching=1000");
-        options.add("--http-reconnect");
+        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(3000, 30000, 1500, 3000)
+                .build();
 
-        libVLC = new LibVLC(this, options);
-        mediaPlayer = new MediaPlayer(libVLC);
-        mediaPlayer.attachViews(videoLayout, null, false, true);
+        DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(10000)
+                .setReadTimeoutMs(10000)
+                .setAllowCrossProtocolRedirects(true);
 
-        mediaPlayer.setEventListener(event -> {
-            if (event.type == MediaPlayer.Event.Playing) {
-                runOnUiThread(() -> {
-                    spinner.setVisibility(View.GONE);
-                    selectSpanishAudioTrack();
-                    liveRetryCount = 0;
-                    cancelStallTimer();
-                    if (!isLive) {
-                        startProgressTicker();
-                        if (pendingResumePositionMs > 0) {
-                            mediaPlayer.setTime(pendingResumePositionMs);
-                            pendingResumePositionMs = 0;
+        trackSelector = new DefaultTrackSelector(this);
+
+        player = new ExoPlayer.Builder(this)
+                .setRenderersFactory(new DefaultRenderersFactory(this)
+                        .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory))
+                .setLoadControl(loadControl)
+                .setTrackSelector(trackSelector)
+                .build();
+        videoLayout.setPlayer(player);
+        videoLayout.setUseController(false);
+        videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+
+        player.addListener(new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(int state) {
+                if (state == Player.STATE_READY) {
+                    runOnUiThread(() -> {
+                        spinner.setVisibility(View.GONE);
+                        selectSpanishAudioTrack();
+                        liveRetryCount = 0;
+                        cancelStallTimer();
+                        if (!isLive) {
+                            startProgressTicker();
+                            if (pendingResumePositionMs > 0) {
+                                player.seekTo(pendingResumePositionMs);
+                                pendingResumePositionMs = 0;
+                            }
                         }
-                    }
-                });
-            } else if (event.type == MediaPlayer.Event.Buffering) {
-                if (isLive) runOnUiThread(this::scheduleStallTimer);
-            } else if (event.type == MediaPlayer.Event.EncounteredError) {
+                    });
+                } else if (state == Player.STATE_BUFFERING) {
+                    if (isLive) runOnUiThread(VlcPlayerActivity.this::scheduleStallTimer);
+                } else if (state == Player.STATE_ENDED) {
+                    runOnUiThread(() -> {
+                        // A live channel's connection dropping briefly can
+                        // also surface as ENDED (not just a player error) —
+                        // reconnect to the SAME channel instead of
+                        // advancing. Only movies/series actually finishing
+                        // should move on to the next item.
+                        if (isLive) loadCurrent();
+                        else advanceOrFinish();
+                    });
+                }
+            }
+
+            @Override
+            public void onPlayerError(PlaybackException error) {
                 // Silent, automatic recovery — no dialog, no channel
                 // change. Reconnects to the exact same channel, backing
                 // off a little more each time so a truly dead stream
@@ -225,16 +266,6 @@ public class VlcPlayerActivity extends Activity {
                 runOnUiThread(() -> {
                     spinner.setVisibility(View.GONE);
                     if (isLive) scheduleLiveRetry();
-                });
-            } else if (event.type == MediaPlayer.Event.EndReached) {
-                runOnUiThread(() -> {
-                    // A live channel's connection dropping briefly can also
-                    // surface as EndReached (not just EncounteredError) —
-                    // reconnect to the SAME channel instead of advancing.
-                    // Only movies/series actually finishing should move on
-                    // to the next item.
-                    if (isLive) loadCurrent();
-                    else advanceOrFinish();
                 });
             }
         });
@@ -366,64 +397,72 @@ public class VlcPlayerActivity extends Activity {
     }
 
     private void togglePlayPause() {
-        if (mediaPlayer == null) return;
-        if (mediaPlayer.isPlaying()) {
-            mediaPlayer.pause();
+        if (player == null) return;
+        if (player.isPlaying()) {
+            player.pause();
         } else {
-            mediaPlayer.play();
+            player.play();
         }
     }
 
     // Manual zoom, since automatic "fill the screen" detection wasn't
     // reliable on every TV — this gives direct control instead: tap to
-    // cycle through Original → Zoom 1 → Zoom 2, whichever looks right.
-    private final float[] zoomLevels = {0f, 1.33f, 1.78f};
+    // cycle through Original → Zoom, whichever looks right.
     private int zoomIndex = 0;
     private void cycleZoom() {
-        if (mediaPlayer == null) return;
-        zoomIndex = (zoomIndex + 1) % zoomLevels.length;
-        mediaPlayer.setScale(zoomLevels[zoomIndex]);
-        String label = zoomIndex == 0 ? "Tamaño original" : "Estirado " + (int) (zoomLevels[zoomIndex] * 100) + "%";
+        if (videoLayout == null) return;
+        zoomIndex = (zoomIndex + 1) % 2;
+        videoLayout.setResizeMode(zoomIndex == 0
+                ? AspectRatioFrameLayout.RESIZE_MODE_FIT
+                : AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
+        String label = zoomIndex == 0 ? "Tamaño original" : "Ajustado a pantalla";
         android.widget.Toast.makeText(this, label, android.widget.Toast.LENGTH_SHORT).show();
     }
 
-    private boolean subtitlesEnabled = true;
+    private boolean subtitlesEnabled = false;
     /** Turns subtitles on/off — bound to the remote's CC/Subtitles key. */
     private void toggleSubtitles() {
-        if (mediaPlayer == null) return;
+        if (player == null || trackSelector == null) return;
         if (subtitlesEnabled) {
-            mediaPlayer.setSpuTrack(-1);
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                    .setIgnoredTextSelectionFlags(~0));
             subtitlesEnabled = false;
             android.widget.Toast.makeText(this, "Subtítulos desactivados", android.widget.Toast.LENGTH_SHORT).show();
         } else {
-            try {
-                org.videolan.libvlc.MediaPlayer.TrackDescription[] tracks = mediaPlayer.getSpuTracks();
-                if (tracks != null && tracks.length > 0) {
-                    int trackId = tracks.length > 1 ? tracks[1].id : tracks[0].id;
-                    mediaPlayer.setSpuTrack(trackId);
-                    android.widget.Toast.makeText(this, "Subtítulos activados", android.widget.Toast.LENGTH_SHORT).show();
-                } else {
-                    android.widget.Toast.makeText(this, "Esta señal no tiene subtítulos disponibles", android.widget.Toast.LENGTH_SHORT).show();
+            boolean found = false;
+            Tracks tracks = player.getCurrentTracks();
+            for (Tracks.Group group : tracks.getGroups()) {
+                if (group.getType() == C.TRACK_TYPE_TEXT && group.length > 0) {
+                    trackSelector.setParameters(trackSelector.buildUponParameters()
+                            .setIgnoredTextSelectionFlags(0)
+                            .setOverrideForType(new TrackSelectionOverride(group.getMediaTrackGroup(), 0)));
+                    found = true;
+                    break;
                 }
-            } catch (Exception ignored) { }
+            }
+            if (found) {
+                android.widget.Toast.makeText(this, "Subtítulos activados", android.widget.Toast.LENGTH_SHORT).show();
+            } else {
+                android.widget.Toast.makeText(this, "Esta señal no tiene subtítulos disponibles", android.widget.Toast.LENGTH_SHORT).show();
+            }
             subtitlesEnabled = true;
         }
     }
 
     /** Seeks by deltaMs (negative = backward) and briefly shows the progress bar. */
     private void seekBy(int deltaMs) {
-        if (mediaPlayer == null) return;
-        long length = mediaPlayer.getLength();
-        long newTime = mediaPlayer.getTime() + deltaMs;
+        if (player == null) return;
+        long length = player.getDuration();
+        long newTime = player.getCurrentPosition() + deltaMs;
         if (newTime < 0) newTime = 0;
-        if (length > 0 && newTime > length) newTime = length;
-        mediaPlayer.setTime(newTime);
+        if (length > 0 && length != C.TIME_UNSET && newTime > length) newTime = length;
+        player.seekTo(newTime);
         if (seekBar != null) {
-            if (length > 0) seekBar.setMax((int) length);
+            if (length > 0 && length != C.TIME_UNSET) seekBar.setMax((int) length);
             seekBar.setProgress((int) newTime);
         }
         if (timeElapsedView != null) timeElapsedView.setText(formatTime((int) newTime));
-        if (timeTotalView != null && length > 0) timeTotalView.setText(formatTime((int) length));
+        if (timeTotalView != null && length > 0 && length != C.TIME_UNSET) timeTotalView.setText(formatTime((int) length));
         showProgressBarTemporarily();
     }
 
@@ -462,23 +501,36 @@ public class VlcPlayerActivity extends Activity {
     // labeled "Latino"/"es-419" over a generic Spanish one (Spain dub),
     // falling back to any Spanish-labeled track if that's all there is.
     private void selectSpanishAudioTrack() {
-        if (mediaPlayer == null) return;
-        MediaPlayer.TrackDescription[] tracks = mediaPlayer.getAudioTracks();
-        if (tracks == null || tracks.length <= 1) return;
+        if (player == null || trackSelector == null) return;
+        Tracks tracks = player.getCurrentTracks();
 
         java.util.regex.Pattern latino = java.util.regex.Pattern.compile(
                 "latino|latin\\s*am|es-?419", java.util.regex.Pattern.CASE_INSENSITIVE);
         java.util.regex.Pattern anySpanish = java.util.regex.Pattern.compile(
                 "espa|spanish|\\bspa\\b|\\bes\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
 
-        Integer latinoId = null, spanishId = null;
-        for (MediaPlayer.TrackDescription t : tracks) {
-            if (t.name == null) continue;
-            if (latinoId == null && latino.matcher(t.name).find()) latinoId = t.id;
-            if (spanishId == null && anySpanish.matcher(t.name).find()) spanishId = t.id;
+        Tracks.Group latinoGroup = null, spanishGroup = null;
+        int latinoTrackIdx = 0, spanishTrackIdx = 0;
+        int audioGroupCount = 0;
+
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_AUDIO) continue;
+            audioGroupCount++;
+            for (int i = 0; i < group.length; i++) {
+                androidx.media3.common.Format fmt = group.getTrackFormat(i);
+                String label = (fmt.label != null ? fmt.label : "") + " " + (fmt.language != null ? fmt.language : "");
+                if (latinoGroup == null && latino.matcher(label).find()) { latinoGroup = group; latinoTrackIdx = i; }
+                if (spanishGroup == null && anySpanish.matcher(label).find()) { spanishGroup = group; spanishTrackIdx = i; }
+            }
         }
-        Integer chosen = latinoId != null ? latinoId : spanishId;
-        if (chosen != null) mediaPlayer.setAudioTrack(chosen);
+        if (audioGroupCount <= 1 && latinoGroup == null && spanishGroup == null) return; // nothing to switch between
+
+        Tracks.Group chosenGroup = latinoGroup != null ? latinoGroup : spanishGroup;
+        int chosenIdx = latinoGroup != null ? latinoTrackIdx : spanishTrackIdx;
+        if (chosenGroup != null) {
+            trackSelector.setParameters(trackSelector.buildUponParameters()
+                    .setOverrideForType(new TrackSelectionOverride(chosenGroup.getMediaTrackGroup(), chosenIdx)));
+        }
     }
 
     // ---------- Silent live-channel recovery (no dialog, no channel change) ----------
@@ -488,10 +540,10 @@ public class VlcPlayerActivity extends Activity {
 
     /** If a live channel starts buffering and never reaches Playing within
      *  this window, treat it as frozen and reconnect automatically. Only
-     *  arms once per buffering episode — VLC can fire repeated Buffering
-     *  progress updates while genuinely stuck at the same spot, and
-     *  resetting the timer on every one of them meant it could never
-     *  actually elapse. */
+     *  arms once per buffering episode — the player can report buffering
+     *  repeatedly while genuinely stuck at the same spot, and resetting
+     *  the timer on every one of them meant it could never actually
+     *  elapse. */
     private void scheduleStallTimer() {
         if (stallRunnable != null) return; // already armed for this stall
         stallRunnable = () -> {
@@ -526,13 +578,12 @@ public class VlcPlayerActivity extends Activity {
             progressBarContainer.setVisibility(View.GONE);
             seekBar.setProgress(0);
         }
-        Media media = new Media(libVLC, Uri.parse(urls.get(currentIndex)));
-        media.setHWDecoderEnabled(true, false);
-        mediaPlayer.setMedia(media);
-        media.release();
         zoomIndex = 0;
-        mediaPlayer.setScale(0);
-        mediaPlayer.play();
+        if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+        MediaItem item = MediaItem.fromUri(Uri.parse(urls.get(currentIndex)));
+        player.setMediaItem(item);
+        player.prepare();
+        player.play();
     }
 
     // ================= Browse panels (channel list + category list) =================
@@ -764,10 +815,10 @@ public class VlcPlayerActivity extends Activity {
     private void startProgressTicker() {
         stopProgressTicker();
         progressTickRunnable = () -> {
-            if (mediaPlayer != null && !userSeeking) {
-                long length = mediaPlayer.getLength();
-                long time = mediaPlayer.getTime();
-                if (length > 0) {
+            if (player != null && !userSeeking) {
+                long length = player.getDuration();
+                long time = player.getCurrentPosition();
+                if (length > 0 && length != C.TIME_UNSET) {
                     seekBar.setMax((int) length);
                     seekBar.setProgress((int) time);
                     timeTotalView.setText(formatTime((int) length));
@@ -992,7 +1043,7 @@ public class VlcPlayerActivity extends Activity {
     private void showLockout(boolean blocked) {
         cancelStatusCheck();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
-        if (mediaPlayer != null) mediaPlayer.stop();
+        if (player != null) player.stop();
 
         lockoutTitleView.setText(blocked ? "Cuenta bloqueada" : "Cuenta pausada");
         lockoutMsgView.setText(blocked
@@ -1019,9 +1070,8 @@ public class VlcPlayerActivity extends Activity {
         // so stopping here meant a channel could halt permanently over a
         // completely transient interruption. Movies/series still stop,
         // since pausing those when backgrounded is expected behavior.
-        if (!isLive && mediaPlayer != null) {
-            mediaPlayer.stop();
-            mediaPlayer.detachViews();
+        if (!isLive && player != null) {
+            player.stop();
         }
     }
 
@@ -1032,8 +1082,8 @@ public class VlcPlayerActivity extends Activity {
         cancelStallTimer();
         cancelStatusCheck();
         stopProgressTicker();
-        if (mediaPlayer != null) mediaPlayer.release();
-        if (libVLC != null) libVLC.release();
+        if (videoLayout != null) videoLayout.setPlayer(null);
+        if (player != null) player.release();
     }
 
     @Override
