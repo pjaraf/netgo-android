@@ -951,6 +951,7 @@
     background:none; border:1px solid var(--line); color:var(--text);
     font-size:14px; padding:9px 16px; border-radius:9px; cursor:pointer; margin-bottom:18px;
   }
+  body.tv-mode .settings-back-btn{ display:none; } /* TV uses the remote's Back key instead */
   .settings-page-title{
     font-family:'Space Grotesk'; font-size:26px; font-weight:700; margin-bottom:22px;
   }
@@ -3619,6 +3620,18 @@
   // if we're anywhere other than the TV home screen, go back there instead
   // of exiting the app. Returns true if it handled the press.
   window.handleTVBack = function(){
+    // Any open modal (Settings included) gets closed first — this was
+    // missing entirely, which meant pressing Back while Settings was open
+    // did nothing on this side, and Android fell through to its own
+    // "press Back again to exit" handling instead, making it look like
+    // the app was closing itself.
+    for(const id of MODAL_OVERLAY_IDS){
+      const el = document.getElementById(id);
+      if(el && el.style.display && el.style.display !== 'none'){
+        el.style.display = 'none';
+        return true;
+      }
+    }
     if(isTV() && currentCat !== 'vivo'){
       document.querySelectorAll('.cat:not(.tv-sidebar-gear)').forEach(c => c.classList.toggle('active', c.dataset.cat === 'vivo'));
       renderCategory('vivo');
