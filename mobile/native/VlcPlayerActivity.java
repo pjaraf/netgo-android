@@ -240,6 +240,23 @@ public class VlcPlayerActivity extends Activity {
                 .setUserAgent("NetGo/1.0 (Linux;Android) ExoPlayerLib/1.4.1");
 
         trackSelector = new DefaultTrackSelector(this);
+        // No cap on resolution/bitrate — always eligible to play at
+        // whatever quality the channel's own stream actually offers. For
+        // channels with multiple quality variants (adaptive HLS), this is
+        // what lets ExoPlayer pick the best one bandwidth allows instead
+        // of being artificially held back.
+        trackSelector.setParameters(trackSelector.buildUponParameters()
+                .setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE)
+                .setMaxVideoBitrate(Integer.MAX_VALUE)
+                .setForceHighestSupportedBitrate(false)); // still adaptive — steps down only if the network truly can't keep up
+
+        // A generous starting estimate so playback doesn't needlessly
+        // begin at a low-quality variant while the real bandwidth is
+        // still being measured on a fresh connection.
+        androidx.media3.exoplayer.upstream.DefaultBandwidthMeter bandwidthMeter =
+                new androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.Builder(this)
+                        .setInitialBitrateEstimate(8_000_000)
+                        .build();
 
         player = new ExoPlayer.Builder(this)
                 .setRenderersFactory(new DefaultRenderersFactory(this)
@@ -249,10 +266,11 @@ public class VlcPlayerActivity extends Activity {
                         .setLoadErrorHandlingPolicy(new IptvLoadErrorPolicy()))
                 .setLoadControl(loadControl)
                 .setTrackSelector(trackSelector)
+                .setBandwidthMeter(bandwidthMeter)
                 .build();
         videoLayout.setPlayer(player);
         videoLayout.setUseController(false);
-        videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM); // auto-fill the screen 16:9 by default
+        videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT); // show the whole image, never cropping — no forced zoom by default
 
         player.addListener(new Player.Listener() {
             @Override
@@ -628,8 +646,8 @@ public class VlcPlayerActivity extends Activity {
             progressBarContainer.setVisibility(View.GONE);
             seekBar.setProgress(0);
         }
-        zoomIndex = 1; // matches the auto-applied RESIZE_MODE_ZOOM below
-        if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM); // auto-fill the screen 16:9 by default
+        zoomIndex = 0; // matches the auto-applied RESIZE_MODE_FIT below
+        if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT); // show the whole image, never cropping — no forced zoom by default
         String playUrl = (usingFallbackFormat && currentIndex < tsUrls.size() && !tsUrls.get(currentIndex).isEmpty())
                 ? tsUrls.get(currentIndex) : urls.get(currentIndex);
         MediaItem.Builder itemBuilder = new MediaItem.Builder().setUri(Uri.parse(playUrl));
@@ -720,8 +738,10 @@ public class VlcPlayerActivity extends Activity {
     private void populateChannelList() {
         channelListCol.removeAllViews();
         List<String> names = catTitlesPerItem.get(currentCatIndex);
+        List<String> imgs = catImgUrls.get(currentCatIndex);
         for (int i = 0; i < names.size(); i++) {
-            channelListCol.addView(buildListRow(names.get(i), i == browseChannelIndex));
+            String img = i < imgs.size() ? imgs.get(i) : "";
+            channelListCol.addView(buildChannelListRow(names.get(i), img, i == browseChannelIndex));
         }
         scrollToSelected(channelScroll, channelListCol, browseChannelIndex);
     }
@@ -732,6 +752,86 @@ public class VlcPlayerActivity extends Activity {
             categoryListCol.addView(buildListRow(catTitles.get(i), i == browseCatIndex));
         }
         scrollToSelected(categoryScroll, categoryListCol, browseCatIndex);
+    }
+
+    /** A channel row with its logo — same visual language as the banner's
+     *  logo box, just smaller, so the channel list and the OSD banner look
+     *  consistent. */
+    private LinearLayout buildChannelListRow(String text, String imgUrl, boolean selected) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(8), dp(8), dp(10), dp(8));
+
+        FrameLayout logoBox = new FrameLayout(this);
+        GradientDrawable logoBg = new GradientDrawable();
+        logoBg.setColor(0xFF0B1B26);
+        logoBg.setCornerRadius(dp(7));
+        logoBox.setBackground(logoBg);
+        TextView fallback = new TextView(this);
+        fallback.setTextColor(Color.WHITE);
+        fallback.setTextSize(13);
+        fallback.setGravity(Gravity.CENTER);
+        fallback.setText(text != null && !text.isEmpty() ? text.substring(0, 1).toUpperCase() : "?");
+        logoBox.addView(fallback, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(36), dp(36));
+        logoLp.rightMargin = dp(10);
+        row.addView(logoBox, logoLp);
+        loadImageIntoBox(logoBox, fallback, imgUrl);
+
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextSize(15);
+        label.setMaxLines(1);
+        if (selected) {
+            label.setTextColor(0xFF1A0E00);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(0xFFFF8A3D);
+            bg.setCornerRadius(dp(8));
+            row.setBackground(bg);
+            label.setTypeface(label.getTypeface(), android.graphics.Typeface.BOLD);
+        } else {
+            label.setTextColor(0xFFEAF2F5);
+        }
+        row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return row;
+    }
+
+    /** Shared logo-loading helper — used by both the channel browse list
+     *  and the OSD banner, so a logo only needs to be fetched/decoded
+     *  once per implementation instead of two separate copies. */
+    private void loadImageIntoBox(FrameLayout box, TextView fallback, String url) {
+        fallback.setVisibility(View.VISIBLE);
+        if (url == null || url.isEmpty()) return;
+        new Thread(() -> {
+            try {
+                URL u = new URL(url);
+                HttpURLConnection conn = (HttpURLConnection) u.openConnection();
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.connect();
+                if (conn.getResponseCode() != 200) return;
+                android.graphics.Bitmap bmp;
+                try (InputStream in = conn.getInputStream()) {
+                    bmp = android.graphics.BitmapFactory.decodeStream(in);
+                }
+                if (bmp == null) return;
+                final android.graphics.Bitmap finalBmp = bmp;
+                runOnUiThread(() -> {
+                    android.widget.ImageView iv = new android.widget.ImageView(this);
+                    iv.setImageBitmap(finalBmp);
+                    iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+                    int pad = dp(4);
+                    iv.setPadding(pad, pad, pad, pad);
+                    box.addView(iv, 0, new FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    fallback.setVisibility(View.GONE);
+                });
+            } catch (Exception ignored) {
+                // No logo available — the fallback letter stays visible.
+            }
+        }).start();
     }
 
     private TextView buildListRow(String text, boolean selected) {
