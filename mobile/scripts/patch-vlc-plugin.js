@@ -29,6 +29,7 @@ fs.mkdirSync(javaDir, { recursive: true });
 const layoutDir = path.join(androidAppDir, 'src', 'main', 'res', 'layout');
 fs.mkdirSync(layoutDir, { recursive: true });
 fs.copyFileSync(path.join(nativeDir, 'activity_vlc_player.xml'), path.join(layoutDir, 'activity_vlc_player.xml'));
+fs.copyFileSync(path.join(nativeDir, 'inline_player_view.xml'), path.join(layoutDir, 'inline_player_view.xml'));
 
 // 3) Register the player Activity in AndroidManifest.xml
 const manifestPath = path.join(androidAppDir, 'src', 'main', 'AndroidManifest.xml');
