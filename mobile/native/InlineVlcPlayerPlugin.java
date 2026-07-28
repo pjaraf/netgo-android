@@ -276,7 +276,8 @@ public class InlineVlcPlayerPlugin extends Plugin {
         // rebuffering. 2500ms is a safer middle ground — still starts
         // reasonably fast, but absorbs slow-network hiccups much better.
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(2500, 25000, 1200, 2500)
+                .setBufferDurationsMs(2500, 25000, 2000, 3500)
+                .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                 .setConnectTimeoutMs(10000)
@@ -646,9 +647,9 @@ public class InlineVlcPlayerPlugin extends Plugin {
             MediaItem item = new MediaItem.Builder()
                     .setUri(Uri.parse(urls.get(currentIndex)))
                     .setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
-                            .setTargetOffsetMs(8000)
-                            .setMinPlaybackSpeed(0.96f)
-                            .setMaxPlaybackSpeed(1.04f)
+                            .setTargetOffsetMs(10000)
+                            .setMinPlaybackSpeed(0.99f)
+                            .setMaxPlaybackSpeed(1.01f)
                             .build())
                     .build();
             player.setMediaItem(item);
