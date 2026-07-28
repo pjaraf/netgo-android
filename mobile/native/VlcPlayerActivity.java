@@ -210,14 +210,20 @@ public class VlcPlayerActivity extends Activity {
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
                 .setConnectTimeoutMs(10000)
                 .setReadTimeoutMs(10000)
-                .setAllowCrossProtocolRedirects(true);
+                .setAllowCrossProtocolRedirects(true)
+                // Some IPTV panels rate-limit or reject clients they don't
+                // recognize — identifying as a well-known player name
+                // improves compatibility with those servers.
+                .setUserAgent("NetGo/1.0 (Linux;Android) ExoPlayerLib/1.4.1");
 
         trackSelector = new DefaultTrackSelector(this);
 
         player = new ExoPlayer.Builder(this)
                 .setRenderersFactory(new DefaultRenderersFactory(this)
                         .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON))
-                .setMediaSourceFactory(new DefaultMediaSourceFactory(this).setDataSourceFactory(httpFactory))
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(this)
+                        .setDataSourceFactory(httpFactory)
+                        .setLoadErrorHandlingPolicy(new IptvLoadErrorPolicy()))
                 .setLoadControl(loadControl)
                 .setTrackSelector(trackSelector)
                 .build();
@@ -580,7 +586,18 @@ public class VlcPlayerActivity extends Activity {
         }
         zoomIndex = 0;
         if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
-        MediaItem item = MediaItem.fromUri(Uri.parse(urls.get(currentIndex)));
+        MediaItem.Builder itemBuilder = new MediaItem.Builder().setUri(Uri.parse(urls.get(currentIndex)));
+        if (isLive) {
+            // Lets ExoPlayer nudge playback speed by a few percent to stay
+            // near a comfortable buffer target instead of ever having to
+            // hard-stall when the network dips briefly.
+            itemBuilder.setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(8000)
+                    .setMinPlaybackSpeed(0.96f)
+                    .setMaxPlaybackSpeed(1.04f)
+                    .build());
+        }
+        MediaItem item = itemBuilder.build();
         player.setMediaItem(item);
         player.prepare();
         player.play();
