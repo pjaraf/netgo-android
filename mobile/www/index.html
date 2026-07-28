@@ -785,6 +785,13 @@
     background: var(--card); border:1px solid var(--line); border-radius:16px;
     padding:22px 28px; margin-bottom:18px; text-align:center;
   }
+  .code-entry-input{
+    width:100%; box-sizing:border-box; background:var(--bg); border:2px solid var(--line);
+    border-radius:12px; padding:16px; text-align:center; margin-bottom:14px;
+    font-family:'JetBrains Mono', monospace; font-size:32px; font-weight:700;
+    letter-spacing:10px; color:var(--amber);
+  }
+  .code-entry-input:focus{ outline:none; border-color:var(--amber); }
   .start-code-digits{
     font-family:'JetBrains Mono', monospace; font-size:38px; font-weight:700;
     letter-spacing:10px; color:var(--amber); margin-bottom:10px;
@@ -1001,11 +1008,12 @@
 <div id="startScreen" class="start-screen">
   <img class="start-logo" src="logo.png" alt="NetGo">
   <h1 class="start-title">NetGo</h1>
-  <p class="start-sub">Envía este código al administrador para activar tu cuenta.</p>
+  <p class="start-sub">Escribe el código de 6 dígitos que te dio tu proveedor.</p>
 
   <div id="startCodeBox" class="start-code-box">
-    <div class="start-code-digits" id="startCodeDigits">------</div>
-    <p class="start-status" id="startStatus">Esperando que el administrador active tu cuenta…</p>
+    <input id="codeEntryInput" class="code-entry-input" type="text" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off">
+    <button class="start-generate-btn" id="codeEntrySubmit" tabindex="0">Conectar</button>
+    <p class="start-status" id="startStatus" style="display:none"></p>
   </div>
 </div>
 
@@ -1052,7 +1060,7 @@
   <div class="brand">
     <img class="mark" src="logo.png" alt="NetGo">
     <div class="name">NetGo</div>
-    <div class="ver mono">1.0</div>
+    <div class="ver mono" id="appVersionLabel">1.0</div>
   </div>
   <div class="top-status">
     <span>📶</span>
@@ -1285,6 +1293,7 @@
     </div>
     <button class="qr-close-btn" id="accountInfoClose">Cerrar</button>
     <button class="qr-close-btn" id="accountSwitchProfileBtn">Cambiar de perfil</button>
+    <button class="qr-close-btn" id="accountCheckUpdateBtn">Buscar actualizaciones</button>
     <button class="qr-close-btn qr-close-btn-danger" id="accountLogoutBtn">Cerrar sesión</button>
   </div>
 </div>
@@ -1317,7 +1326,7 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #adminMessageClose';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #accountCheckUpdateBtn, #adminMessageClose';
 
   // If a modal (series detail, account info, PIN, QR screens) is open,
   // navigation must stay inside it — otherwise focus could jump to
@@ -1943,7 +1952,7 @@
       categories,
       catIndex: vivoActiveCatIndex,
       itemIndex,
-      deviceCode: getDeviceCode()
+      deviceCode: getClientCode()
     }).catch(err => console.error('VlcPlayer playLive error:', err));
   }
 
@@ -2170,7 +2179,7 @@
     if(!queue || !queue.length) return;
     if(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
       window.Capacitor.Plugins.VlcPlayer.play({
-        queue, startIndex: startIndex || 0, deviceCode: getDeviceCode(),
+        queue, startIndex: startIndex || 0, deviceCode: getClientCode(),
         startPositionMs: resumeMs || 0,
         contPlayingItem: currentPlayingItem ? JSON.stringify(currentPlayingItem) : ''
       }).catch(err => console.error('VlcPlayer error:', err));
@@ -3084,17 +3093,27 @@
   const UPDATE_INFO_URL = 'https://pjaraf.github.io/netgo-android/version.json';
   const UPDATE_APK_URL = 'https://github.com/pjaraf/netgo-android/releases/latest/download/app-debug.apk';
 
-  async function checkForUpdate(){
+  async function checkForUpdate(manual){
     try{
       const res = await fetch(UPDATE_INFO_URL, { cache:'no-store' });
-      if(!res.ok) return;
+      if(!res.ok){
+        if(manual) showStatus(`✕ No se pudo revisar (HTTP ${res.status})`, true);
+        return;
+      }
       const data = await res.json();
       const current = window.NETGO_APP_VERSION || 0;
       if(data.version && data.version > current){
         document.getElementById('updateBannerText').textContent = `Nueva versión disponible (build ${data.version})`;
         document.getElementById('updateBanner').style.display = 'flex';
+      } else if(manual){
+        showStatus(`✓ Ya tenés la última versión (v${current})`, false);
       }
-    }catch(err){ /* offline, or not published yet — ignore silently */ }
+    }catch(err){
+      // Offline, or not published yet — silent on auto-check (this runs
+      // on every boot), but visible when the person taps "Buscar
+      // actualizaciones" manually so a real problem doesn't stay hidden.
+      if(manual) showStatus('✕ No se pudo conectar para revisar: ' + err.message, true);
+    }
   }
   document.getElementById('updateBannerBtn').onclick = async () => {
     const btn = document.getElementById('updateBannerBtn');
@@ -3155,7 +3174,8 @@
   let statusCheckTimer = null;
   async function checkClientStatus(){
     try{
-      const code = getDeviceCode();
+      const code = getClientCode();
+      if(!code) return;
       const res = await fetch(`${FIREBASE_BASE}/status/${code}.json`, { cache:'no-store' });
       if(!res.ok) return;
       const data = await res.json();
@@ -3243,6 +3263,8 @@
       renderCategory(isTV() ? 'vivo' : 'peliculas');
       showStartScreenPairing();
     }
+    const verLabel = document.getElementById('appVersionLabel');
+    if(verLabel) verLabel.textContent = 'v' + (window.NETGO_APP_VERSION || '?');
     checkForUpdate();
   });
 
@@ -3322,6 +3344,10 @@
   document.getElementById('accountSwitchProfileBtn').onclick = () => {
     document.getElementById('accountInfoOverlay').style.display = 'none';
     showProfileScreen(() => {}); // content is already loaded — just apply the new profile's restrictions
+  };
+  document.getElementById('accountCheckUpdateBtn').onclick = () => {
+    document.getElementById('accountInfoOverlay').style.display = 'none';
+    checkForUpdate(true);
   };
   document.getElementById('accountLogoutBtn').onclick = () => {
     localStorage.removeItem(CONN_KEY);
@@ -3554,43 +3580,99 @@
     return deviceCodeCache || localStorage.getItem(DEVICE_CODE_KEY) || '';
   }
 
-  function showStartScreenPairing(){
-    document.getElementById('startScreen').style.display = 'flex';
-    pairCode = getDeviceCode();
-    document.getElementById('startCodeDigits').textContent = pairCode;
-    document.getElementById('startStatus').textContent = 'Esperando que el administrador active tu cuenta…';
-    startStartScreenPolling();
+  // The CLIENT CODE (given out by the admin, typed in by the person) is
+  // what everything — connections, pause/block, messages, hidden
+  // categories — is keyed by from here on, since multiple physical
+  // devices can share one client. getDeviceCode() above is now used only
+  // to tell physical devices apart for the device-limit check.
+  const CLIENT_CODE_KEY = 'netgo_client_code';
+  function getClientCode(){
+    return localStorage.getItem(CLIENT_CODE_KEY) || '';
+  }
+  function saveClientCode(code){
+    localStorage.setItem(CLIENT_CODE_KEY, code);
   }
 
-  function startStartScreenPolling(){
-    stopStartScreenPolling();
-    startPollTimer = setInterval(async () => {
-      try{
-        const res = await fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`);
-        if(!res.ok) return;
-        const data = await res.json();
-        let conn = null;
-        if(data && data.connType === 'm3u' && data.m3uUrl){
-          conn = { type:'m3u', server:data.m3uUrl };
-        } else if(data && Array.isArray(data.connections) && data.connections.length){
-          conn = { type:'xtream', connections:data.connections };
-        } else if(data && data.server && data.username && data.password){
-          conn = { type:'xtream', server:data.server, username:data.username, password:data.password };
-        }
-        if(conn){
-          fetch(`${FIREBASE_BASE}/pairs/${pairCode}.json`, { method:'DELETE' }).catch(()=>{});
-          stopStartScreenPolling();
-          document.getElementById('startScreen').style.display = 'none';
-          saveConn(conn);
-          tryConnect(conn);
-          startStatusPolling();
-          startBackgroundCatalogRefresh(conn);
-        }
-      }catch(err){ /* keep polling silently */ }
-    }, 2500);
+  function showStartScreenPairing(){
+    document.getElementById('startScreen').style.display = 'flex';
+    document.getElementById('codeEntryInput').value = '';
+    document.getElementById('startStatus').style.display = 'none';
+    setTimeout(() => document.getElementById('codeEntryInput').focus(), 200);
   }
-  function stopStartScreenPolling(){
-    if(startPollTimer){ clearInterval(startPollTimer); startPollTimer = null; }
+
+  document.getElementById('codeEntrySubmit').onclick = submitClientCode;
+  document.getElementById('codeEntryInput').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') submitClientCode();
+  });
+
+  async function submitClientCode(){
+    const enteredCode = document.getElementById('codeEntryInput').value.trim();
+    const statusEl = document.getElementById('startStatus');
+    if(!/^\d{6}$/.test(enteredCode)){
+      statusEl.textContent = 'Escribe los 6 dígitos del código.';
+      statusEl.style.color = '#FF6B6B';
+      statusEl.style.display = 'block';
+      return;
+    }
+
+    statusEl.textContent = 'Verificando código…';
+    statusEl.style.color = 'var(--text-dim)';
+    statusEl.style.display = 'block';
+
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/clients/${enteredCode}.json`);
+      const c = await res.json();
+      if(!c){
+        statusEl.textContent = 'Ese código no existe. Revísalo con tu proveedor.';
+        statusEl.style.color = '#FF6B6B';
+        return;
+      }
+
+      // Device-limit check: this client's code allows a certain number of
+      // devices connected at once (set by the admin) — this physical
+      // device either already counts toward that (reconnecting), or there
+      // needs to be a free slot for it.
+      const physicalId = await initDeviceCode();
+      const maxDevices = c.maxDevices || 1;
+      const registered = c.registeredDevices || {};
+      const alreadyRegistered = !!registered[physicalId];
+
+      if(!alreadyRegistered && Object.keys(registered).length >= maxDevices){
+        statusEl.textContent = `Ya se alcanzó el límite de ${maxDevices} dispositivo(s) para este código. Contacta a tu proveedor para ampliarlo.`;
+        statusEl.style.color = '#FF6B6B';
+        return;
+      }
+
+      if(!alreadyRegistered){
+        await fetch(`${FIREBASE_BASE}/clients/${enteredCode}/registeredDevices/${physicalId}.json`, {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(true)
+        });
+      }
+
+      let conn = null;
+      if(Array.isArray(c.connections) && c.connections.length){
+        conn = { type:'xtream', connections:c.connections };
+      } else if(c.connType === 'm3u' && c.m3uUrl){
+        conn = { type:'m3u', server:c.m3uUrl };
+      } else if(c.server && c.username && c.password){
+        conn = { type:'xtream', server:c.server, username:c.username, password:c.password };
+      }
+      if(!conn){
+        statusEl.textContent = 'Este código no tiene contenido asignado todavía. Contacta a tu proveedor.';
+        statusEl.style.color = '#FF6B6B';
+        return;
+      }
+
+      saveClientCode(enteredCode);
+      document.getElementById('startScreen').style.display = 'none';
+      saveConn(conn);
+      tryConnect(conn);
+      startStatusPolling();
+      startBackgroundCatalogRefresh(conn);
+    }catch(err){
+      statusEl.textContent = 'No se pudo verificar el código. Revisa tu conexión e intenta de nuevo.';
+      statusEl.style.color = '#FF6B6B';
+    }
   }
 
   const ADMIN_PIN = '1286';
