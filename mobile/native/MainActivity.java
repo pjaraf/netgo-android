@@ -14,6 +14,17 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DeviceIdPlugin.class);
         super.onCreate(savedInstanceState);
         getBridge().getWebView().getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        // A few safe tweaks that specifically help on weak/generic TV
+        // boxes: explicit hardware-accelerated compositing (some cheap
+        // boxes ship WebViews that default more conservatively), turning
+        // off features this app never uses (form-data saving, geolocation)
+        // so the WebView isn't holding onto memory for nothing, and a
+        // slightly bigger render-ahead cache so scrolling through long
+        // rows doesn't have to keep re-painting from scratch.
+        getBridge().getWebView().setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null);
+        getBridge().getWebView().getSettings().setSaveFormData(false);
+        getBridge().getWebView().getSettings().setGeolocationEnabled(false);
+        getBridge().getWebView().getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
         // WebViews default to a WHITE background before/between paints —
         // that's the white flash that was showing up whenever returning
         // from the fullscreen native player (or any other activity
