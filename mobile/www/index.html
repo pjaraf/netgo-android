@@ -2567,6 +2567,19 @@
   // localStorage first so it survives an app restart before the network
   // catches up.
   let clientMaxDevices = parseInt(localStorage.getItem('netgo_max_devices') || '1', 10);
+
+  async function refreshClientMaxDevices(){
+    const code = getClientCode();
+    if(!code) return;
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/clients/${code}/maxDevices.json`);
+      const val = await res.json();
+      if(val){
+        clientMaxDevices = val;
+        localStorage.setItem('netgo_max_devices', String(val));
+      }
+    }catch(err){ /* keep the last-known cached value if this fails */ }
+  }
   try{ hiddenCategoryNames = JSON.parse(localStorage.getItem('netgo_hidden_categories') || '[]'); }catch(e){}
 
   function filterHiddenCategories(data){
@@ -3362,6 +3375,7 @@
   async function tryConnect(conn, { silent } = {}){
     if(!silent) showStatus('Conectando…', false);
     const cacheKey = connCacheKey(conn);
+    refreshClientMaxDevices(); // fire-and-forget — fixes "casting requires 3/5 devices" showing wrong for returning sessions
 
     // Show the last-known catalog immediately (if we have one) so the
     // screen is never empty/blank while fresh data loads in the
