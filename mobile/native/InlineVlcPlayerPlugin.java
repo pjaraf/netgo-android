@@ -296,6 +296,17 @@ public class InlineVlcPlayerPlugin extends Plugin {
                 .setAllowCrossProtocolRedirects(true)
                 .setUserAgent("NetGo/1.0 (Linux;Android) ExoPlayerLib/1.4.1");
         trackSelector = new DefaultTrackSelector(activity);
+        // Same as the TV player — no artificial cap, so playback always
+        // aims for each channel's real/native quality.
+        trackSelector.setParameters(trackSelector.buildUponParameters()
+                .setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE)
+                .setMaxVideoBitrate(Integer.MAX_VALUE)
+                .setForceHighestSupportedBitrate(false));
+
+        androidx.media3.exoplayer.upstream.DefaultBandwidthMeter bandwidthMeter =
+                new androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.Builder(activity)
+                        .setInitialBitrateEstimate(8_000_000)
+                        .build();
 
         player = new ExoPlayer.Builder(activity)
                 .setRenderersFactory(new DefaultRenderersFactory(activity)
@@ -305,6 +316,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
                         .setLoadErrorHandlingPolicy(new IptvLoadErrorPolicy()))
                 .setLoadControl(loadControl)
                 .setTrackSelector(trackSelector)
+                .setBandwidthMeter(bandwidthMeter)
                 .build();
         videoLayout.setPlayer(player);
 
