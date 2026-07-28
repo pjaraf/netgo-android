@@ -570,6 +570,18 @@
   .row-head h2{ font-family:'Space Grotesk'; font-size:15px; font-weight:600; }
   .row-head .count{ font-family:'JetBrains Mono'; font-size:11px; color:var(--text-dim); }
   .row-scroll{ display:flex; gap:12px; overflow-x:auto; padding-bottom:4px; contain:content; }
+  /* Filtered to a single category: fill the screen with a grid instead of
+     a horizontal carousel — 8 per row, wrapping downward. */
+  .row-scroll.grid-mode{
+    display:grid; grid-template-columns:repeat(8, 1fr); overflow-x:visible; gap:14px 12px;
+  }
+  @media (max-width: 900px){
+    .row-scroll.grid-mode{ grid-template-columns:repeat(4, 1fr); }
+  }
+  @media (max-width: 560px){
+    .row-scroll.grid-mode{ grid-template-columns:repeat(3, 1fr); }
+  }
+  .row-scroll.grid-mode .poster-card, .row-scroll.grid-mode .channel-card{ width:100%; flex-shrink:1; }
   .row-scroll::-webkit-scrollbar{ display:none; }
   .empty-card{
     flex: 0 0 150px; height:96px;
@@ -1745,10 +1757,29 @@
     });
   }
   function jumpToCategoryRow(idx){
-    // idx === -1 means "Todas" (show every category again)
+    // idx === -1 means "Todas" (show every category again, as carousels)
     document.querySelectorAll('#rowsContainer .row').forEach(section => {
       const rowIdx = +section.dataset.rowIndex;
       section.style.display = (idx === -1 || rowIdx === idx) ? '' : 'none';
+      // Also hide that row's own title when it's the only one showing —
+      // filtering to "Acción" doesn't need an "Acción" header repeated
+      // right above the grid it's already labeled by in the panel.
+      const head = section.querySelector('.row-head');
+      if(head) head.style.display = (idx === -1) ? '' : 'none';
+      const scrollEl = section.querySelector('.row-scroll');
+      if(!scrollEl) return;
+      const isGrid = idx !== -1 && rowIdx === idx;
+      scrollEl.classList.toggle('grid-mode', isGrid);
+      // The batch loader only triggers on horizontal scroll, which grid
+      // mode doesn't have (the whole page scrolls vertically instead) —
+      // so switching a row into grid mode loads every one of its items
+      // right away instead of leaving the rest stuck unloaded.
+      if(isGrid && window.jumpToCategoryRowFullData && window.jumpToCategoryRowFullData[rowIdx]){
+        const rowData = window.jumpToCategoryRowFullData[rowIdx];
+        if(scrollEl.childElementCount < rowData.items.length){
+          scrollEl.innerHTML = rowData.items.map(rowData.cardFn).join('');
+        }
+      }
     });
     document.querySelectorAll('.category-panel-item').forEach(el => {
       el.classList.toggle('active', +el.dataset.rowIndex === idx);
@@ -1845,6 +1876,10 @@
     });
     rowsContainer.appendChild(frag);
     updateCategoryPanel(cat, rows);
+    window.jumpToCategoryRowFullData = rows.map(row => ({
+      items: row.items,
+      cardFn: row.cardType === 'channel' ? channelCard : (row.cardType === 'poster' ? posterCard : cardFn)
+    }));
 
     function populateRow(section){
       if(myGen !== renderGen) return;
