@@ -70,6 +70,16 @@ public class InlineVlcPlayerPlugin extends Plugin {
         currentInstance = this;
     }
 
+    /** Fires when the app loses foreground — including when the screen
+     *  locks, since Android pauses the current Activity in that case too.
+     *  Playback pauses instead of continuing as audio-only in the
+     *  background, which nobody asked for and just drains the battery. */
+    @Override
+    protected void handleOnPause() {
+        super.handleOnPause();
+        if (player != null && player.isPlaying()) player.pause();
+    }
+
     /** Called from MainActivity's back button handling — closes the video
      *  if one is open, returning true if it handled the press. */
     public static boolean handleBackPress() {
