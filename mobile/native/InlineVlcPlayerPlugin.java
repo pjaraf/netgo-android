@@ -237,7 +237,15 @@ public class InlineVlcPlayerPlugin extends Plugin {
         activity.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         container = new FrameLayout(activity);
-        videoLayout = new PlayerView(activity);
+        // Inflated from XML specifically because that's the only way to
+        // configure PlayerView's surface type — the default (SurfaceView)
+        // renders as its own compositor layer that sits ABOVE the
+        // WebView's own content regardless of normal Android z-ordering,
+        // which was hiding the web-based title/cast/close buttons behind
+        // the video. TextureView is a normal View that composites
+        // properly alongside everything else.
+        int layoutId = activity.getResources().getIdentifier("inline_player_view", "layout", activity.getPackageName());
+        videoLayout = (PlayerView) android.view.LayoutInflater.from(activity).inflate(layoutId, container, false);
         videoLayout.setUseController(false);
         container.addView(videoLayout, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -554,7 +562,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
             activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
             hideSystemBars(activity);
             fullscreenBtn.setText("⤡");
-            if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM); // fill the screen 16:9
+            if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT); // show the whole image, never cropping
             isFullscreen = true;
         } else {
             exitFullscreen(activity);
