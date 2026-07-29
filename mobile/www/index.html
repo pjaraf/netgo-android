@@ -58,24 +58,6 @@
   .display{ font-family:'Space Grotesk', sans-serif; }
 
   /* ---------- Top bar ---------- */
-  /* TV: expanding the already-playing preview in place — hides
-     everything else so only the (now fullscreen-sized) native video
-     shows, without touching the player itself. */
-  body.vivo-preview-expanded header,
-  body.vivo-preview-expanded .search-bar,
-  body.vivo-preview-expanded .vivo-tabs,
-  body.vivo-preview-expanded .vivo-body,
-  body.vivo-preview-expanded #rowsContainer,
-  body.vivo-preview-expanded .tv-sidebar-brand,
-  body.vivo-preview-expanded .cat{
-    display:none !important;
-  }
-  .vivo-preview-hint{ display:none; }
-  body.vivo-preview-expanded .vivo-preview-hint{
-    display:block; position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
-    z-index:20; background:rgba(6,14,20,.75); color:#fff; font-size:12.5px;
-    padding:8px 16px; border-radius:20px; pointer-events:none;
-  }
   header{
     display:flex; align-items:center; justify-content:space-between;
     padding:18px 22px;
@@ -1368,7 +1350,6 @@
 </div>
 
 
-<div class="vivo-preview-hint">Presiona Atrás para volver</div>
 <div id="vivoView" class="vivo-view" style="display:none">
   <div class="vivo-top-grid">
     <div class="vivo-preview" id="vivoPreview">
@@ -2240,30 +2221,6 @@
     if(el) el.textContent = '';
   }
   let vivoPreviewPlaying = false;
-  let vivoPreviewExpanded = false;
-
-  /** Grows the SAME already-playing preview to fill the whole screen —
-   *  no new player, no reload, just resizing the existing native view
-   *  (same trick used to keep it aligned with the preview box normally).
-   *  This trades away the fullscreen native player's extra features
-   *  (channel banner, EPG, Right-arrow channel/category browsing) for a
-   *  truly instant, zero-rebuffer expand — which is what was asked for
-   *  specifically here. */
-  function expandVivoPreviewFullscreen(){
-    if(!vivoPreviewPlaying || !inlineAvailable() || vivoPreviewExpanded) return;
-    vivoPreviewExpanded = true;
-    document.body.classList.add('vivo-preview-expanded');
-    window.Capacitor.Plugins.InlineVlcPlayer.updateRect({
-      x:0, y:0, width:window.innerWidth, height:window.innerHeight
-    }).catch(()=>{});
-  }
-
-  function shrinkVivoPreview(){
-    if(!vivoPreviewExpanded) return;
-    vivoPreviewExpanded = false;
-    document.body.classList.remove('vivo-preview-expanded');
-    repositionVivoPreview();
-  }
 
   function getVivoPreviewRect(){
     const r = document.getElementById('vivoPreviewArt').getBoundingClientRect();
@@ -2271,7 +2228,7 @@
   }
 
   function repositionVivoPreview(){
-    if(!vivoPreviewPlaying || !inlineAvailable() || vivoPreviewExpanded) return;
+    if(!vivoPreviewPlaying || !inlineAvailable()) return;
     window.Capacitor.Plugins.InlineVlcPlayer.updateRect(getVivoPreviewRect()).catch(()=>{});
   }
   window.addEventListener('resize', () => { if(vivoPreviewPlaying) repositionVivoPreview(); });
@@ -2377,11 +2334,10 @@
       if(now - lastCatClick < 150) return; // ignore rapid double-taps/clicks
       lastCatClick = now;
 
-      // On TV, pressing "TV" while it's already the active tab expands
-      // the preview that's already playing to fill the screen — same
-      // video, same connection, no reload.
+      // On TV, "TV" is a shortcut to fullscreen whatever's already playing
+      // in the main-screen preview — not a view to switch into.
       if(isTV() && cat.dataset.cat === 'vivo' && vivoPreviewPlaying){
-        expandVivoPreviewFullscreen();
+        launchTVLivePlayback();
         return;
       }
 
@@ -3695,10 +3651,6 @@
   // if we're anywhere other than the TV home screen, go back there instead
   // of exiting the app. Returns true if it handled the press.
   window.handleTVBack = function(){
-    if(vivoPreviewExpanded){
-      shrinkVivoPreview();
-      return true;
-    }
     // Any open modal (Settings included) gets closed first — this was
     // missing entirely, which meant pressing Back while Settings was open
     // did nothing on this side, and Android fell through to its own
