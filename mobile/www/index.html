@@ -466,6 +466,7 @@
     width:38px; height:38px; border-radius:50%; background:rgba(6,14,20,.55);
     display:flex; align-items:center; justify-content:center; font-size:18px; color:#fff; cursor:pointer;
   }
+  body.tv-mode .sd-back, body.tv-mode .sd-fav{ display:none; } /* TV: back button on the remote instead */
   .sd-fav.active{ color:var(--amber); }
   .sd-cover-circle{
     width:112px; height:112px; border-radius:50%; object-fit:cover;
@@ -3217,29 +3218,14 @@
       </div>
     `;
 
-    // Load in batches as the list scrolls, instead of building every
-    // episode (with its thumbnail) synchronously in one go — the same
-    // approach we already use for long channel/content lists elsewhere.
-    list.innerHTML = '';
-    const BATCH = (isTV() || isLowPower()) ? 6 : 12;
-    let loaded = 0;
-    function loadMore(){
-      const old = list.querySelector('.sd-ep-sentinel');
-      if(old) old.remove();
-      const next = eps.slice(loaded, loaded + BATCH);
-      list.insertAdjacentHTML('beforeend', next.map(episodeRow).join(''));
-      loaded += next.length;
-      if(loaded < eps.length){
-        const sentinel = document.createElement('div');
-        sentinel.className = 'sd-ep-sentinel';
-        list.appendChild(sentinel);
-        const obs = new IntersectionObserver((entries) => {
-          if(entries[0].isIntersecting){ obs.disconnect(); loadMore(); }
-        }, { root:null, rootMargin:'400px 0px' });
-        obs.observe(sentinel);
-      }
-    }
-    loadMore();
+    // Every episode of a season, all at once — a season is at most a few
+    // dozen entries, nothing like the size of a full channel/movie
+    // catalog, so there's no real cost to rendering all of them upfront.
+    // Loading them in scroll-triggered batches meant D-pad navigation on
+    // TV could leave later episodes never loaded at all, since triggering
+    // that load depended on a scroll behavior that isn't guaranteed to
+    // fire the same way with a remote as it does with a finger/mouse.
+    list.innerHTML = eps.map(episodeRow).join('');
   }
 
   document.getElementById('sdSeasonTabs').addEventListener('click', (e) => {
