@@ -1353,7 +1353,7 @@
 
 <div id="vivoView" class="vivo-view" style="display:none">
   <div class="vivo-top-grid">
-    <div class="vivo-preview" id="vivoPreview">
+    <div class="vivo-preview" id="vivoPreview" tabindex="0">
       <div class="vivo-preview-art" id="vivoPreviewArt">
         <div class="vivo-preview-icon" id="vivoPreviewIcon">📡</div>
       </div>
@@ -1584,7 +1584,7 @@
   // D-pad "OK/Select" sends Enter (sometimes Space) to the focused element.
   // Plain <div tabindex="0"> elements don't auto-click on Enter like
   // buttons/links do, so we do it ourselves for our interactive cards.
-  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #accountCheckUpdateBtn, #adminMessageClose, #accountInfoClose, #parentalControlToggle, #accountLogoutBtn, .tv-key, #categoryPanelBtn, #categoryPanelClose, .category-panel-item';
+  const NAV_SELECTOR = '.poster-card, .channel-card, .cat, .vivo-cat-item, .vivo-chan-row, [data-fav-toggle], .save-btn, .qr-btn, .gear, .start-manual-btn, #updateBannerBtn, #updateBannerClose, .sd-season-tab, .sd-episode-row, .sd-back, .sd-fav, .profile-tile, .profile-avatar-option, .profile-edit-cancel, .profile-edit-save, .profile-edit-delete, #accountSwitchProfileBtn, #accountCheckUpdateBtn, #adminMessageClose, #accountInfoClose, #parentalControlToggle, #accountLogoutBtn, .tv-key, #categoryPanelBtn, #categoryPanelClose, .category-panel-item, #vivoPreview';
 
   // If a modal (series detail, account info, PIN, QR screens) is open,
   // navigation must stay inside it — otherwise focus could jump to
@@ -2248,22 +2248,13 @@
     document.getElementById('vivoPreviewName').textContent = item.t;
     document.getElementById('vivoPreviewMeta').textContent = item.num ? `Canal ${item.num}` : '';
 
-    if(!inlineAvailable()){
-      const artBox = document.getElementById('vivoPreviewArt');
-      artBox.innerHTML = item.img
-        ? `<img src="${item.img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
-        : `<div class="vivo-preview-icon">📡</div>`;
-      return;
-    }
-
-    document.getElementById('vivoPreviewArt').innerHTML = ''; // native video renders on top of this box
-    const P = window.Capacitor.Plugins.InlineVlcPlayer;
-    await P.mount({ ...getVivoPreviewRect(), showControls: false });
-    await P.loadQueue({ queue: [{ url:item.url, title:item.t }], startIndex: 0 });
-    vivoPreviewPlaying = true;
-    startVivoRateIndicator();
-    setTimeout(repositionVivoPreview, 150);
-    setTimeout(repositionVivoPreview, 500);
+    // No more auto-playing inline preview — just a static thumbnail. The
+    // channel actually plays (in the one native fullscreen player used
+    // everywhere now) once the person taps/selects it.
+    const artBox = document.getElementById('vivoPreviewArt');
+    artBox.innerHTML = item.img
+      ? `<img src="${item.img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
+      : `<div class="vivo-preview-icon">📡</div>`;
   }
 
   async function updateVivoPreview(row){
@@ -2274,6 +2265,14 @@
       img: row.dataset.img || ''
     });
   }
+
+  // The preview card is just a static thumbnail now (no more inline
+  // player) — tapping/selecting it opens the one native fullscreen
+  // player, same as everywhere else in the app.
+  document.getElementById('vivoPreview').onclick = () => {
+    if(!vivoPreviewSelected) return;
+    playQueue([{ url: vivoPreviewSelected.url, title: vivoPreviewSelected.title, num: vivoPreviewSelected.num }], 0, vivoPreviewSelected.title, 'channel');
+  };
 
   async function launchTVLivePlayback(){
     if(!vivoPreviewSelected) return;
@@ -2337,8 +2336,10 @@
 
       // On TV, "TV" is a shortcut to fullscreen whatever's already playing
       // in the main-screen preview — not a view to switch into.
-      if(isTV() && cat.dataset.cat === 'vivo' && vivoPreviewPlaying){
-        launchTVLivePlayback();
+      // On TV, pressing "TV" while already on that tab launches the
+      // currently-selected channel in the (one, shared) fullscreen player.
+      if(isTV() && cat.dataset.cat === 'vivo' && currentCat === 'vivo' && vivoPreviewSelected){
+        playQueue([{ url: vivoPreviewSelected.url, title: vivoPreviewSelected.title, num: vivoPreviewSelected.num }], 0, vivoPreviewSelected.title, 'channel');
         return;
       }
 
@@ -2693,7 +2694,7 @@
   // the screen. On phones we keep the inline overlay player.
   function playQueue(queue, startIndex, fallbackTitle, kind, resumeMs){
     if(!queue || !queue.length) return;
-    if(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
+    if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
       window.Capacitor.Plugins.VlcPlayer.play({
         queue, startIndex: startIndex || 0, deviceCode: getClientCode(),
         startPositionMs: resumeMs || 0,
@@ -2701,7 +2702,10 @@
       }).catch(err => console.error('VlcPlayer error:', err));
       return;
     }
-    playInline(queue, startIndex || 0, kind, resumeMs);
+    // Only reachable if the native plugin genuinely isn't available (e.g.
+    // previewing in a desktop browser) — there's no other player to fall
+    // back to anymore.
+    showStatus('No se pudo abrir el reproductor.', true);
   }
   function closePlayer(){
     playerOverlay.classList.remove('open');
