@@ -189,6 +189,18 @@
 
   <div class="tab-panel" id="tab-servers" style="display:none">
     <div class="card">
+      <h2>🔒 Servidor 1 fijo (usuario/clave únicos para todos los clientes)</h2>
+      <p class="tab-hint">Este servidor se agrega automáticamente a cada cliente nuevo, con el mismo usuario y contraseña siempre. Solo vos podés cambiarlos acá — los sub-administradores nunca los ven ni los editan.</p>
+      <label>URL del servidor</label>
+      <input id="fixedServer1Url" type="text" placeholder="http://proveedor.ejemplo.com:8080">
+      <label>Usuario (igual para todos)</label>
+      <input id="fixedServer1User" type="text" placeholder="usuario">
+      <label>Contraseña (igual para todos)</label>
+      <input id="fixedServer1Pass" type="text" placeholder="contraseña">
+      <button id="btnSaveFixedServer1">Guardar servidor fijo</button>
+      <p class="msg" id="fixedServer1Msg"></p>
+    </div>
+    <div class="card">
       <h2>Agregar servidor</h2>
       <label>Nombre / etiqueta</label>
       <input id="newServerLabel" type="text" placeholder="ej: Servidor Principal">
@@ -989,7 +1001,7 @@
       document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
       document.getElementById('tab-' + tab.dataset.tab).style.display = 'block';
       if(tab.dataset.tab === 'admins') loadAdminsList();
-      else if(tab.dataset.tab === 'servers') loadServersList();
+      else if(tab.dataset.tab === 'servers'){ loadServersList(); loadFixedServer1(); }
       else if(tab.dataset.tab === 'summary') loadSummary();
       else if(tab.dataset.tab === 'categories') populateCatClientSelect();
       else if(tab.dataset.tab !== 'activate') loadAllLists();
@@ -1301,6 +1313,35 @@
 
   document.getElementById('refreshServersBtn').onclick = loadServersList;
 
+  async function loadFixedServer1(){
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/fixedServer1.json`);
+      const data = await res.json();
+      if(data){
+        document.getElementById('fixedServer1Url').value = data.server || '';
+        document.getElementById('fixedServer1User').value = data.username || '';
+        document.getElementById('fixedServer1Pass').value = data.password || '';
+      }
+    }catch(e){}
+  }
+  document.getElementById('btnSaveFixedServer1').onclick = async () => {
+    const server = document.getElementById('fixedServer1Url').value.trim();
+    const username = document.getElementById('fixedServer1User').value.trim();
+    const password = document.getElementById('fixedServer1Pass').value.trim();
+    const msg = document.getElementById('fixedServer1Msg');
+    if(!server || !username || !password){
+      msg.textContent = 'Completá URL, usuario y contraseña.';
+      msg.className = 'msg err';
+      return;
+    }
+    await fetch(`${FIREBASE_BASE}/fixedServer1.json`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ server, username, password, type:'xtream', fixed:true, updatedAt: Date.now() })
+    });
+    msg.textContent = '✓ Guardado. Se va a usar automáticamente en cada cliente nuevo.';
+    msg.className = 'msg ok';
+  };
+
   async function loadServersList(){
     const list = document.getElementById('serversList');
     list.innerHTML = '<p class="msg info">Cargando…</p>';
@@ -1466,6 +1507,35 @@
     `;
   }
 
+  let cachedFixedServer1 = null;
+  async function ensureFixedServer1Cached(){
+    if(cachedFixedServer1) return cachedFixedServer1;
+    try{
+      const res = await fetch(`${FIREBASE_BASE}/fixedServer1.json`);
+      cachedFixedServer1 = await res.json();
+    }catch(e){ cachedFixedServer1 = null; }
+    return cachedFixedServer1;
+  }
+
+  /** The fixed Server 1 block — same credentials for every client, locked
+   *  so nobody but the super admin (from the Servidores tab) can change
+   *  them. Sub-admins just see it sitting there already filled in. */
+  function addLockedServer1Block(data){
+    const container = document.getElementById('serverBlocksContainer');
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = xtreamBlockHtml(data.server, data.username, data.password);
+    const block = wrapper.firstElementChild;
+    block.dataset.locked = 'true';
+    block.querySelector('.server-block-select').disabled = true;
+    block.querySelector('.server-block-user').disabled = true;
+    block.querySelector('.server-block-pass').disabled = true;
+    const removeBtn = block.querySelector('.server-block-remove');
+    if(removeBtn) removeBtn.remove(); // can't be removed — it's not optional
+    const label = block.querySelector('.server-block-label') || block.firstElementChild;
+    if(label) label.insertAdjacentHTML('beforeend', ' 🔒 (fijo, no editable)');
+    container.appendChild(block);
+  }
+
   function addServerBlock(server, username, password){
     const container = document.getElementById('serverBlocksContainer');
     const wrapper = document.createElement('div');
@@ -1501,9 +1571,15 @@
     }).filter(c => c.type === 'm3u' ? c.url : c.server);
   }
 
-  function resetServerBlocks(){
+  async function resetServerBlocks(){
     document.getElementById('serverBlocksContainer').innerHTML = '';
-    addServerBlock();
+    const fixed = await ensureFixedServer1Cached();
+    if(fixed && fixed.server){
+      addLockedServer1Block(fixed);
+      addServerBlock(); // Server 2 — empty, sub-admin fills in per-client credentials
+    } else {
+      addServerBlock();
+    }
   }
 
   let currentAdminPermissions = null;
