@@ -428,11 +428,17 @@ public class VlcPlayerActivity extends Activity {
             return true;
         }
         if (audioSubMenuOverlay != null && audioSubMenuOverlay.getParent() != null) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) { moveAudioMenuSelection(-1); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) { moveAudioMenuSelection(1); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                confirmAudioMenuSelection();
+                return true;
+            }
             if (keyCode == KeyEvent.KEYCODE_BACK) {
                 closeAudioSubtitleMenu();
                 return true;
             }
-            return super.onKeyDown(keyCode, event); // let D-pad navigate the menu's own focusable rows normally
+            return true; // swallow everything else while the menu is open
         }
         if (episodeBrowseOpen) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) { moveEpisodeBrowseSelection(-1); return true; }
@@ -535,11 +541,18 @@ public class VlcPlayerActivity extends Activity {
     /** The CC button's menu — lets you pick the real audio language (not
      *  just Spanish auto-detection) and turn subtitles on/off, all
      *  D-pad navigable like the channel/category browse panels. */
+    private final List<TextView> audioMenuRows = new ArrayList<>();
+    private final List<Runnable> audioMenuActions = new ArrayList<>();
+    private int audioMenuSelectedIndex = 0;
+
     private void openAudioSubtitleMenu() {
         if (player == null || trackSelector == null) return;
         if (audioSubMenuOverlay != null && audioSubMenuOverlay.getParent() != null) {
             ((ViewGroup) audioSubMenuOverlay.getParent()).removeView(audioSubMenuOverlay);
         }
+        audioMenuRows.clear();
+        audioMenuActions.clear();
+        audioMenuSelectedIndex = 0;
 
         FrameLayout root = findViewById(android.R.id.content);
         audioSubMenuOverlay = new FrameLayout(this);
@@ -573,12 +586,18 @@ public class VlcPlayerActivity extends Activity {
                 final Tracks.Group fGroup = group;
                 final int fIndex = i;
                 TextView row = buildMenuRow("🔊 " + label, selected);
-                row.setOnClickListener(v -> {
+                card.addView(row);
+                audioMenuRows.add(row);
+                final int rowIndexForClick = audioMenuRows.size() - 1;
+                audioMenuActions.add(() -> {
                     trackSelector.setParameters(trackSelector.buildUponParameters()
                             .setOverrideForType(new TrackSelectionOverride(fGroup.getMediaTrackGroup(), fIndex)));
                     closeAudioSubtitleMenu();
                 });
-                card.addView(row);
+                row.setOnClickListener(v -> {
+                    audioMenuSelectedIndex = rowIndexForClick;
+                    confirmAudioMenuSelection();
+                });
                 audioIdx++;
             }
         }
@@ -599,11 +618,17 @@ public class VlcPlayerActivity extends Activity {
         card.addView(subLabel, subLp);
 
         TextView subRow = buildMenuRow(subtitlesEnabled ? "✓ Activados" : "Desactivados", false);
-        subRow.setOnClickListener(v -> {
+        card.addView(subRow);
+        audioMenuRows.add(subRow);
+        final int subRowIndex = audioMenuRows.size() - 1;
+        audioMenuActions.add(() -> {
             toggleSubtitlesOnly();
             closeAudioSubtitleMenu();
         });
-        card.addView(subRow);
+        subRow.setOnClickListener(v -> {
+            audioMenuSelectedIndex = subRowIndex;
+            confirmAudioMenuSelection();
+        });
 
         FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(dp(280), ViewGroup.LayoutParams.WRAP_CONTENT);
         cardLp.gravity = Gravity.CENTER;
@@ -613,8 +638,36 @@ public class VlcPlayerActivity extends Activity {
         root.addView(audioSubMenuOverlay, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        View firstRow = card.getChildCount() > 1 ? card.getChildAt(1) : card.getChildAt(0);
-        if (firstRow != null) firstRow.requestFocus();
+        highlightAudioMenuRow();
+    }
+
+    /** This player never relies on Android's own view-focus system for
+     *  D-pad movement — every panel (channels, categories, episodes) is
+     *  navigated by hand, tracking a selected index and re-drawing the
+     *  highlighted row. This menu needs the exact same treatment, which
+     *  is what was missing (Up/Down did nothing inside it before). */
+    private void highlightAudioMenuRow() {
+        for (int i = 0; i < audioMenuRows.size(); i++) {
+            TextView row = audioMenuRows.get(i);
+            boolean isCursor = (i == audioMenuSelectedIndex);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(isCursor ? 0xFFFF8A3D : 0x00000000);
+            bg.setCornerRadius(dp(8));
+            row.setBackground(bg);
+            row.setTextColor(isCursor ? 0xFF1A0E00 : Color.WHITE);
+        }
+    }
+
+    private void moveAudioMenuSelection(int delta) {
+        if (audioMenuRows.isEmpty()) return;
+        int max = audioMenuRows.size();
+        audioMenuSelectedIndex = ((audioMenuSelectedIndex + delta) % max + max) % max;
+        highlightAudioMenuRow();
+    }
+
+    private void confirmAudioMenuSelection() {
+        if (audioMenuSelectedIndex < 0 || audioMenuSelectedIndex >= audioMenuActions.size()) return;
+        audioMenuActions.get(audioMenuSelectedIndex).run();
     }
 
     private TextView buildMenuRow(String text, boolean selected) {
