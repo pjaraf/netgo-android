@@ -235,6 +235,12 @@ public class VlcPlayerActivity extends Activity {
         if (isPhoneDevice) {
             buildTouchControls();
             setupGestureDetector();
+            // Movies/series/anime/Kids/seguir viendo: rotate to landscape
+            // automatically — only live TV stays portrait by default with
+            // a manual fullscreen button instead.
+            if (!isLive) {
+                setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+            }
         }
 
         // Tuned for live IPTV/HLS: big enough to absorb real network
