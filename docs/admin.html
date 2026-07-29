@@ -1519,21 +1519,31 @@
 
   /** The fixed Server 1 block — same credentials for every client, locked
    *  so nobody but the super admin (from the Servidores tab) can change
-   *  them. Sub-admins just see it sitting there already filled in. */
+   *  them. Sub-admins just see it sitting there already filled in.
+   *  Built directly (not via xtreamBlockHtml's dropdown) since that
+   *  dropdown only lists servers from the general registry — this one's
+   *  URL doesn't need to be registered there too. */
   function addLockedServer1Block(data){
     const container = document.getElementById('serverBlocksContainer');
     const wrapper = document.createElement('div');
-    wrapper.innerHTML = xtreamBlockHtml(data.server, data.username, data.password);
-    const block = wrapper.firstElementChild;
-    block.dataset.locked = 'true';
-    block.querySelector('.server-block-select').disabled = true;
-    block.querySelector('.server-block-user').disabled = true;
-    block.querySelector('.server-block-pass').disabled = true;
-    const removeBtn = block.querySelector('.server-block-remove');
-    if(removeBtn) removeBtn.remove(); // can't be removed — it's not optional
-    const label = block.querySelector('.server-block-label') || block.firstElementChild;
-    if(label) label.insertAdjacentHTML('beforeend', ' 🔒 (fijo, no editable)');
-    container.appendChild(block);
+    wrapper.innerHTML = `
+      <div class="server-block" data-block-type="xtream" data-locked="true" style="border:1px solid var(--amber); border-radius:9px; padding:12px; margin-bottom:10px; position:relative;">
+        <div style="font-size:11px; font-weight:700; color:var(--amber); margin-bottom:6px;">SERVIDOR XTREAM 🔒 (fijo, no editable)</div>
+        <label>Servidor</label>
+        <input type="text" class="server-block-select" value="${data.server || ''}" disabled style="opacity:.75;">
+        <div class="row2">
+          <div>
+            <label>Usuario</label>
+            <input type="text" class="server-block-user" value="${data.username || ''}" disabled style="opacity:.75;">
+          </div>
+          <div>
+            <label>Contraseña</label>
+            <input type="text" class="server-block-pass" value="${data.password || ''}" disabled style="opacity:.75;">
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(wrapper.firstElementChild);
   }
 
   function addServerBlock(server, username, password){
