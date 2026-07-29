@@ -298,7 +298,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
                 // Same fix as the TV player: minBufferMs must be >= the
                 // other two values or ExoPlayer throws at construction time.
-                .setBufferDurationsMs(4000, 25000, 2000, 3500)
+                .setBufferDurationsMs(6000, 35000, 2500, 4500)
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
         DefaultHttpDataSource.Factory httpFactory = new DefaultHttpDataSource.Factory()
