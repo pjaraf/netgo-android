@@ -47,6 +47,17 @@
         android:layout_height="wrap_content"
         android:layout_centerInParent="true" />
 
+    <TextView
+        android:id="@+id/player_loading_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:text="Cargando siguiente episodio…"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/player_progress_bar"
         android:layout_width="match_parent"
