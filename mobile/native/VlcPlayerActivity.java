@@ -252,9 +252,14 @@ public class VlcPlayerActivity extends Activity {
         // measured bandwidth than the library default since live TV
         // benefits more from steady quality than from a large safety
         // margin.
+        // Tuned so a channel always STARTS at its best available quality
+        // instead of creeping up to it — only steps down if the network
+        // genuinely can't keep up (to avoid a freeze), and once it does,
+        // waits a long time before trying to step back up, so the person
+        // never sees a visible back-and-forth in quality.
         AdaptiveTrackSelection.Factory adaptiveFactory = new AdaptiveTrackSelection.Factory(
-                15_000,  // minDurationForQualityIncreaseMs
-                12_000,  // maxDurationForQualityDecreaseMs
+                60_000,  // minDurationForQualityIncreaseMs — long, so a recovered connection doesn't visibly bounce back up
+                10_000,  // maxDurationForQualityDecreaseMs — reacts promptly to real trouble, before it becomes a stall
                 25_000,  // minDurationToRetainAfterDiscardMs
                 0.75f);  // bandwidthFraction
         trackSelector = new DefaultTrackSelector(this, adaptiveFactory);
@@ -268,12 +273,14 @@ public class VlcPlayerActivity extends Activity {
                 .setMaxVideoBitrate(Integer.MAX_VALUE)
                 .setForceHighestSupportedBitrate(false)); // still adaptive — steps down only if the network truly can't keep up
 
-        // A generous starting estimate so playback doesn't needlessly
-        // begin at a low-quality variant while the real bandwidth is
-        // still being measured on a fresh connection.
+        // A confidently high starting estimate — a channel begins at its
+        // best quality immediately instead of ramping up to it over the
+        // first several seconds, which is what "buscando la mejor
+        // calidad" looked like from the outside. Only actually drops if
+        // real playback shows the connection can't sustain it.
         androidx.media3.exoplayer.upstream.DefaultBandwidthMeter bandwidthMeter =
                 new androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.Builder(this)
-                        .setInitialBitrateEstimate(8_000_000)
+                        .setInitialBitrateEstimate(20_000_000)
                         .build();
 
         player = new ExoPlayer.Builder(this)
