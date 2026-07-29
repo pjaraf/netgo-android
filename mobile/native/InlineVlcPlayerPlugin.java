@@ -316,8 +316,12 @@ public class InlineVlcPlayerPlugin extends Plugin {
                 .setReadTimeoutMs(10000)
                 .setAllowCrossProtocolRedirects(true)
                 .setUserAgent("NetGo/1.0 (Linux;Android) ExoPlayerLib/1.4.1");
+        // Same idea as the TV player: start confidently at the best
+        // quality instead of ramping up to it, and if it ever has to step
+        // down for a genuinely slow connection, wait a long time before
+        // trying to step back up so the change isn't visibly noticeable.
         AdaptiveTrackSelection.Factory adaptiveFactory = new AdaptiveTrackSelection.Factory(
-                15_000, 12_000, 25_000, 0.75f);
+                60_000, 10_000, 25_000, 0.75f);
         trackSelector = new DefaultTrackSelector(activity, adaptiveFactory);
         // Same as the TV player — no artificial cap, so playback always
         // aims for each channel's real/native quality.
@@ -328,7 +332,7 @@ public class InlineVlcPlayerPlugin extends Plugin {
 
         androidx.media3.exoplayer.upstream.DefaultBandwidthMeter bandwidthMeter =
                 new androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.Builder(activity)
-                        .setInitialBitrateEstimate(8_000_000)
+                        .setInitialBitrateEstimate(20_000_000)
                         .build();
 
         player = new ExoPlayer.Builder(activity)
