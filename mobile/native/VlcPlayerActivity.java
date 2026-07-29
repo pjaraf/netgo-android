@@ -176,9 +176,7 @@ public class VlcPlayerActivity extends Activity {
         timeElapsedView = findViewById(R.id.player_time_elapsed);
         timeTotalView = findViewById(R.id.player_time_total);
         ccToggle = findViewById(R.id.player_cc_toggle);
-        ccToggle.setOnClickListener(v -> toggleSubtitles());
-        TextView expandToggle = findViewById(R.id.player_expand_toggle);
-        expandToggle.setOnClickListener(v -> cycleZoom());
+        ccToggle.setOnClickListener(v -> openAudioSubtitleMenu());
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
                 if (fromUser) timeElapsedView.setText(formatTime(progress));
@@ -296,6 +294,7 @@ public class VlcPlayerActivity extends Activity {
                         cancelStallTimer();
                         if (!isLive) {
                             startProgressTicker();
+                            showCcButtonTemporarily();
                             if (pendingResumePositionMs > 0) {
                                 player.seekTo(pendingResumePositionMs);
                                 pendingResumePositionMs = 0;
@@ -420,6 +419,13 @@ public class VlcPlayerActivity extends Activity {
             }
             return true;
         }
+        if (audioSubMenuOverlay != null && audioSubMenuOverlay.getParent() != null) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                closeAudioSubtitleMenu();
+                return true;
+            }
+            return super.onKeyDown(keyCode, event); // let D-pad navigate the menu's own focusable rows normally
+        }
         if (isLive && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             if (browseState == BROWSE_NONE) { openChannelBrowse(); return true; }
             if (browseState == BROWSE_CHANNELS) { openCategoryBrowse(); return true; }
@@ -452,7 +458,7 @@ public class VlcPlayerActivity extends Activity {
             return true;
         }
         if (keyCode == KeyEvent.KEYCODE_CAPTIONS) {
-            toggleSubtitles();
+            openAudioSubtitleMenu();
             return true;
         }
 
@@ -493,14 +499,124 @@ public class VlcPlayerActivity extends Activity {
     }
 
     private boolean subtitlesEnabled = false;
-    /** Turns subtitles on/off — bound to the remote's CC/Subtitles key. */
-    private void toggleSubtitles() {
+    private FrameLayout audioSubMenuOverlay;
+
+    /** The CC button's menu — lets you pick the real audio language (not
+     *  just Spanish auto-detection) and turn subtitles on/off, all
+     *  D-pad navigable like the channel/category browse panels. */
+    private void openAudioSubtitleMenu() {
+        if (player == null || trackSelector == null) return;
+        if (audioSubMenuOverlay != null && audioSubMenuOverlay.getParent() != null) {
+            ((ViewGroup) audioSubMenuOverlay.getParent()).removeView(audioSubMenuOverlay);
+        }
+
+        FrameLayout root = findViewById(android.R.id.content);
+        audioSubMenuOverlay = new FrameLayout(this);
+        audioSubMenuOverlay.setBackgroundColor(0x99000000);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(16);
+        card.setPadding(pad, pad, pad, pad);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(0xFF142838);
+        bg.setCornerRadius(dp(14));
+        bg.setStroke(dp(1), 0x33FFFFFF);
+        card.setBackground(bg);
+
+        TextView audioLabel = new TextView(this);
+        audioLabel.setText("Idioma de audio");
+        audioLabel.setTextColor(0xFF9FB6C4);
+        audioLabel.setTextSize(12);
+        audioLabel.setPadding(0, 0, 0, dp(6));
+        card.addView(audioLabel);
+
+        Tracks tracks = player.getCurrentTracks();
+        int audioIdx = 0;
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_AUDIO) continue;
+            for (int i = 0; i < group.length; i++) {
+                androidx.media3.common.Format fmt = group.getTrackFormat(i);
+                String label = fmt.label != null ? fmt.label : (fmt.language != null ? fmt.language : ("Audio " + (audioIdx + 1)));
+                boolean selected = group.isTrackSelected(i);
+                final Tracks.Group fGroup = group;
+                final int fIndex = i;
+                TextView row = buildMenuRow("🔊 " + label, selected);
+                row.setOnClickListener(v -> {
+                    trackSelector.setParameters(trackSelector.buildUponParameters()
+                            .setOverrideForType(new TrackSelectionOverride(fGroup.getMediaTrackGroup(), fIndex)));
+                    closeAudioSubtitleMenu();
+                });
+                card.addView(row);
+                audioIdx++;
+            }
+        }
+        if (audioIdx == 0) {
+            TextView none = buildMenuRow("Solo hay un idioma disponible", false);
+            none.setEnabled(false);
+            card.addView(none);
+        }
+
+        TextView subLabel = new TextView(this);
+        subLabel.setText("Subtítulos");
+        subLabel.setTextColor(0xFF9FB6C4);
+        subLabel.setTextSize(12);
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        subLp.topMargin = dp(14);
+        subLp.bottomMargin = dp(6);
+        card.addView(subLabel, subLp);
+
+        TextView subRow = buildMenuRow(subtitlesEnabled ? "✓ Activados" : "Desactivados", false);
+        subRow.setOnClickListener(v -> {
+            toggleSubtitlesOnly();
+            closeAudioSubtitleMenu();
+        });
+        card.addView(subRow);
+
+        FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(dp(280), ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardLp.gravity = Gravity.CENTER;
+        audioSubMenuOverlay.addView(card, cardLp);
+        audioSubMenuOverlay.setOnClickListener(v -> closeAudioSubtitleMenu());
+
+        root.addView(audioSubMenuOverlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        View firstRow = card.getChildCount() > 1 ? card.getChildAt(1) : card.getChildAt(0);
+        if (firstRow != null) firstRow.requestFocus();
+    }
+
+    private TextView buildMenuRow(String text, boolean selected) {
+        TextView row = new TextView(this);
+        row.setText(text);
+        row.setTextSize(14);
+        row.setPadding(dp(12), dp(11), dp(12), dp(11));
+        row.setFocusable(true);
+        row.setFocusableInTouchMode(true);
+        row.setMaxLines(1);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(selected ? 0xFFFF8A3D : 0x00000000);
+        bg.setCornerRadius(dp(8));
+        row.setBackground(bg);
+        row.setTextColor(selected ? 0xFF1A0E00 : Color.WHITE);
+        row.setTypeface(row.getTypeface(), selected ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        return row;
+    }
+
+    private void closeAudioSubtitleMenu() {
+        if (audioSubMenuOverlay != null && audioSubMenuOverlay.getParent() != null) {
+            ((ViewGroup) audioSubMenuOverlay.getParent()).removeView(audioSubMenuOverlay);
+        }
+    }
+
+    /** Turns subtitles on/off — the actual toggle logic, called from the
+     *  CC menu's subtitle row. */
+    private void toggleSubtitlesOnly() {
         if (player == null || trackSelector == null) return;
         if (subtitlesEnabled) {
             trackSelector.setParameters(trackSelector.buildUponParameters()
                     .setIgnoredTextSelectionFlags(~0));
             subtitlesEnabled = false;
-            android.widget.Toast.makeText(this, "Subtítulos desactivados", android.widget.Toast.LENGTH_SHORT).show();
         } else {
             boolean found = false;
             Tracks tracks = player.getCurrentTracks();
@@ -513,10 +629,9 @@ public class VlcPlayerActivity extends Activity {
                     break;
                 }
             }
-            if (found) {
-                android.widget.Toast.makeText(this, "Subtítulos activados", android.widget.Toast.LENGTH_SHORT).show();
-            } else {
+            if (!found) {
                 android.widget.Toast.makeText(this, "Esta señal no tiene subtítulos disponibles", android.widget.Toast.LENGTH_SHORT).show();
+                return;
             }
             subtitlesEnabled = true;
         }
@@ -537,6 +652,7 @@ public class VlcPlayerActivity extends Activity {
         if (timeElapsedView != null) timeElapsedView.setText(formatTime((int) newTime));
         if (timeTotalView != null && length > 0 && length != C.TIME_UNSET) timeTotalView.setText(formatTime((int) length));
         showProgressBarTemporarily();
+        showCcButtonTemporarily();
     }
 
     /** Shows the progress bar for a few seconds (used when seeking), then
@@ -548,6 +664,20 @@ public class VlcPlayerActivity extends Activity {
         if (hideProgressBarRunnable != null) handler.removeCallbacks(hideProgressBarRunnable);
         hideProgressBarRunnable = () -> progressBarContainer.setVisibility(View.GONE);
         handler.postDelayed(hideProgressBarRunnable, 2500);
+    }
+
+    /** CC only makes sense for movies/series (real audio-language and
+     *  subtitle tracks) — never shown for live TV, and hidden the rest of
+     *  the time too so it's not sitting on screen permanently. Briefly
+     *  reappears whenever the person touches the remote, then fades away
+     *  again on its own. */
+    private Runnable hideCcButtonRunnable;
+    private void showCcButtonTemporarily() {
+        if (ccToggle == null || isLive) return;
+        ccToggle.setVisibility(View.VISIBLE);
+        if (hideCcButtonRunnable != null) handler.removeCallbacks(hideCcButtonRunnable);
+        hideCcButtonRunnable = () -> ccToggle.setVisibility(View.GONE);
+        handler.postDelayed(hideCcButtonRunnable, 3500);
     }
 
     private void goToChannel(int index) {
@@ -660,6 +790,12 @@ public class VlcPlayerActivity extends Activity {
             progressBarContainer.setVisibility(View.GONE);
             seekBar.setProgress(0);
         }
+        if (ccToggle != null) {
+            ccToggle.setVisibility(View.GONE);
+            if (hideCcButtonRunnable != null) handler.removeCallbacks(hideCcButtonRunnable);
+        }
+        subtitlesEnabled = false;
+        closeAudioSubtitleMenu();
         zoomIndex = 0; // matches the auto-applied RESIZE_MODE_FIT below
         if (videoLayout != null) videoLayout.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT); // show the whole image, never cropping — no forced zoom by default
         String playUrl = (usingFallbackFormat && currentIndex < tsUrls.size() && !tsUrls.get(currentIndex).isEmpty())
@@ -1545,6 +1681,7 @@ public class VlcPlayerActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
+        if (hideCcButtonRunnable != null) handler.removeCallbacks(hideCcButtonRunnable);
         cancelStallTimer();
         cancelStatusCheck();
         stopProgressTicker();
