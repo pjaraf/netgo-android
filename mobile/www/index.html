@@ -58,24 +58,6 @@
   .display{ font-family:'Space Grotesk', sans-serif; }
 
   /* ---------- Top bar ---------- */
-  /* TV: expanding the already-playing preview in place — hides
-     everything else so only the (now fullscreen-sized) native video and
-     its banner show, without touching the player itself. */
-  body.vivo-preview-expanded header,
-  body.vivo-preview-expanded .search-bar,
-  body.vivo-preview-expanded .vivo-tabs,
-  body.vivo-preview-expanded .vivo-body,
-  body.vivo-preview-expanded #rowsContainer,
-  body.vivo-preview-expanded .tv-sidebar-brand,
-  body.vivo-preview-expanded .cat{
-    display:none !important;
-  }
-  .tv-expand-banner{
-    position:fixed !important; left:40px; right:40px; bottom:40px; z-index:20;
-    display:none;
-  }
-  body.vivo-preview-expanded .tv-expand-banner.show{ display:flex; }
-  .tv-expand-hint{ color:var(--text-dim); font-size:11px; margin-top:6px; white-space:nowrap; }
   header{
     display:flex; align-items:center; justify-content:space-between;
     padding:18px 22px;
@@ -1368,25 +1350,6 @@
 </div>
 
 
-<!-- TV: shown only while the preview is expanded to fullscreen. Same
-     banner concept as the phone's (logo, number, current programme with
-     progress, what's next), plus a hint on how to switch channels /
-     go back, since there's no fullscreen native player's own UI here. -->
-<div id="tvExpandBanner" class="hp-osd-banner tv-expand-banner" style="display:none">
-  <div class="hp-osd-logo" id="tvExpandLogo"><span id="tvExpandLogoFallback">?</span></div>
-  <div class="hp-osd-info">
-    <div class="hp-osd-channel-name" id="tvExpandChannelName">—</div>
-    <div class="hp-osd-program" id="tvExpandProgram">Cargando programación…</div>
-    <div class="hp-osd-progress-track"><div class="hp-osd-progress-fill" id="tvExpandProgressFill"></div></div>
-    <div class="hp-osd-times" id="tvExpandTimes"></div>
-    <div class="hp-osd-next" id="tvExpandNext"></div>
-  </div>
-  <div class="hp-osd-right">
-    <div class="hp-osd-num" id="tvExpandNum">—</div>
-    <div class="tv-expand-hint">▲▼ cambiar canal · Atrás para volver</div>
-  </div>
-</div>
-
 <div id="vivoView" class="vivo-view" style="display:none">
   <div class="vivo-top-grid">
     <div class="vivo-preview" id="vivoPreview">
@@ -2258,72 +2221,6 @@
     if(el) el.textContent = '';
   }
   let vivoPreviewPlaying = false;
-  let vivoPreviewExpanded = false;
-  let tvExpandBannerHideTimer = null;
-
-  function showTvExpandBanner(item){
-    updateTvExpandBanner(item);
-    const banner = document.getElementById('tvExpandBanner');
-    banner.classList.add('show');
-    if(tvExpandBannerHideTimer) clearTimeout(tvExpandBannerHideTimer);
-    tvExpandBannerHideTimer = setTimeout(() => banner.classList.remove('show'), 4500);
-  }
-
-  /** Grows the SAME already-playing preview to fill the whole screen —
-   *  no new player, no reload, just resizing the existing native view
-   *  (same trick used to keep it aligned with the preview box normally).
-   *  Shows the same channel banner (logo/programme/progress) the phone
-   *  gets, and Up/Down switches channels without ever leaving this view. */
-  function expandVivoPreviewFullscreen(){
-    if(!vivoPreviewPlaying || !inlineAvailable() || vivoPreviewExpanded) return;
-    vivoPreviewExpanded = true;
-    document.body.classList.add('vivo-preview-expanded');
-    window.Capacitor.Plugins.InlineVlcPlayer.updateRect({
-      x:0, y:0, width:window.innerWidth, height:window.innerHeight
-    }).catch(()=>{});
-    if(vivoPreviewSelected) showTvExpandBanner(vivoPreviewSelected);
-  }
-
-  function shrinkVivoPreview(){
-    if(!vivoPreviewExpanded) return;
-    vivoPreviewExpanded = false;
-    document.body.classList.remove('vivo-preview-expanded');
-    document.getElementById('tvExpandBanner').classList.remove('show');
-    repositionVivoPreview();
-  }
-
-  /** Up/Down while expanded moves to the next/previous channel in the
-   *  current category — this DOES need to load the new channel (there's
-   *  no way around a real connection change when the channel itself
-   *  changes), but the expand/collapse transition itself never does. */
-  async function switchExpandedVivoChannel(delta){
-    const d = activeData().vivo;
-    if(!d || !d.rows || !d.rows[vivoActiveCatIndex]) return;
-    const items = d.rows[vivoActiveCatIndex].items;
-    if(!items || items.length < 2 || !vivoPreviewSelected) return;
-    const curIdx = items.findIndex(c => c.url === vivoPreviewSelected.url);
-    const nextIdx = ((curIdx < 0 ? 0 : curIdx) + delta + items.length) % items.length;
-    await playVivoChannelData(items[nextIdx]);
-    if(vivoPreviewExpanded){
-      // playVivoChannelData re-mounts at the small preview's rect — pull
-      // it back to fullscreen since we're still expanded.
-      window.Capacitor.Plugins.InlineVlcPlayer.updateRect({
-        x:0, y:0, width:window.innerWidth, height:window.innerHeight
-      }).catch(()=>{});
-      showTvExpandBanner(vivoPreviewSelected);
-    }
-  }
-
-  document.addEventListener('keydown', (e) => {
-    if(!vivoPreviewExpanded) return;
-    if(e.key === 'ArrowUp' || e.key === 'ChannelUp'){ switchExpandedVivoChannel(-1); e.preventDefault(); }
-    else if(e.key === 'ArrowDown' || e.key === 'ChannelDown'){ switchExpandedVivoChannel(1); e.preventDefault(); }
-    else if(e.key === 'Enter' || e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
-      // Any other remote press just re-shows the banner, like a real
-      // channel banner does when you touch the remote.
-      if(vivoPreviewSelected) showTvExpandBanner(vivoPreviewSelected);
-    }
-  });
 
   function getVivoPreviewRect(){
     const r = document.getElementById('vivoPreviewArt').getBoundingClientRect();
@@ -2331,7 +2228,7 @@
   }
 
   function repositionVivoPreview(){
-    if(!vivoPreviewPlaying || !inlineAvailable() || vivoPreviewExpanded) return;
+    if(!vivoPreviewPlaying || !inlineAvailable()) return;
     window.Capacitor.Plugins.InlineVlcPlayer.updateRect(getVivoPreviewRect()).catch(()=>{});
   }
   window.addEventListener('resize', () => { if(vivoPreviewPlaying) repositionVivoPreview(); });
@@ -2437,11 +2334,10 @@
       if(now - lastCatClick < 150) return; // ignore rapid double-taps/clicks
       lastCatClick = now;
 
-      // On TV, pressing "TV" while it's already the active tab expands
-      // the preview that's already playing to fill the screen — same
-      // video, same connection, no reload for the channel already on.
+      // On TV, "TV" is a shortcut to fullscreen whatever's already playing
+      // in the main-screen preview — not a view to switch into.
       if(isTV() && cat.dataset.cat === 'vivo' && vivoPreviewPlaying){
-        expandVivoPreviewFullscreen();
+        launchTVLivePlayback();
         return;
       }
 
@@ -2568,13 +2464,13 @@
   // Same OSD banner concept as the Android TV app — channel logo, number,
   // clock, current programme with a progress bar, and what's next.
   let osdEpgFetchToken = 0;
-  async function updateOsdBanner(item, ids){
-    document.getElementById(ids.name).textContent = item.title || '—';
-    document.getElementById(ids.num).textContent = item.num || '•';
-    if(ids.clock) document.getElementById(ids.clock).textContent = new Date().toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
+  async function updatePhoneOsdBanner(item){
+    document.getElementById('hpOsdChannelName').textContent = item.title || '—';
+    document.getElementById('hpOsdNum').textContent = item.num || '•';
+    document.getElementById('hpOsdClock').textContent = new Date().toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
 
-    const logoBox = document.getElementById(ids.logo);
-    const fallback = document.getElementById(ids.logoFallback);
+    const logoBox = document.getElementById('hpOsdLogo');
+    const fallback = document.getElementById('hpOsdLogoFallback');
     fallback.textContent = (item.title || '?').charAt(0).toUpperCase();
     logoBox.querySelectorAll('img').forEach(el => el.remove());
     fallback.style.display = 'block';
@@ -2586,13 +2482,13 @@
       logoBox.appendChild(img);
     }
 
-    document.getElementById(ids.program).textContent = 'Cargando programación…';
-    document.getElementById(ids.progressFill).style.width = '0%';
-    document.getElementById(ids.times).textContent = '';
-    document.getElementById(ids.next).textContent = '';
+    document.getElementById('hpOsdProgram').textContent = 'Cargando programación…';
+    document.getElementById('hpOsdProgressFill').style.width = '0%';
+    document.getElementById('hpOsdTimes').textContent = '';
+    document.getElementById('hpOsdNext').textContent = '';
 
     if(!item.epgUrl){
-      document.getElementById(ids.program).textContent = 'Sin información de programación';
+      document.getElementById('hpOsdProgram').textContent = 'Sin información de programación';
       return;
     }
     const token = ++osdEpgFetchToken;
@@ -2602,7 +2498,7 @@
       const listings = data.epg_listings || [];
       if(token !== osdEpgFetchToken) return; // a newer channel change already superseded this
       if(!listings.length){
-        document.getElementById(ids.program).textContent = 'Sin información de programación';
+        document.getElementById('hpOsdProgram').textContent = 'Sin información de programación';
         return;
       }
       const decode = (b64) => { try{ return decodeURIComponent(escape(atob(b64))).trim(); }catch(e){ return ''; } };
@@ -2610,30 +2506,25 @@
       const next = listings[1];
       const fmt = (ts) => ts ? new Date(ts * 1000).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' }) : '';
       const currentTitle = decode(current.title || '');
-      document.getElementById(ids.program).textContent = currentTitle || item.title || '';
+      document.getElementById('hpOsdProgram').textContent = currentTitle || item.title || '';
       const start = parseInt(current.start_timestamp || 0, 10);
       const stop = parseInt(current.stop_timestamp || 0, 10);
       if(start && stop > start){
         const pct = Math.max(0, Math.min(100, (Date.now()/1000 - start) * 100 / (stop - start)));
-        document.getElementById(ids.progressFill).style.width = pct + '%';
-        document.getElementById(ids.times).textContent = `${fmt(start)} hrs. – ${fmt(stop)} hrs.`;
+        document.getElementById('hpOsdProgressFill').style.width = pct + '%';
+        document.getElementById('hpOsdTimes').textContent = `${fmt(start)} hrs. – ${fmt(stop)} hrs.`;
       }
       if(next){
         const nextTitle = decode(next.title || '');
         if(nextTitle){
-          document.getElementById(ids.next).textContent =
+          document.getElementById('hpOsdNext').textContent =
             `Siguiente: ${nextTitle} | ${fmt(next.start_timestamp)} hrs. / ${fmt(next.stop_timestamp)} hrs.`;
         }
       }
     }catch(err){
-      if(token === osdEpgFetchToken) document.getElementById(ids.program).textContent = 'Sin información de programación';
+      if(token === osdEpgFetchToken) document.getElementById('hpOsdProgram').textContent = 'Sin información de programación';
     }
   }
-
-  const PHONE_OSD_IDS = { name:'hpOsdChannelName', num:'hpOsdNum', clock:'hpOsdClock', logo:'hpOsdLogo', logoFallback:'hpOsdLogoFallback', program:'hpOsdProgram', progressFill:'hpOsdProgressFill', times:'hpOsdTimes', next:'hpOsdNext' };
-  const TV_EXPAND_OSD_IDS = { name:'tvExpandChannelName', num:'tvExpandNum', clock:null, logo:'tvExpandLogo', logoFallback:'tvExpandLogoFallback', program:'tvExpandProgram', progressFill:'tvExpandProgressFill', times:'tvExpandTimes', next:'tvExpandNext' };
-  function updatePhoneOsdBanner(item){ return updateOsdBanner(item, PHONE_OSD_IDS); }
-  function updateTvExpandBanner(item){ return updateOsdBanner(item, TV_EXPAND_OSD_IDS); }
 
   async function closeInlinePlayer(){
     if(inlineAvailable()){
@@ -3760,10 +3651,6 @@
   // if we're anywhere other than the TV home screen, go back there instead
   // of exiting the app. Returns true if it handled the press.
   window.handleTVBack = function(){
-    if(vivoPreviewExpanded){
-      shrinkVivoPreview();
-      return true;
-    }
     // Any open modal (Settings included) gets closed first — this was
     // missing entirely, which meant pressing Back while Settings was open
     // did nothing on this side, and Android fell through to its own
