@@ -472,17 +472,16 @@ public class VlcPlayerActivity extends Activity {
             return true; // swallow other keys while browsing so they don't hit the player
         }
 
-        // Movies/series: left/right seeks 10s, OK toggles play/pause. For
-        // a series (more than one item), Down opens the full episode list
-        // and Up opens the audio/subtitles menu — neither one silently
-        // jumps to another episode by itself anymore. For a lone movie
-        // (nothing to list), Up still cycles the manual zoom instead.
+        // Movies/series: left/right seeks 10s, OK toggles play/pause, Up
+        // opens the audio/subtitles menu (CC). Down opens the full
+        // episode list, but only when there's actually more than one item
+        // to list (a lone movie has nothing to pick between).
         if (!isLive) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { seekBy(-10000); return true; }
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { seekBy(10000); return true; }
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && urls.size() > 1) { openEpisodeBrowse(); return true; }
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                if (urls.size() > 1) openAudioSubtitleMenu(); else cycleZoom();
+                openAudioSubtitleMenu();
                 return true;
             }
         }
