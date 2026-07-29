@@ -1075,7 +1075,10 @@ public class VlcPlayerActivity extends Activity {
         List<String> imgs = catImgUrls.get(currentCatIndex);
         for (int i = 0; i < names.size(); i++) {
             String img = i < imgs.size() ? imgs.get(i) : "";
-            channelListCol.addView(buildChannelListRow(names.get(i), img, i == browseChannelIndex));
+            LinearLayout row = buildChannelListRow(names.get(i), img, i == browseChannelIndex);
+            final int idx = i;
+            row.setOnClickListener(v -> { browseChannelIndex = idx; confirmBrowseSelection(); });
+            channelListCol.addView(row);
         }
         scrollToSelected(channelScroll, channelListCol, browseChannelIndex);
     }
@@ -1083,7 +1086,10 @@ public class VlcPlayerActivity extends Activity {
     private void populateCategoryList() {
         categoryListCol.removeAllViews();
         for (int i = 0; i < catTitles.size(); i++) {
-            categoryListCol.addView(buildListRow(catTitles.get(i), i == browseCatIndex));
+            TextView row = buildListRow(catTitles.get(i), i == browseCatIndex);
+            final int idx = i;
+            row.setOnClickListener(v -> { browseCatIndex = idx; confirmBrowseSelection(); });
+            categoryListCol.addView(row);
         }
         scrollToSelected(categoryScroll, categoryListCol, browseCatIndex);
     }
@@ -1300,6 +1306,28 @@ public class VlcPlayerActivity extends Activity {
     private void buildTouchControls() {
         FrameLayout root = findViewById(android.R.id.content);
 
+        // Live TV doesn't get the movie-style play/pause/seek bar at all —
+        // it's channel surfing (swipe/tap/double-tap), not something you
+        // pause and scrub through. Just the fullscreen button.
+        if (isLive) {
+            touchFullscreenBtn = new TextView(this);
+            touchFullscreenBtn.setText("⤢");
+            touchFullscreenBtn.setTextColor(Color.WHITE);
+            touchFullscreenBtn.setTextSize(20);
+            touchFullscreenBtn.setGravity(Gravity.CENTER);
+            GradientDrawable fsBg = new GradientDrawable();
+            fsBg.setShape(GradientDrawable.OVAL);
+            fsBg.setColor(0x66000000);
+            touchFullscreenBtn.setBackground(fsBg);
+            touchFullscreenBtn.setOnClickListener(v -> toggleTouchFullscreen());
+            FrameLayout.LayoutParams fsLp = new FrameLayout.LayoutParams(dp(44), dp(44));
+            fsLp.gravity = Gravity.TOP | Gravity.END;
+            fsLp.topMargin = dp(24);
+            fsLp.rightMargin = dp(24);
+            root.addView(touchFullscreenBtn, fsLp);
+            return;
+        }
+
         touchControlsBar = new LinearLayout(this);
         touchControlsBar.setOrientation(LinearLayout.HORIZONTAL);
         touchControlsBar.setGravity(Gravity.CENTER);
@@ -1310,11 +1338,9 @@ public class VlcPlayerActivity extends Activity {
         int barPad = dp(20);
         touchControlsBar.setPadding(barPad, dp(40), barPad, barPad);
 
-        if (!isLive) {
-            TextView seekBackBtn = touchIconButton("⏪ 10");
-            seekBackBtn.setOnClickListener(v -> { seekBy(-10000); showTouchControls(); });
-            touchControlsBar.addView(seekBackBtn, touchSideBtnParams());
-        }
+        TextView seekBackBtn = touchIconButton("⏪ 10");
+        seekBackBtn.setOnClickListener(v -> { seekBy(-10000); showTouchControls(); });
+        touchControlsBar.addView(seekBackBtn, touchSideBtnParams());
 
         touchPlayPauseBtn = new ImageButton(this);
         touchPlayPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
@@ -1326,38 +1352,14 @@ public class VlcPlayerActivity extends Activity {
         mainLp.setMargins(dp(16), 0, dp(16), 0);
         touchControlsBar.addView(touchPlayPauseBtn, mainLp);
 
-        if (!isLive) {
-            TextView seekFwdBtn = touchIconButton("10 ⏩");
-            seekFwdBtn.setOnClickListener(v -> { seekBy(10000); showTouchControls(); });
-            touchControlsBar.addView(seekFwdBtn, touchSideBtnParams());
-        }
+        TextView seekFwdBtn = touchIconButton("10 ⏩");
+        seekFwdBtn.setOnClickListener(v -> { seekBy(10000); showTouchControls(); });
+        touchControlsBar.addView(seekFwdBtn, touchSideBtnParams());
 
         FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         barLp.gravity = Gravity.BOTTOM;
         root.addView(touchControlsBar, barLp);
-
-        // Live TV specifically gets a fullscreen (rotate to landscape)
-        // button — it plays "normal" (portrait, like everything else)
-        // until this is tapped, instead of forcing landscape immediately.
-        if (isLive) {
-            touchFullscreenBtn = new TextView(this);
-            touchFullscreenBtn.setText("⤢");
-            touchFullscreenBtn.setTextColor(Color.WHITE);
-            touchFullscreenBtn.setTextSize(20);
-            touchFullscreenBtn.setGravity(Gravity.CENTER);
-            GradientDrawable fsBg = new GradientDrawable();
-            fsBg.setShape(GradientDrawable.OVAL);
-            fsBg.setColor(0x99000000);
-            touchFullscreenBtn.setBackground(fsBg);
-            touchFullscreenBtn.setVisibility(View.GONE);
-            touchFullscreenBtn.setOnClickListener(v -> { toggleTouchFullscreen(); showTouchControls(); });
-            FrameLayout.LayoutParams fsLp = new FrameLayout.LayoutParams(dp(44), dp(44));
-            fsLp.gravity = Gravity.TOP | Gravity.END;
-            fsLp.topMargin = dp(24);
-            fsLp.rightMargin = dp(24);
-            root.addView(touchFullscreenBtn, fsLp);
-        }
     }
 
     private TextView touchIconButton(String text) {
@@ -1395,7 +1397,6 @@ public class VlcPlayerActivity extends Activity {
         if (touchControlsBar == null) return;
         touchControlsVisible = true;
         touchControlsBar.setVisibility(View.VISIBLE);
-        if (touchFullscreenBtn != null) touchFullscreenBtn.setVisibility(View.VISIBLE);
         if (touchPlayPauseBtn != null && player != null) {
             touchPlayPauseBtn.setImageResource(player.isPlaying() ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
         }
@@ -1407,7 +1408,6 @@ public class VlcPlayerActivity extends Activity {
     private void hideTouchControls() {
         touchControlsVisible = false;
         if (touchControlsBar != null) touchControlsBar.setVisibility(View.GONE);
-        if (touchFullscreenBtn != null) touchFullscreenBtn.setVisibility(View.GONE);
     }
 
     /** Swipe left/right changes channels on live TV — passing a finger
@@ -1417,13 +1417,28 @@ public class VlcPlayerActivity extends Activity {
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onSingleTapConfirmed(MotionEvent e) {
-                if (touchControlsVisible) hideTouchControls(); else showTouchControls();
+                if (isLive) {
+                    if (browseState == BROWSE_NONE) openChannelBrowse();
+                    // If a panel is already open, a tap on one of its own
+                    // rows selects it (handled by that row's own click
+                    // listener) — this outer handler deliberately does
+                    // nothing else here, so the two don't fight over the
+                    // same tap.
+                } else {
+                    if (touchControlsVisible) hideTouchControls(); else showTouchControls();
+                }
+                return true;
+            }
+
+            @Override
+            public boolean onDoubleTap(MotionEvent e) {
+                if (isLive) openCategoryBrowse();
                 return true;
             }
 
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-                if (e1 == null || !isLive || urls.size() <= 1) return false;
+                if (e1 == null || !isLive || urls.size() <= 1 || browseState != BROWSE_NONE) return false;
                 float dx = e2.getX() - e1.getX();
                 float dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) < dp(60) || Math.abs(dx) < Math.abs(dy)) return false;
