@@ -3764,6 +3764,22 @@
         showLockout(data.blocked ? 'blocked' : 'paused');
         return;
       }
+      // Auto-disconnect when the plan's real expiry date has passed —
+      // checked directly here so this works even if no admin has the
+      // panel open at the time. Blocking the client this way disconnects
+      // both servers together, since they're both part of the same
+      // client record.
+      try{
+        const expRes = await fetch(`${FIREBASE_BASE}/clients/${code}/expiry.json`, { cache:'no-store' });
+        const expiry = await expRes.json();
+        if(expiry){
+          const today = new Date().toISOString().slice(0, 10);
+          if(expiry < today){
+            showLockout('expired');
+            return;
+          }
+        }
+      }catch(e){ /* if this specific check fails, don't lock the person out over it */ }
       if(data && data.message && data.message.text && data.message.ts){
         const lastShownTs = Number(localStorage.getItem('netgo_last_message_ts') || 0);
         if(data.message.ts > lastShownTs){
@@ -3794,9 +3810,11 @@
   };
   function showLockout(kind){
     if(statusCheckTimer){ clearInterval(statusCheckTimer); statusCheckTimer = null; }
-    document.getElementById('lockoutTitle').textContent = kind === 'blocked' ? 'Cuenta bloqueada' : 'Cuenta pausada';
-    document.getElementById('lockoutMsg').textContent = kind === 'blocked'
-      ? 'El administrador bloqueó tu acceso. Contáctalo para más información.'
+    document.getElementById('lockoutTitle').textContent =
+      kind === 'expired' ? 'Plan vencido' : (kind === 'blocked' ? 'Cuenta bloqueada' : 'Cuenta pausada');
+    document.getElementById('lockoutMsg').textContent =
+      kind === 'expired' ? 'Tu plan venció. Contacta a tu proveedor para renovarlo.'
+      : kind === 'blocked' ? 'El administrador bloqueó tu acceso. Contáctalo para más información.'
       : 'El administrador pausó tu acceso. Contáctalo para reactivarlo.';
     document.getElementById('lockoutScreen').style.display = 'flex';
   }
