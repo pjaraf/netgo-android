@@ -248,14 +248,24 @@ public class InlineVlcPlayerPlugin extends Plugin {
         activity.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         container = new FrameLayout(activity);
+        // TextureView (needed when web-based buttons have to render on
+        // top of the video — see the note further down) is measurably
+        // heavier than SurfaceView, since it goes through the normal View
+        // compositing pipeline instead of its own hardware layer. The TV
+        // home screen's preview never shows any controls on top of it
+        // (mounted with showControls:false), so it has no reason to pay
+        // that cost — this picks the lighter layout whenever nothing
+        // needs to overlay the video.
+        String layoutName = controlsEnabled ? "inline_player_view" : "inline_player_view_surface";
+        int layoutId = activity.getResources().getIdentifier(layoutName, "layout", activity.getPackageName());
+        if (layoutId == 0) layoutId = activity.getResources().getIdentifier("inline_player_view", "layout", activity.getPackageName());
         // Inflated from XML specifically because that's the only way to
         // configure PlayerView's surface type — the default (SurfaceView)
         // renders as its own compositor layer that sits ABOVE the
         // WebView's own content regardless of normal Android z-ordering,
         // which was hiding the web-based title/cast/close buttons behind
-        // the video. TextureView is a normal View that composites
-        // properly alongside everything else.
-        int layoutId = activity.getResources().getIdentifier("inline_player_view", "layout", activity.getPackageName());
+        // the video when controls are shown. TextureView is a normal View
+        // that composites properly alongside everything else in that case.
         videoLayout = (PlayerView) android.view.LayoutInflater.from(activity).inflate(layoutId, container, false);
         videoLayout.setUseController(false);
         container.addView(videoLayout, new FrameLayout.LayoutParams(
