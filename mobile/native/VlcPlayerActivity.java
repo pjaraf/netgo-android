@@ -860,21 +860,31 @@ public class VlcPlayerActivity extends Activity {
      *  MPEG-TS (.ts) format instead — some servers' HLS output is
      *  unreliable even though the same channel works fine as a direct
      *  stream. */
+    private Runnable liveRetryRunnable;
+
     private void scheduleLiveRetry() {
         cancelStallTimer();
+        cancelLiveRetry();
         liveRetryCount++;
         if (!usingFallbackFormat && liveRetryCount >= 2
                 && currentIndex < tsUrls.size() && !tsUrls.get(currentIndex).isEmpty()) {
             usingFallbackFormat = true;
         }
         long delay = Math.min(3000L + (liveRetryCount * 2000L), 15000L);
-        handler.postDelayed(this::loadCurrent, delay);
+        liveRetryRunnable = this::loadCurrent;
+        handler.postDelayed(liveRetryRunnable, delay);
+    }
+
+    private void cancelLiveRetry() {
+        if (liveRetryRunnable != null) handler.removeCallbacks(liveRetryRunnable);
+        liveRetryRunnable = null;
     }
 
     private boolean showEpisodeLoadingTextNext = false;
 
     private void loadCurrent() {
         cancelStallTimer();
+        cancelLiveRetry();
         if (showEpisodeLoadingTextNext && loadingEpisodeText != null) {
             loadingEpisodeText.setVisibility(View.VISIBLE);
             spinner.setVisibility(View.GONE);
@@ -1829,6 +1839,7 @@ public class VlcPlayerActivity extends Activity {
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
         if (hideCcButtonRunnable != null) handler.removeCallbacks(hideCcButtonRunnable);
         cancelStallTimer();
+        cancelLiveRetry();
         cancelStatusCheck();
         stopProgressTicker();
         if (videoLayout != null) videoLayout.setPlayer(null);
