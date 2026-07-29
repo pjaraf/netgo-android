@@ -58,6 +58,24 @@
   .display{ font-family:'Space Grotesk', sans-serif; }
 
   /* ---------- Top bar ---------- */
+  /* TV: expanding the already-playing preview in place — hides
+     everything else so only the (now fullscreen-sized) native video
+     shows, without touching the player itself. */
+  body.vivo-preview-expanded header,
+  body.vivo-preview-expanded .search-bar,
+  body.vivo-preview-expanded .vivo-tabs,
+  body.vivo-preview-expanded .vivo-body,
+  body.vivo-preview-expanded #rowsContainer,
+  body.vivo-preview-expanded .tv-sidebar-brand,
+  body.vivo-preview-expanded .cat{
+    display:none !important;
+  }
+  .vivo-preview-hint{ display:none; }
+  body.vivo-preview-expanded .vivo-preview-hint{
+    display:block; position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    z-index:20; background:rgba(6,14,20,.75); color:#fff; font-size:12.5px;
+    padding:8px 16px; border-radius:20px; pointer-events:none;
+  }
   header{
     display:flex; align-items:center; justify-content:space-between;
     padding:18px 22px;
@@ -1337,7 +1355,7 @@
   </div>
   <div class="cat" tabindex="0" data-cat="vivo"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Z"/><path d="M2 8h20"/><path d="M8 4l4 4 4-4"/><circle cx="12" cy="13.5" r="2.5"/></svg></div><span>TV</span></div>
   <div class="cat" tabindex="0" data-cat="series"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="14" height="10" rx="2"/><path d="M7 20h6"/><path d="M10 14v6"/><rect x="8.5" y="8.5" width="14" height="10" rx="2" fill="var(--bg-raise, #0B1B26)"/></svg></div><span>Series</span></div>
-  <div class="cat active" tabindex="0" data-cat="peliculas"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 8 2.5-4h3L6 8Z"/><path d="m9.5 8 2.5-4h3l-2.5 4Z"/><path d="m16 8 2.5-4H21l-2.5 4Z"/><rect x="3" y="8" width="18" height="12" rx="2"/></svg></div><span>Películas</span></div>
+  <div class="cat" tabindex="0" data-cat="peliculas"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 8 2.5-4h3L6 8Z"/><path d="m9.5 8 2.5-4h3l-2.5 4Z"/><path d="m16 8 2.5-4H21l-2.5 4Z"/><rect x="3" y="8" width="18" height="12" rx="2"/></svg></div><span>Películas</span></div>
   <div class="cat" tabindex="0" data-cat="anime"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><path d="m5.6 5.6 2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="4"/></svg></div><span>Anime</span></div>
   <div class="cat" tabindex="0" data-cat="kids"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 8l4.7.7-3.4 3.3.8 4.7L12 14.5 7.9 16.7l.8-4.7L5.3 8.7 10 8l2-4.5Z"/><circle cx="9" cy="12" r="0.5" fill="currentColor"/><circle cx="15" cy="12" r="0.5" fill="currentColor"/><path d="M10 15c.6.5 1.4.5 2 0"/></svg></div><span>Kids</span></div>
   <div class="cat" tabindex="0" data-cat="continuar"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5-6-3.5Z" fill="currentColor" stroke="none"/></svg></div><span>Seguir</span></div>
@@ -1350,6 +1368,7 @@
 </div>
 
 
+<div class="vivo-preview-hint">Presiona Atrás para volver</div>
 <div id="vivoView" class="vivo-view" style="display:none">
   <div class="vivo-top-grid">
     <div class="vivo-preview" id="vivoPreview">
@@ -1733,6 +1752,7 @@
   let liveData = null;          // becomes real provider data once connected
   let rawLiveData = null;       // unfiltered — needed so un-hiding a category can bring it back
   let currentCat = isTV() ? 'vivo' : 'peliculas';
+  document.querySelectorAll('.cat[data-cat]').forEach(c => c.classList.toggle('active', c.dataset.cat === currentCat));
 
   function activeData(){ return liveData || emptyData; }
 
@@ -2220,6 +2240,30 @@
     if(el) el.textContent = '';
   }
   let vivoPreviewPlaying = false;
+  let vivoPreviewExpanded = false;
+
+  /** Grows the SAME already-playing preview to fill the whole screen —
+   *  no new player, no reload, just resizing the existing native view
+   *  (same trick used to keep it aligned with the preview box normally).
+   *  This trades away the fullscreen native player's extra features
+   *  (channel banner, EPG, Right-arrow channel/category browsing) for a
+   *  truly instant, zero-rebuffer expand — which is what was asked for
+   *  specifically here. */
+  function expandVivoPreviewFullscreen(){
+    if(!vivoPreviewPlaying || !inlineAvailable() || vivoPreviewExpanded) return;
+    vivoPreviewExpanded = true;
+    document.body.classList.add('vivo-preview-expanded');
+    window.Capacitor.Plugins.InlineVlcPlayer.updateRect({
+      x:0, y:0, width:window.innerWidth, height:window.innerHeight
+    }).catch(()=>{});
+  }
+
+  function shrinkVivoPreview(){
+    if(!vivoPreviewExpanded) return;
+    vivoPreviewExpanded = false;
+    document.body.classList.remove('vivo-preview-expanded');
+    repositionVivoPreview();
+  }
 
   function getVivoPreviewRect(){
     const r = document.getElementById('vivoPreviewArt').getBoundingClientRect();
@@ -2227,7 +2271,7 @@
   }
 
   function repositionVivoPreview(){
-    if(!vivoPreviewPlaying || !inlineAvailable()) return;
+    if(!vivoPreviewPlaying || !inlineAvailable() || vivoPreviewExpanded) return;
     window.Capacitor.Plugins.InlineVlcPlayer.updateRect(getVivoPreviewRect()).catch(()=>{});
   }
   window.addEventListener('resize', () => { if(vivoPreviewPlaying) repositionVivoPreview(); });
@@ -2333,10 +2377,11 @@
       if(now - lastCatClick < 150) return; // ignore rapid double-taps/clicks
       lastCatClick = now;
 
-      // On TV, "TV" is a shortcut to fullscreen whatever's already playing
-      // in the main-screen preview — not a view to switch into.
+      // On TV, pressing "TV" while it's already the active tab expands
+      // the preview that's already playing to fill the screen — same
+      // video, same connection, no reload.
       if(isTV() && cat.dataset.cat === 'vivo' && vivoPreviewPlaying){
-        launchTVLivePlayback();
+        expandVivoPreviewFullscreen();
         return;
       }
 
@@ -3650,6 +3695,10 @@
   // if we're anywhere other than the TV home screen, go back there instead
   // of exiting the app. Returns true if it handled the press.
   window.handleTVBack = function(){
+    if(vivoPreviewExpanded){
+      shrinkVivoPreview();
+      return true;
+    }
     // Any open modal (Settings included) gets closed first — this was
     // missing entirely, which meant pressing Back while Settings was open
     // did nothing on this side, and Android fell through to its own
