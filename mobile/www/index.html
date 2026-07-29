@@ -3866,8 +3866,15 @@
   function startBackgroundCatalogRefresh(conn){
     if(backgroundRefreshTimer) clearInterval(backgroundRefreshTimer);
     backgroundRefreshTimer = setInterval(async () => {
+      // Never refresh while a live channel is actively playing on the
+      // phone — re-fetching (and re-merging) catalogs from every server
+      // is real work, and there's no reason to make it compete with a
+      // channel that's already up and playing just to keep the row data
+      // fresh a few minutes earlier.
+      if(!isTV() && currentInlineIsLive && heroBox.classList.contains('playing')) return;
       try{
         if(conn.type === 'm3u') await connectM3U(conn);
+        else if(Array.isArray(conn.connections)) await connectMultiXtream(conn.connections);
         else await connectXtream(conn);
         saveCatalogCache(connCacheKey(conn), liveData);
       }catch(err){ /* a background refresh failing silently is fine — the
