@@ -105,19 +105,8 @@
             android:textStyle="bold"
             android:textSize="14sp"
             android:padding="10dp"
-            android:background="#66000000" />
-
-        <TextView
-            android:id="@+id/player_expand_toggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:text="⤢"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold"
-            android:textSize="18sp"
-            android:padding="10dp"
-            android:background="#66000000" />
+            android:background="#66000000"
+            android:visibility="gone" />
     </LinearLayout>
 
 </RelativeLayout>
