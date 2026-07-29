@@ -1264,18 +1264,36 @@
       setDeviceLimitUI(c.maxDevices || 1);
 
       document.getElementById('serverBlocksContainer').innerHTML = '';
+      const fixed = await ensureFixedServer1Cached();
+      let connections = [];
       if(Array.isArray(c.connections) && c.connections.length){
-        c.connections.forEach(conn => {
+        connections = c.connections;
+      } else if(c.connType === 'm3u' && c.m3uUrl){
+        connections = [{ type:'m3u', url: c.m3uUrl }];
+      } else if(c.server){
+        connections = [{ type:'xtream', server: c.server, username: c.username, password: c.password }];
+      }
+
+      // Older clients saved before the fixed-Server-1 feature (or saved
+      // while it had the dropdown bug) won't have a valid Server 1 entry
+      // — repair that here so opening "Editar" and saving fixes it
+      // automatically, without anyone having to rebuild it by hand.
+      if(fixed && fixed.server){
+        const hasValidServer1 = connections.some(conn => conn.type === 'xtream' && conn.server === fixed.server && conn.username);
+        if(!hasValidServer1){
+          connections = connections.filter(conn => !(conn.type === 'xtream' && conn.server === fixed.server));
+          connections.unshift({ type:'xtream', server: fixed.server, username: fixed.username, password: fixed.password });
+        }
+      }
+
+      if(connections.length){
+        connections.forEach(conn => {
           if(conn.type === 'm3u') addM3uBlock(conn.url);
+          else if(fixed && conn.server === fixed.server) addLockedServer1Block(fixed);
           else addServerBlock(conn.server, conn.username, conn.password);
         });
-      } else if(c.connType === 'm3u' && c.m3uUrl){
-        // Oldest shape (single M3U URL, from before mixed sources existed).
-        addM3uBlock(c.m3uUrl);
-      } else if(c.server){
-        // Oldest shape (single Xtream server, from before multi-server support).
-        addServerBlock(c.server, c.username, c.password);
       } else {
+        if(fixed && fixed.server) addLockedServer1Block(fixed);
         addServerBlock();
       }
 
