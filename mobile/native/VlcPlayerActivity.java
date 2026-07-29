@@ -82,6 +82,7 @@ public class VlcPlayerActivity extends Activity {
     private DefaultTrackSelector trackSelector;
     private TextView titleView;
     private ProgressBar spinner;
+    private TextView loadingEpisodeText;
 
     // ---- Flat-queue mode (movies / series / single channel list) ----
     private final List<String> urls = new ArrayList<>();
@@ -123,6 +124,11 @@ public class VlcPlayerActivity extends Activity {
     private FrameLayout categoryPanel;
     private LinearLayout categoryListCol;
     private ScrollView categoryScroll;
+    private FrameLayout episodePanel;
+    private LinearLayout episodeListCol;
+    private ScrollView episodeScroll;
+    private boolean episodeBrowseOpen = false;
+    private int browseEpisodeIndex = 0;
 
     // ---- Channel change banner ----
     private FrameLayout bannerRoot;
@@ -169,6 +175,7 @@ public class VlcPlayerActivity extends Activity {
         titleView = findViewById(R.id.player_title);
         ImageButton closeBtn = findViewById(R.id.player_close);
         spinner = findViewById(R.id.player_spinner);
+        loadingEpisodeText = findViewById(R.id.player_loading_text);
         progressBarContainer = findViewById(R.id.player_progress_bar);
         seekBar = findViewById(R.id.player_seekbar);
         seekBar.setFocusable(false);
@@ -289,6 +296,7 @@ public class VlcPlayerActivity extends Activity {
                 if (state == Player.STATE_READY) {
                     runOnUiThread(() -> {
                         spinner.setVisibility(View.GONE);
+                        if (loadingEpisodeText != null) loadingEpisodeText.setVisibility(View.GONE);
                         selectSpanishAudioTrack();
                         liveRetryCount = 0;
                         cancelStallTimer();
@@ -426,6 +434,19 @@ public class VlcPlayerActivity extends Activity {
             }
             return super.onKeyDown(keyCode, event); // let D-pad navigate the menu's own focusable rows normally
         }
+        if (episodeBrowseOpen) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) { moveEpisodeBrowseSelection(-1); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) { moveEpisodeBrowseSelection(1); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                confirmEpisodeBrowseSelection();
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                closeEpisodeBrowse();
+                return true;
+            }
+            return true; // swallow everything else while the picker is open
+        }
         if (isLive && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             if (browseState == BROWSE_NONE) { openChannelBrowse(); return true; }
             if (browseState == BROWSE_CHANNELS) { openCategoryBrowse(); return true; }
@@ -445,13 +466,19 @@ public class VlcPlayerActivity extends Activity {
             return true; // swallow other keys while browsing so they don't hit the player
         }
 
-        // Movies/series: left/right seeks 10s, OK toggles play/pause. Up
-        // cycles the manual zoom — only when it's free (a single item; for
-        // a series with an episode queue, Up already surfs episodes there).
+        // Movies/series: left/right seeks 10s, OK toggles play/pause. For
+        // a series (more than one item), Down opens the full episode list
+        // and Up opens the audio/subtitles menu — neither one silently
+        // jumps to another episode by itself anymore. For a lone movie
+        // (nothing to list), Up still cycles the manual zoom instead.
         if (!isLive) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { seekBy(-10000); return true; }
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) { seekBy(10000); return true; }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && urls.size() <= 1) { cycleZoom(); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && urls.size() > 1) { openEpisodeBrowse(); return true; }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                if (urls.size() > 1) openAudioSubtitleMenu(); else cycleZoom();
+                return true;
+            }
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             togglePlayPause();
@@ -462,7 +489,10 @@ public class VlcPlayerActivity extends Activity {
             return true;
         }
 
-        if (urls.size() > 1) {
+        // Live TV: Up/Down (and the dedicated channel keys) still surf
+        // channels directly, same as always — only the non-live/episode
+        // behavior above changed.
+        if (isLive && urls.size() > 1) {
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                 goToChannel(currentIndex - 1 < 0 ? urls.size() - 1 : currentIndex - 1);
                 return true;
@@ -472,6 +502,7 @@ public class VlcPlayerActivity extends Activity {
                 return true;
             }
         }
+
         return super.onKeyDown(keyCode, event);
     }
 
@@ -781,9 +812,18 @@ public class VlcPlayerActivity extends Activity {
         handler.postDelayed(this::loadCurrent, delay);
     }
 
+    private boolean showEpisodeLoadingTextNext = false;
+
     private void loadCurrent() {
         cancelStallTimer();
-        spinner.setVisibility(View.VISIBLE);
+        if (showEpisodeLoadingTextNext && loadingEpisodeText != null) {
+            loadingEpisodeText.setVisibility(View.VISIBLE);
+            spinner.setVisibility(View.GONE);
+        } else {
+            spinner.setVisibility(View.VISIBLE);
+            if (loadingEpisodeText != null) loadingEpisodeText.setVisibility(View.GONE);
+        }
+        showEpisodeLoadingTextNext = false;
         titleView.setText(titles.get(currentIndex));
         stopProgressTicker();
         if (progressBarContainer != null) {
@@ -841,6 +881,16 @@ public class VlcPlayerActivity extends Activity {
         catLp.gravity = Gravity.END | Gravity.TOP;
         catLp.rightMargin = channelWidth;
         root.addView(categoryPanel, catLp);
+
+        // Episode picker (movies/series only) — small numbered boxes in a
+        // single vertical column, opened with Down.
+        episodePanel = buildListPanel();
+        episodeScroll = (ScrollView) episodePanel.getChildAt(0);
+        episodeListCol = (LinearLayout) episodeScroll.getChildAt(0);
+        int episodeWidth = (int) (dm.widthPixels * 0.20f);
+        FrameLayout.LayoutParams epLp = new FrameLayout.LayoutParams(episodeWidth, ViewGroup.LayoutParams.MATCH_PARENT);
+        epLp.gravity = Gravity.END | Gravity.TOP;
+        root.addView(episodePanel, epLp);
     }
 
     private FrameLayout buildListPanel() {
@@ -883,6 +933,43 @@ public class VlcPlayerActivity extends Activity {
         browseState = BROWSE_NONE;
         channelPanel.setVisibility(View.GONE);
         categoryPanel.setVisibility(View.GONE);
+    }
+
+    // ---------- Episode picker (movies/series, opened with Down) ----------
+    private void openEpisodeBrowse() {
+        episodeBrowseOpen = true;
+        browseEpisodeIndex = currentIndex;
+        populateEpisodeList();
+        episodePanel.setVisibility(View.VISIBLE);
+    }
+
+    private void closeEpisodeBrowse() {
+        episodeBrowseOpen = false;
+        episodePanel.setVisibility(View.GONE);
+    }
+
+    private void populateEpisodeList() {
+        episodeListCol.removeAllViews();
+        for (int i = 0; i < urls.size(); i++) {
+            // Small numbered box, starting at 1 — not the episode's own
+            // title/number metadata, just plain sequential order as asked.
+            episodeListCol.addView(buildListRow(String.valueOf(i + 1), i == browseEpisodeIndex));
+        }
+        scrollToSelected(episodeScroll, episodeListCol, browseEpisodeIndex);
+    }
+
+    private void moveEpisodeBrowseSelection(int delta) {
+        int max = urls.size();
+        browseEpisodeIndex = ((browseEpisodeIndex + delta) % max + max) % max;
+        populateEpisodeList();
+    }
+
+    private void confirmEpisodeBrowseSelection() {
+        closeEpisodeBrowse();
+        if (browseEpisodeIndex != currentIndex) {
+            showEpisodeLoadingTextNext = true;
+            goToChannel(browseEpisodeIndex);
+        }
     }
 
     private void populateChannelList() {
