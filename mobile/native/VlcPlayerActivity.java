@@ -227,7 +227,7 @@ public class VlcPlayerActivity extends Activity {
                 // exactly what was crashing the app right after the
                 // catalog/pairing screen, since that's when the first
                 // player gets constructed (the TV home screen preview).
-                .setBufferDurationsMs(5000, 30000, 2500, 4000)
+                .setBufferDurationsMs(8000, 40000, 3000, 5000)
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build();
 
@@ -610,7 +610,7 @@ public class VlcPlayerActivity extends Activity {
     // ---------- Silent live-channel recovery (no dialog, no channel change) ----------
     private int liveRetryCount = 0;
     private Runnable stallRunnable;
-    private static final long STALL_TIMEOUT_MS = 9000;
+    private static final long STALL_TIMEOUT_MS = 11000;
 
     /** If a live channel starts buffering and never reaches Playing within
      *  this window, treat it as frozen and reconnect automatically. Only
