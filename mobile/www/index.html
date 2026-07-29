@@ -1741,7 +1741,7 @@
     const art = m.img
       ? `<img class="poster-cover-img" src="${m.img}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="poster-art">${m.icon||'🎬'}</div>`;
-    return `<div class="poster-card" tabindex="0" data-kind="${m.kind||''}" data-url="${m.url||''}" data-sid="${m.series_id||''}" data-title="${m.t}" data-img="${m.img||''}">
+    return `<div class="poster-card" tabindex="0" data-kind="${m.kind||''}" data-url="${m.url||''}" data-sid="${m.series_id||''}" data-title="${m.t}" data-img="${m.img||''}" data-conn="${m.sourceConn ? encodeURIComponent(JSON.stringify(m.sourceConn)) : ''}">
       ${art}
       <div class="poster-badge mono">${m.badge||'HD'}</div>
       <div class="poster-rating mono">★ ${m.r||'—'}</div>
@@ -2716,7 +2716,9 @@
     const kind = card.dataset.kind;
     const title = card.dataset.title;
     if(kind === 'series'){
-      openSeriesDetail(card.dataset.sid, title);
+      let seriesConn = null;
+      try{ seriesConn = card.dataset.conn ? JSON.parse(decodeURIComponent(card.dataset.conn)) : null; }catch(e){}
+      openSeriesDetail(card.dataset.sid, title, seriesConn);
     } else if(card.dataset.url){
       if(card.classList.contains('channel-card')){
         // Build the queue from sibling channel cards in the same row so
@@ -3095,9 +3097,10 @@
   let xtreamState = null; // { conn, liveCategories, vodCategories, seriesCategories, live, vod, series }
 
   async function resolveSeriesQueue(seriesId, seriesName){
-    const info = await xtreamFetch(xtreamState.conn, 'get_series_info', `&series_id=${seriesId}`);
+    const conn = sdCurrentConn || xtreamState.conn;
+    const info = await xtreamFetch(conn, 'get_series_info', `&series_id=${seriesId}`);
     const seasons = info.episodes || {};
-    const base = xtreamState.conn.server.replace(/\/+$/,'');
+    const base = conn.server.replace(/\/+$/,'');
     const seasonKeys = Object.keys(seasons).sort((a,b) => Number(a) - Number(b));
     const queue = [];
     seasonKeys.forEach(sk => {
@@ -3106,7 +3109,7 @@
         const ext = ep.container_extension || 'mp4';
         const epTitle = `${seriesName || info.info?.name || 'Serie'} · T${sk} E${ep.episode_num}${ep.title ? ' - ' + ep.title : ''}`;
         queue.push({
-          url: `${base}/series/${xtreamState.conn.username}/${xtreamState.conn.password}/${ep.id}.${ext}`,
+          url: `${base}/series/${conn.username}/${conn.password}/${ep.id}.${ext}`,
           title: epTitle
         });
       });
@@ -3129,7 +3132,9 @@
     localStorage.setItem(sdFavKey, JSON.stringify(list));
   }
 
-  async function openSeriesDetail(seriesId, fallbackTitle){
+  let sdCurrentConn = null; // the specific server this open series actually lives on
+  async function openSeriesDetail(seriesId, fallbackTitle, seriesConn){
+    sdCurrentConn = (seriesConn && seriesConn.server) ? { type:'xtream', ...seriesConn } : xtreamState.conn;
     const overlay = document.getElementById('seriesDetailOverlay');
     overlay.style.display = isTV() ? 'flex' : 'block';
     overlay.scrollTop = 0;
@@ -3159,7 +3164,7 @@
     }
 
     try{
-      const info = await xtreamFetch(xtreamState.conn, 'get_series_info', `&series_id=${seriesId}`);
+      const info = await xtreamFetch(sdCurrentConn, 'get_series_info', `&series_id=${seriesId}`);
       sdCurrentInfo = info;
       const meta = info.info || {};
       document.getElementById('sdTitle').textContent = meta.name || fallbackTitle || 'Serie';
@@ -3251,10 +3256,10 @@
     const idx = parseInt(row.dataset.idx, 10);
     const seasons = sdCurrentInfo.episodes || {};
     const eps = (seasons[sdCurrentSeasonKey] || []).slice().sort((a,b) => Number(a.episode_num) - Number(b.episode_num));
-    const base = xtreamState.conn.server.replace(/\/+$/,'');
+    const base = sdCurrentConn.server.replace(/\/+$/,'');
     const seriesName = (sdCurrentInfo.info && sdCurrentInfo.info.name) || document.getElementById('sdTitle').textContent;
     const queue = eps.map(ep => ({
-      url: `${base}/series/${xtreamState.conn.username}/${xtreamState.conn.password}/${ep.id}.${ep.container_extension || 'mp4'}`,
+      url: `${base}/series/${sdCurrentConn.username}/${sdCurrentConn.password}/${ep.id}.${ep.container_extension || 'mp4'}`,
       title: `${seriesName} · T${sdCurrentSeasonKey} E${ep.episode_num}${ep.title ? ' - ' + ep.title : ''}`
     }));
     const chosen = queue[idx];
@@ -3327,7 +3332,7 @@
       items: row.items.map(s => ({
         t: s.name, meta: s.releaseDate || '', badge:'HD', r: s.rating || '—',
         img: s.cover || '',
-        kind:'series', series_id: s.series_id
+        kind:'series', series_id: s.series_id, sourceConn: { server: conn.server, username: conn.username, password: conn.password }
       }))
     }));
     const animeRows = categoriesByKeyword(vod, vodCategories, /anime/i).map(row => ({
@@ -3338,7 +3343,7 @@
       })).concat(categoriesByKeyword(series, seriesCategories, /anime/i).map(row => ({
         title: row.title, items: row.items.map(s => ({
           t:s.name, meta: s.releaseDate || '', badge:'HD', r:s.rating||'—', img:s.cover||'',
-          kind:'series', series_id:s.series_id
+          kind:'series', series_id:s.series_id, sourceConn: { server: conn.server, username: conn.username, password: conn.password }
         }))
       })));
     const kidsVodRows = categoriesByKeyword(vod, vodCategories, /kids|infantil|ni[ñn]os|cartoon|toon|disney/i)
@@ -3349,7 +3354,7 @@
     const kidsSeriesRows = categoriesByKeyword(series, seriesCategories, /kids|infantil|ni[ñn]os|cartoon|toon|disney/i)
       .map(row => ({ title: row.title, items: row.items.map(s => ({
         t:s.name, meta: s.releaseDate || '', badge:'HD', r:s.rating||'—', img:s.cover||'',
-        kind:'series', series_id:s.series_id
+        kind:'series', series_id:s.series_id, sourceConn: { server: conn.server, username: conn.username, password: conn.password }
       })) }));
     // Live kids channels — all merged into a single scrollable row at the
     // top of Kids, above the movies/series, styled as channel cards
