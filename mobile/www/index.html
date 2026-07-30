@@ -112,6 +112,9 @@
   body.playing-fullscreen .cat{
     display:none !important;
   }
+  body.playing-fullscreen{
+    background:#000 !important; animation:none !important;
+  }
   .hero::before{
     content:'';
     position:absolute; left:50%; top:-10%; width:220%; height:160%;
@@ -211,7 +214,7 @@
   }
   .hero.playing .hero-inner,
   .hero.playing::before{ display:none; }
-  .hero.playing{ background: transparent; border-color: rgba(234,242,245,0.14); }
+  .hero.playing{ background: #000; border-color: rgba(234,242,245,0.14); }
   .hero.playing .hero-player{ display:flex; }
 
   .hp-top{
