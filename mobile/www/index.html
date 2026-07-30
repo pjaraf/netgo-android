@@ -2248,13 +2248,22 @@
     document.getElementById('vivoPreviewName').textContent = item.t;
     document.getElementById('vivoPreviewMeta').textContent = item.num ? `Canal ${item.num}` : '';
 
-    // No more auto-playing inline preview — just a static thumbnail. The
-    // channel actually plays (in the one native fullscreen player used
-    // everywhere now) once the person taps/selects it.
-    const artBox = document.getElementById('vivoPreviewArt');
-    artBox.innerHTML = item.img
-      ? `<img src="${item.img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
-      : `<div class="vivo-preview-icon">📡</div>`;
+    if(!inlineAvailable()){
+      const artBox = document.getElementById('vivoPreviewArt');
+      artBox.innerHTML = item.img
+        ? `<img src="${item.img}" onerror="this.parentElement.innerHTML='<div class=&quot;vivo-preview-icon&quot;>📡</div>'">`
+        : `<div class="vivo-preview-icon">📡</div>`;
+      return;
+    }
+
+    document.getElementById('vivoPreviewArt').innerHTML = ''; // native video renders on top of this box
+    const P = window.Capacitor.Plugins.InlineVlcPlayer;
+    await P.mount({ ...getVivoPreviewRect(), showControls: false });
+    await P.loadQueue({ queue: [{ url:item.url, title:item.t }], startIndex: 0 });
+    vivoPreviewPlaying = true;
+    startVivoRateIndicator();
+    setTimeout(repositionVivoPreview, 150);
+    setTimeout(repositionVivoPreview, 500);
   }
 
   async function updateVivoPreview(row){
@@ -2265,14 +2274,6 @@
       img: row.dataset.img || ''
     });
   }
-
-  // The preview card is just a static thumbnail now (no more inline
-  // player) — tapping/selecting it opens the one native fullscreen
-  // player, same as everywhere else in the app.
-  document.getElementById('vivoPreview').onclick = () => {
-    if(!vivoPreviewSelected) return;
-    playQueue([{ url: vivoPreviewSelected.url, title: vivoPreviewSelected.title, num: vivoPreviewSelected.num }], 0, vivoPreviewSelected.title, 'channel');
-  };
 
   async function launchTVLivePlayback(){
     if(!vivoPreviewSelected) return;
@@ -2336,10 +2337,10 @@
 
       // On TV, "TV" is a shortcut to fullscreen whatever's already playing
       // in the main-screen preview — not a view to switch into.
-      // On TV, pressing "TV" while already on that tab launches the
-      // currently-selected channel in the (one, shared) fullscreen player.
-      if(isTV() && cat.dataset.cat === 'vivo' && currentCat === 'vivo' && vivoPreviewSelected){
-        playQueue([{ url: vivoPreviewSelected.url, title: vivoPreviewSelected.title, num: vivoPreviewSelected.num }], 0, vivoPreviewSelected.title, 'channel');
+      // On TV, "TV" is a shortcut to fullscreen whatever's already playing
+      // in the main-screen preview — not a view to switch into.
+      if(isTV() && cat.dataset.cat === 'vivo' && vivoPreviewPlaying){
+        launchTVLivePlayback();
         return;
       }
 
@@ -2694,7 +2695,7 @@
   // the screen. On phones we keep the inline overlay player.
   function playQueue(queue, startIndex, fallbackTitle, kind, resumeMs){
     if(!queue || !queue.length) return;
-    if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
+    if(isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
       window.Capacitor.Plugins.VlcPlayer.play({
         queue, startIndex: startIndex || 0, deviceCode: getClientCode(),
         startPositionMs: resumeMs || 0, isLive: kind === 'channel',
@@ -2702,10 +2703,7 @@
       }).catch(err => console.error('VlcPlayer error:', err));
       return;
     }
-    // Only reachable if the native plugin genuinely isn't available (e.g.
-    // previewing in a desktop browser) — there's no other player to fall
-    // back to anymore.
-    showStatus('No se pudo abrir el reproductor.', true);
+    playInline(queue, startIndex || 0, kind, resumeMs);
   }
   function closePlayer(){
     playerOverlay.classList.remove('open');
