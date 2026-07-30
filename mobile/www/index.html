@@ -2697,7 +2697,7 @@
     if(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.VlcPlayer){
       window.Capacitor.Plugins.VlcPlayer.play({
         queue, startIndex: startIndex || 0, deviceCode: getClientCode(),
-        startPositionMs: resumeMs || 0,
+        startPositionMs: resumeMs || 0, isLive: kind === 'channel',
         contPlayingItem: currentPlayingItem ? JSON.stringify(currentPlayingItem) : ''
       }).catch(err => console.error('VlcPlayer error:', err));
       return;
