@@ -175,8 +175,22 @@ public class VlcPlayerActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        isPhoneDevice = !getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
-                && !getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION);
+        // A device only counts as a "phone" if it genuinely has a
+        // touchscreen AND doesn't identify as a TV in any way. Relying
+        // only on FEATURE_LEANBACK/FEATURE_TELEVISION isn't reliable —
+        // plenty of generic, uncertified TV boxes never bother declaring
+        // those, even though they're unmistakably a TV (big screen,
+        // remote control, no touchscreen at all). Checking for an actual
+        // touchscreen catches those correctly regardless.
+        boolean hasTouchscreen = getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN);
+        boolean declaresTvFeature = getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+                || getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION);
+        boolean uiModeIsTv = false;
+        android.app.UiModeManager uiModeManager = (android.app.UiModeManager) getSystemService(UI_MODE_SERVICE);
+        if (uiModeManager != null) {
+            uiModeIsTv = uiModeManager.getCurrentModeType() == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION;
+        }
+        isPhoneDevice = hasTouchscreen && !declaresTvFeature && !uiModeIsTv;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE
