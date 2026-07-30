@@ -96,6 +96,9 @@
   .hero.playing{
     box-shadow: 0 0 0 1.5px rgba(255,138,61,0.5), 0 14px 40px rgba(255,138,61,0.18), 0 10px 30px rgba(0,0,0,0.45);
   }
+  .hero.inner-hidden:not(.playing){
+    margin:0; border:none; box-shadow:none; aspect-ratio:auto; height:0;
+  }
   .hero::before{
     content:'';
     position:absolute; left:50%; top:-10%; width:220%; height:160%;
@@ -2458,6 +2461,12 @@
     hpPlayPause.textContent = '⏸';
     window.scrollTo({ top:0, behavior:'smooth' });
 
+    // Playing anything — live TV, movies, series, anime, Kids, seguir
+    // viendo — rotates the phone to landscape automatically.
+    if(!isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceId){
+      window.Capacitor.Plugins.DeviceId.setOrientation({ orientation:'landscape' }).catch(()=>{});
+    }
+
     const P = window.Capacitor.Plugins.InlineVlcPlayer;
     await P.mount({ ...getHeroRect(), showControls: !currentInlineIsLive });
     await P.loadQueue({ queue, startIndex: startIndex || 0 });
@@ -2541,6 +2550,9 @@
       try{ await window.Capacitor.Plugins.InlineVlcPlayer.unmount(); }catch(e){}
     }
     heroBox.classList.remove('playing');
+    if(!isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceId){
+      window.Capacitor.Plugins.DeviceId.setOrientation({ orientation:'unspecified' }).catch(()=>{});
+    }
   }
 
   document.getElementById('hpClose').onclick = closeInlinePlayer;
@@ -3388,6 +3400,7 @@
 
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
     document.getElementById('heroTitle').textContent = 'Todo listo';
+    document.getElementById('heroInner').style.display = 'none'; heroBox.classList.add('inner-hidden'); // already connected — no need for this placeholder card anymore
     document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${data.counts.live}</b> canales</span><span><b>${data.counts.vod}</b> películas</span><span><b>${data.counts.series}</b> series</span></div>`;
     document.getElementById('heroConnect').textContent = 'Actualizar catálogo';
     renderCategory(currentCat);
@@ -3427,6 +3440,7 @@
     const totalSeries = ok.reduce((n, r) => n + (r.counts.series || 0), 0);
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
     document.getElementById('heroTitle').textContent = 'Todo listo';
+    document.getElementById('heroInner').style.display = 'none'; heroBox.classList.add('inner-hidden'); // already connected — no need for this placeholder card anymore
     document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${totalLive}</b> canales</span><span><b>${totalVod}</b> películas</span><span><b>${totalSeries}</b> series</span></div>`;
     document.getElementById('heroConnect').textContent = 'Actualizar catálogo';
     renderCategory(currentCat);
@@ -3531,6 +3545,7 @@
 
     document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
     document.getElementById('heroTitle').textContent = 'Todo listo';
+    document.getElementById('heroInner').style.display = 'none'; heroBox.classList.add('inner-hidden'); // already connected — no need for this placeholder card anymore
     document.getElementById('heroSub').innerHTML = `<div class="hero-stats"><span><b>${data.counts.entries}</b> elementos (lista M3U)</span></div>`;
     document.getElementById('heroConnect').textContent = 'Actualizar catálogo';
     renderCategory(currentCat);
@@ -3597,6 +3612,7 @@
         xtreamState = { conn };
         document.getElementById('heroBadge').innerHTML = '<span class="dot-on"></span> Conectado';
         document.getElementById('heroTitle').textContent = 'Todo listo';
+    document.getElementById('heroInner').style.display = 'none'; heroBox.classList.add('inner-hidden'); // already connected — no need for this placeholder card anymore
         document.getElementById('heroConnect').textContent = 'Actualizar catálogo';
         renderCategory(currentCat);
       }
