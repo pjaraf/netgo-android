@@ -72,7 +72,15 @@ public class DeviceIdPlugin extends Plugin {
             default:
                 value = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
         }
-        getActivity().setRequestedOrientation(value);
-        call.resolve();
+        try {
+            getActivity().setRequestedOrientation(value);
+            call.resolve();
+        } catch (Exception e) {
+            // Some devices/Android versions throw here (a known Android
+            // gotcha: "Only fullscreen opaque activities can request
+            // orientation") — surfacing it instead of failing silently,
+            // so this is actually diagnosable from the app itself.
+            call.reject("setOrientation failed: " + e.getMessage());
+        }
     }
 }
