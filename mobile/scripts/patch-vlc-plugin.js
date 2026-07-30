@@ -40,7 +40,8 @@ if (!manifest.includes('VlcPlayerActivity')) {
     '</application>',
     '    <activity android:name=".VlcPlayerActivity" android:exported="false" ' +
       'android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" ' +
-      'android:configChanges="orientation|screenSize|keyboardHidden|screenLayout" />\n' +
+      'android:supportsPictureInPicture="true" ' +
+      'android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode" />\n' +
       '</application>'
   );
   fs.writeFileSync(manifestPath, manifest);
