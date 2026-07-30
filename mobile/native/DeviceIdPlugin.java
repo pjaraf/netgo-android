@@ -52,4 +52,27 @@ public class DeviceIdPlugin extends Plugin {
         ret.put("label", label.trim());
         call.resolve(ret);
     }
+
+    /** Locks the screen to a given orientation, or back to normal
+     *  (unspecified — whatever the device's own rotation lock allows).
+     *  Used so playing anything (live TV, movies, series, etc.) rotates
+     *  the phone to landscape automatically, and it's released again once
+     *  playback closes. */
+    @PluginMethod
+    public void setOrientation(PluginCall call) {
+        String orientation = call.getString("orientation", "unspecified");
+        int value;
+        switch (orientation) {
+            case "landscape":
+                value = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+                break;
+            case "portrait":
+                value = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+                break;
+            default:
+                value = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+        }
+        getActivity().setRequestedOrientation(value);
+        call.resolve();
+    }
 }
