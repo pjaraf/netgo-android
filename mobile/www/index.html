@@ -2478,9 +2478,24 @@
     return { x: r.left, y: r.top, width: r.width, height: r.height };
   }
 
+  let inlinePlayerMinimized = false;
   async function positionInlinePlayer(){
-    if(!inlineAvailable()) return;
+    if(!inlineAvailable() || inlinePlayerMinimized) return;
     try{ await window.Capacitor.Plugins.InlineVlcPlayer.updateRect(getHeroRect()); }catch(e){}
+  }
+  if(inlineAvailable()){
+    window.Capacitor.Plugins.InlineVlcPlayer.addListener('minimizedChanged', (data) => {
+      inlinePlayerMinimized = !!data.minimized;
+      if(inlinePlayerMinimized){
+        document.body.classList.remove('playing-fullscreen');
+      } else {
+        document.body.classList.add('playing-fullscreen');
+        if(!isTV() && window.Capacitor.Plugins.DeviceId){
+          window.Capacitor.Plugins.DeviceId.setOrientation({ orientation:'landscape' }).catch(()=>{});
+        }
+        positionInlinePlayer();
+      }
+    });
   }
   // Keep the native video aligned with the hero box while scrolling/resizing
   let rafPending = false;
