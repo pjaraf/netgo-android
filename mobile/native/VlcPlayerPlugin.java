@@ -51,6 +51,7 @@ public class VlcPlayerPlugin extends Plugin {
         String deviceCode = call.getString("deviceCode", "");
         long startPositionMs = call.getData().optLong("startPositionMs", 0);
         String contPlayingItem = call.getString("contPlayingItem", "");
+        boolean isLive = call.getData().optBoolean("isLive", false);
 
         if (queue == null || queue.length() == 0) {
             call.reject("Falta la cola de reproducción (queue)");
@@ -63,6 +64,7 @@ public class VlcPlayerPlugin extends Plugin {
         intent.putExtra("deviceCode", deviceCode);
         intent.putExtra("startPositionMs", startPositionMs);
         intent.putExtra("contPlayingItem", contPlayingItem);
+        intent.putExtra("isLive", isLive);
         getActivity().startActivity(intent);
         getActivity().overridePendingTransition(0, 0);
         call.resolve();
