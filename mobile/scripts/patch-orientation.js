@@ -9,36 +9,13 @@ const path = require('path');
 const manifestPath = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
 let xml = fs.readFileSync(manifestPath, 'utf8');
 
-// Find MainActivity's own <activity> tag specifically (there are several
-// activity tags in this manifest — VlcPlayerActivity already declares its
-// own configChanges separately).
-const activityMatch = xml.match(/<activity\b[^>]*android:name="\.MainActivity"[^>]*>/);
-
-if (!activityMatch) {
-  console.log('Could not find the MainActivity <activity> tag — skipping.');
+if (!xml.includes('android:configChanges')) {
+  xml = xml.replace(
+    /(<activity\b)(\s)/,
+    '$1 android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode"$2'
+  );
+  fs.writeFileSync(manifestPath, xml);
+  console.log('✓ MainActivity now handles orientation changes without restarting.');
 } else {
-  const tag = activityMatch[0];
-  const configChangesMatch = tag.match(/android:configChanges="([^"]*)"/);
-
-  if (configChangesMatch && configChangesMatch[1].includes('orientation')) {
-    console.log('MainActivity already handles orientation changes — nothing to do.');
-  } else if (configChangesMatch) {
-    // configChanges exists but doesn't cover orientation — a default
-    // Capacitor template can look like this, which the old version of
-    // this script mistook for "already handled" since it only checked
-    // whether the attribute existed at all, not what it actually covered.
-    const newValue = configChangesMatch[1] + '|orientation|screenSize|smallestScreenSize';
-    const newTag = tag.replace(/android:configChanges="[^"]*"/, `android:configChanges="${newValue}"`);
-    xml = xml.replace(tag, newTag);
-    fs.writeFileSync(manifestPath, xml);
-    console.log('✓ Added orientation to MainActivity\'s existing configChanges.');
-  } else {
-    const newTag = tag.replace(
-      '<activity ',
-      '<activity android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode" '
-    );
-    xml = xml.replace(tag, newTag);
-    fs.writeFileSync(manifestPath, xml);
-    console.log('✓ MainActivity now handles orientation changes without restarting.');
-  }
+  console.log('MainActivity already declares configChanges — nothing to do.');
 }
