@@ -1868,55 +1868,6 @@ public class VlcPlayerActivity extends Activity {
             closeAllBrowse();
             return;
         }
-        enterPipOrFinish();
-    }
-
-    @Override
-    protected void onUserLeaveHint() {
-        super.onUserLeaveHint();
-        // Fires when the person presses Home (or otherwise leaves the app)
-        // while this is the active screen — standard Android signal for
-        // "this would be a good time to go into Picture-in-Picture".
-        enterPipOrFinish();
-    }
-
-    /** Shrinks to a small floating window instead of closing outright, so
-     *  whatever's playing keeps going while the person uses the rest of
-     *  the device — falls back to closing normally on anything that
-     *  doesn't support Picture-in-Picture (older Android, or a TV box
-     *  that doesn't implement it despite declaring it). */
-    private void enterPipOrFinish() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
-                && getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
-            try {
-                android.util.Rational aspect = new android.util.Rational(16, 9);
-                android.app.PictureInPictureParams params = new android.app.PictureInPictureParams.Builder()
-                        .setAspectRatio(aspect)
-                        .build();
-                if (enterPictureInPictureMode(params)) return;
-            } catch (Exception ignored) {
-                // Some TV boxes claim support but throw anyway — just
-                // close normally instead of leaving the person stuck.
-            }
-        }
         finish();
-    }
-
-    @Override
-    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, android.content.res.Configuration newConfig) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
-        // Hide every control/banner/overlay while in the small PiP window
-        // — there's no remote interaction with it anyway, just the video.
-        int vis = isInPictureInPictureMode ? View.GONE : View.VISIBLE;
-        if (bannerRoot != null) bannerRoot.setVisibility(View.GONE); // banner never shows in PiP regardless
-        if (ccToggle != null) ccToggle.setVisibility(View.GONE);
-        if (channelPanel != null) channelPanel.setVisibility(View.GONE);
-        if (categoryPanel != null) categoryPanel.setVisibility(View.GONE);
-        if (episodePanel != null) episodePanel.setVisibility(View.GONE);
-        if (!isInPictureInPictureMode) {
-            // Returning from PiP to the full screen — re-show the channel
-            // banner briefly as a reminder of what's playing.
-            showChannelBanner();
-        }
     }
 }
