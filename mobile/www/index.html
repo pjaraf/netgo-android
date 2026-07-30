@@ -425,6 +425,12 @@
   }
   .vivo-logo-tile img{ width:100%; height:100%; object-fit:contain; }
   .vivo-logo-tile .vivo-logo-fallback{ font-size:20px; opacity:.5; }
+  /* TV: fixed single-logo showcase instead of a scrolling strip */
+  .vivo-logo-carousel.vivo-logo-fixed{ justify-content:center; }
+  .vivo-logo-fixed-tile{
+    width:56px; height:56px; animation: vivoLogoFadeIn .4s ease;
+  }
+  @keyframes vivoLogoFadeIn{ from{ opacity:0; } to{ opacity:1; } }
 
   .vivo-recommend-card{
     display:flex; flex-direction:column; min-height:0;
@@ -2089,8 +2095,33 @@
     if(!carousel) return;
     if(logoCarouselTimer){ clearInterval(logoCarouselTimer); logoCarouselTimer = null; }
 
-    // Purely a visual strip — not selectable, just auto-scrolls on its own
-    // within the fixed space where the fullscreen button used to be.
+    if(isTV()){
+      // TV: a single fixed box that cycles through logos on its own —
+      // nothing to scroll, nothing to select, just a rotating showcase.
+      carousel.classList.add('vivo-logo-fixed');
+      if(!items.length){ carousel.innerHTML = ''; return; }
+      let idx = 0;
+      const renderTile = () => {
+        const it = items[idx];
+        carousel.innerHTML = `
+          <div class="vivo-logo-tile vivo-logo-fixed-tile">
+            <img src="${it.img}" onerror="this.parentElement.innerHTML='<span class=&quot;vivo-logo-fallback&quot;>📡</span>'">
+          </div>
+        `;
+      };
+      renderTile();
+      if(items.length > 1){
+        logoCarouselTimer = setInterval(() => {
+          if(!carousel.isConnected){ clearInterval(logoCarouselTimer); logoCarouselTimer = null; return; }
+          idx = (idx + 1) % items.length;
+          renderTile();
+        }, 3000);
+      }
+      return;
+    }
+
+    // Phone: unchanged — purely a visual strip, auto-scrolls on its own.
+    carousel.classList.remove('vivo-logo-fixed');
     carousel.innerHTML = items.map(it => `
       <div class="vivo-logo-tile">
         ${it.img ? `<img src="${it.img}" onerror="this.parentElement.innerHTML='<span class=&quot;vivo-logo-fallback&quot;>📡</span>'">` : `<span class="vivo-logo-fallback">📡</span>`}
