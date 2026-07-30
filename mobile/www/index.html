@@ -2513,31 +2513,14 @@
     window.scrollTo({ top:0, behavior:'smooth' });
 
     // Playing anything — live TV, movies, series, anime, Kids, seguir
-    // viendo — rotates the phone to landscape automatically. This has to
-    // finish (the phone needs a moment to physically rotate and the page
-    // to reflow to the new landscape size) BEFORE mounting the video —
-    // otherwise mount() reads the hero box's still-portrait dimensions
-    // mid-rotation and positions/sizes the native view wrong, which was
-    // both breaking playback and making the rotation look like it
-    // "reverted" itself.
+    // viendo — rotates the phone to landscape automatically.
     if(!isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceId){
-      try{
-        await window.Capacitor.Plugins.DeviceId.setOrientation({ orientation:'landscape' });
-        await new Promise(resolve => setTimeout(resolve, 350));
-      }catch(err){
-        showStatus('No se pudo girar la pantalla: ' + (err && err.message || err), true);
-      }
+      window.Capacitor.Plugins.DeviceId.setOrientation({ orientation:'landscape' }).catch(()=>{});
     }
 
     const P = window.Capacitor.Plugins.InlineVlcPlayer;
-    try{
-      await P.mount({ ...getHeroRect(), showControls: !currentInlineIsLive });
-      await P.loadQueue({ queue, startIndex: startIndex || 0 });
-    }catch(err){
-      showStatus('No se pudo reproducir: ' + (err && err.message || err), true);
-      closeInlinePlayer(); // undo the fullscreen/rotation state instead of leaving the screen stuck
-      return;
-    }
+    await P.mount({ ...getHeroRect(), showControls: !currentInlineIsLive });
+    await P.loadQueue({ queue, startIndex: startIndex || 0 });
     if(currentInlineIsLive) updatePhoneOsdBanner(queue[startIndex || 0]);
     if(resumeMs && resumeMs > 0){
       setTimeout(() => P.seekTo({ positionMs: resumeMs }).catch(()=>{}), 700);
