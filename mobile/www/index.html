@@ -2232,7 +2232,14 @@
     if(!vivoPreviewPlaying || !inlineAvailable()) return;
     window.Capacitor.Plugins.InlineVlcPlayer.updateRect(getVivoPreviewRect()).catch(()=>{});
   }
-  window.addEventListener('resize', () => { if(vivoPreviewPlaying) repositionVivoPreview(); });
+  let vivoRafPending = false;
+  function scheduleVivoPositionUpdate(){
+    if(vivoRafPending) return;
+    vivoRafPending = true;
+    requestAnimationFrame(() => { vivoRafPending = false; repositionVivoPreview(); });
+  }
+  window.addEventListener('resize', () => { if(vivoPreviewPlaying) scheduleVivoPositionUpdate(); });
+  window.addEventListener('scroll', () => { if(vivoPreviewPlaying) scheduleVivoPositionUpdate(); }, { passive:true });
 
   async function stopVivoPreview(){
     if(!vivoPreviewPlaying) return;
