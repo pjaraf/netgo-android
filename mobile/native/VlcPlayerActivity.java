@@ -10,8 +10,6 @@ import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.KeyEvent;
-import android.view.GestureDetector;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -104,18 +102,6 @@ public class VlcPlayerActivity extends Activity {
 
     // ---- Live TV mode (categories + browsing) ----
     private boolean isLive = false;
-    // Whether this is a phone/tablet (touch-driven) rather than an
-    // Android TV / Google TV / TV box (remote-driven) — controls which
-    // interaction layer gets built: swipe/tap for one, D-pad for the
-    // other. Leanback (TV) devices report this system feature; regular
-    // phones don't.
-    private boolean isPhoneDevice;
-    private GestureDetector gestureDetector;
-    private LinearLayout touchControlsBar;
-    private ImageButton touchPlayPauseBtn;
-    private TextView touchFullscreenBtn;
-    private boolean touchControlsVisible = false;
-    private Runnable hideTouchControlsRunnable;
     private final List<String> catTitles = new ArrayList<>();
     private final List<List<String>> catUrls = new ArrayList<>();
     private final List<List<String>> catTsUrls = new ArrayList<>();
@@ -175,22 +161,6 @@ public class VlcPlayerActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // A device only counts as a "phone" if it genuinely has a
-        // touchscreen AND doesn't identify as a TV in any way. Relying
-        // only on FEATURE_LEANBACK/FEATURE_TELEVISION isn't reliable —
-        // plenty of generic, uncertified TV boxes never bother declaring
-        // those, even though they're unmistakably a TV (big screen,
-        // remote control, no touchscreen at all). Checking for an actual
-        // touchscreen catches those correctly regardless.
-        boolean hasTouchscreen = getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN);
-        boolean declaresTvFeature = getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
-                || getPackageManager().hasSystemFeature(android.content.pm.PackageManager.FEATURE_TELEVISION);
-        boolean uiModeIsTv = false;
-        android.app.UiModeManager uiModeManager = (android.app.UiModeManager) getSystemService(UI_MODE_SERVICE);
-        if (uiModeManager != null) {
-            uiModeIsTv = uiModeManager.getCurrentModeType() == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION;
-        }
-        isPhoneDevice = hasTouchscreen && !declaresTvFeature && !uiModeIsTv;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE
@@ -245,17 +215,6 @@ public class VlcPlayerActivity extends Activity {
             return;
         }
         deviceCode = getIntent().getStringExtra("deviceCode");
-
-        if (isPhoneDevice) {
-            buildTouchControls();
-            setupGestureDetector();
-            // Movies/series/anime/Kids/seguir viendo: rotate to landscape
-            // automatically — only live TV stays portrait by default with
-            // a manual fullscreen button instead.
-            if (!isLive) {
-                setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-            }
-        }
 
         // Tuned for live IPTV/HLS: big enough to absorb real network
         // fluctuations without stalling, without adding so much delay
@@ -348,7 +307,6 @@ public class VlcPlayerActivity extends Activity {
                         selectSpanishAudioTrack();
                         liveRetryCount = 0;
                         cancelStallTimer();
-                        if (isPhoneDevice) showTouchControls();
                         if (!isLive) {
                             startProgressTicker();
                             showCcButtonTemporarily();
@@ -1316,157 +1274,6 @@ public class VlcPlayerActivity extends Activity {
     private TextView bannerClock;
     private long epgFetchToken = 0; // lets a slow/late EPG response be ignored if the channel changed again meanwhile
 
-    // ---------- Touch interaction layer (phones only — TV keeps using the D-pad) ----------
-    private void buildTouchControls() {
-        FrameLayout root = findViewById(android.R.id.content);
-
-        // Live TV doesn't get the movie-style play/pause/seek bar at all —
-        // it's channel surfing (swipe/tap/double-tap), not something you
-        // pause and scrub through. Just the fullscreen button.
-        if (isLive) {
-            touchFullscreenBtn = new TextView(this);
-            touchFullscreenBtn.setText("⤢");
-            touchFullscreenBtn.setTextColor(Color.WHITE);
-            touchFullscreenBtn.setTextSize(20);
-            touchFullscreenBtn.setGravity(Gravity.CENTER);
-            GradientDrawable fsBg = new GradientDrawable();
-            fsBg.setShape(GradientDrawable.OVAL);
-            fsBg.setColor(0x66000000);
-            touchFullscreenBtn.setBackground(fsBg);
-            touchFullscreenBtn.setOnClickListener(v -> toggleTouchFullscreen());
-            FrameLayout.LayoutParams fsLp = new FrameLayout.LayoutParams(dp(44), dp(44));
-            fsLp.gravity = Gravity.TOP | Gravity.END;
-            fsLp.topMargin = dp(24);
-            fsLp.rightMargin = dp(24);
-            root.addView(touchFullscreenBtn, fsLp);
-            return;
-        }
-
-        touchControlsBar = new LinearLayout(this);
-        touchControlsBar.setOrientation(LinearLayout.HORIZONTAL);
-        touchControlsBar.setGravity(Gravity.CENTER);
-        touchControlsBar.setVisibility(View.GONE);
-        GradientDrawable barBg = new GradientDrawable(
-                GradientDrawable.Orientation.BOTTOM_TOP, new int[]{0xC0000000, 0x00000000});
-        touchControlsBar.setBackground(barBg);
-        int barPad = dp(20);
-        touchControlsBar.setPadding(barPad, dp(40), barPad, barPad);
-
-        TextView seekBackBtn = touchIconButton("⏪ 10");
-        seekBackBtn.setOnClickListener(v -> { seekBy(-10000); showTouchControls(); });
-        touchControlsBar.addView(seekBackBtn, touchSideBtnParams());
-
-        touchPlayPauseBtn = new ImageButton(this);
-        touchPlayPauseBtn.setImageResource(android.R.drawable.ic_media_pause);
-        GradientDrawable circle = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFFFFC98A, 0xFFFF8A3D});
-        circle.setShape(GradientDrawable.OVAL);
-        touchPlayPauseBtn.setBackground(circle);
-        touchPlayPauseBtn.setOnClickListener(v -> { togglePlayPause(); showTouchControls(); });
-        LinearLayout.LayoutParams mainLp = new LinearLayout.LayoutParams(dp(58), dp(58));
-        mainLp.setMargins(dp(16), 0, dp(16), 0);
-        touchControlsBar.addView(touchPlayPauseBtn, mainLp);
-
-        TextView seekFwdBtn = touchIconButton("10 ⏩");
-        seekFwdBtn.setOnClickListener(v -> { seekBy(10000); showTouchControls(); });
-        touchControlsBar.addView(seekFwdBtn, touchSideBtnParams());
-
-        FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        barLp.gravity = Gravity.BOTTOM;
-        root.addView(touchControlsBar, barLp);
-    }
-
-    private TextView touchIconButton(String text) {
-        TextView btn = new TextView(this);
-        btn.setText(text);
-        btn.setTextColor(Color.WHITE);
-        btn.setTextSize(13);
-        btn.setGravity(Gravity.CENTER);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(0x33FFFFFF);
-        btn.setBackground(bg);
-        return btn;
-    }
-
-    private LinearLayout.LayoutParams touchSideBtnParams() {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(48), dp(48));
-        return lp;
-    }
-
-    private boolean touchFullscreenOn = false;
-    /** Rotates between portrait (the normal, default state for live TV on
-     *  a phone) and landscape (true fullscreen) — this Activity handles
-     *  the rotation itself (declared with configChanges in the manifest),
-     *  so this never restarts playback either. */
-    private void toggleTouchFullscreen() {
-        touchFullscreenOn = !touchFullscreenOn;
-        setRequestedOrientation(touchFullscreenOn
-                ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
-        if (touchFullscreenBtn != null) touchFullscreenBtn.setText(touchFullscreenOn ? "⤡" : "⤢");
-    }
-
-    private void showTouchControls() {
-        if (touchControlsBar == null) return;
-        touchControlsVisible = true;
-        touchControlsBar.setVisibility(View.VISIBLE);
-        if (touchPlayPauseBtn != null && player != null) {
-            touchPlayPauseBtn.setImageResource(player.isPlaying() ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play);
-        }
-        if (hideTouchControlsRunnable != null) handler.removeCallbacks(hideTouchControlsRunnable);
-        hideTouchControlsRunnable = this::hideTouchControls;
-        handler.postDelayed(hideTouchControlsRunnable, 3500);
-    }
-
-    private void hideTouchControls() {
-        touchControlsVisible = false;
-        if (touchControlsBar != null) touchControlsBar.setVisibility(View.GONE);
-    }
-
-    /** Swipe left/right changes channels on live TV — passing a finger
-     *  over the screen, nothing more, exactly as asked. A single tap just
-     *  toggles the touch controls (play/pause, seek, fullscreen) instead. */
-    private void setupGestureDetector() {
-        gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override
-            public boolean onSingleTapConfirmed(MotionEvent e) {
-                if (isLive) {
-                    if (browseState == BROWSE_NONE) openChannelBrowse();
-                    // If a panel is already open, a tap on one of its own
-                    // rows selects it (handled by that row's own click
-                    // listener) — this outer handler deliberately does
-                    // nothing else here, so the two don't fight over the
-                    // same tap.
-                } else {
-                    if (touchControlsVisible) hideTouchControls(); else showTouchControls();
-                }
-                return true;
-            }
-
-            @Override
-            public boolean onDoubleTap(MotionEvent e) {
-                if (isLive) openCategoryBrowse();
-                return true;
-            }
-
-            @Override
-            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-                if (e1 == null || !isLive || urls.size() <= 1 || browseState != BROWSE_NONE) return false;
-                float dx = e2.getX() - e1.getX();
-                float dy = e2.getY() - e1.getY();
-                if (Math.abs(dx) < dp(60) || Math.abs(dx) < Math.abs(dy)) return false;
-                if (dx < 0) {
-                    goToChannel(currentIndex + 1 >= urls.size() ? 0 : currentIndex + 1);
-                } else {
-                    goToChannel(currentIndex - 1 < 0 ? urls.size() - 1 : currentIndex - 1);
-                }
-                return true;
-            }
-        });
-        View rootView = findViewById(android.R.id.content);
-        rootView.setOnTouchListener((v, event) -> gestureDetector.onTouchEvent(event));
-    }
 
     private void buildChannelBanner() {
         FrameLayout root = findViewById(android.R.id.content);
@@ -2038,7 +1845,6 @@ public class VlcPlayerActivity extends Activity {
         super.onDestroy();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
         if (hideCcButtonRunnable != null) handler.removeCallbacks(hideCcButtonRunnable);
-        if (hideTouchControlsRunnable != null) handler.removeCallbacks(hideTouchControlsRunnable);
         cancelStallTimer();
         cancelLiveRetry();
         cancelStatusCheck();
