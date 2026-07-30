@@ -2515,7 +2515,8 @@
     // Playing anything — live TV, movies, series, anime, Kids, seguir
     // viendo — rotates the phone to landscape automatically.
     if(!isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceId){
-      window.Capacitor.Plugins.DeviceId.setOrientation({ orientation:'landscape' }).catch(()=>{});
+      window.Capacitor.Plugins.DeviceId.setOrientation({ orientation:'landscape' })
+        .catch(err => showStatus('No se pudo girar la pantalla: ' + (err && err.message || err), true));
     }
 
     const P = window.Capacitor.Plugins.InlineVlcPlayer;
