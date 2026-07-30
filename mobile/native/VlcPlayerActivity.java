@@ -1117,7 +1117,16 @@ public class VlcPlayerActivity extends Activity {
     // URL. Lets the banner show a logo instantly on channel change instead
     // of waiting on a fresh network fetch every single time. Capped at 80
     // entries (small icons, this stays well under a few MB).
-    private static final android.util.LruCache<String, android.graphics.Bitmap> logoCache = new android.util.LruCache<>(80);
+    // Bounded by actual memory used (3MB), not just entry count — a flat
+    // "80 items" cap doesn't actually guarantee a memory ceiling if some
+    // logos decode larger than others. This does.
+    private static final android.util.LruCache<String, android.graphics.Bitmap> logoCache =
+            new android.util.LruCache<String, android.graphics.Bitmap>(3 * 1024 * 1024) {
+                @Override
+                protected int sizeOf(String key, android.graphics.Bitmap bitmap) {
+                    return bitmap.getByteCount();
+                }
+            };
 
     /** Downloads and decodes a small icon at roughly the size it'll
      *  actually be shown at, instead of decoding the source image at full
