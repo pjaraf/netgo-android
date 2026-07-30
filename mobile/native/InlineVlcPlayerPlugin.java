@@ -87,57 +87,15 @@ public class InlineVlcPlayerPlugin extends Plugin {
         return currentInstance.closeIfOpen();
     }
 
-    private boolean isMinimized = false;
-
     private boolean closeIfOpen() {
         if (container != null && container.getVisibility() == View.VISIBLE) {
-            if (!isMinimized) {
-                minimizeToPip();
-            } else {
-                if (isFullscreen) exitFullscreen(getActivity());
-                getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                container.setVisibility(View.GONE);
-                isMinimized = false;
-                notifyListeners("ended", new JSObject());
-            }
+            if (isFullscreen) exitFullscreen(getActivity());
+            getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            container.setVisibility(View.GONE);
+            notifyListeners("ended", new JSObject());
             return true;
         }
         return false;
-    }
-
-    /** Shrinks the video to a small corner box instead of closing it —
-     *  the person can keep browsing the rest of the app while it keeps
-     *  playing, same idea as Picture-in-Picture but done by resizing our
-     *  own overlay instead of a separate Android PiP window. */
-    private void minimizeToPip() {
-        isMinimized = true;
-        android.util.DisplayMetrics dm = getActivity().getResources().getDisplayMetrics();
-        int pipWidth = (int) (dm.widthPixels * 0.42f);
-        int pipHeight = (int) (pipWidth * 9f / 16f);
-        int margin = dp(getActivity(), 14);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(pipWidth, pipHeight);
-        lp.leftMargin = dm.widthPixels - pipWidth - margin;
-        lp.topMargin = dm.heightPixels - pipHeight - margin - dp(getActivity(), 60); // clear of the bottom nav bar
-        container.setLayoutParams(lp);
-        if (topBar != null) topBar.setVisibility(View.GONE);
-        if (bottomBar != null) bottomBar.setVisibility(View.GONE);
-        container.setOnClickListener(v -> restoreFromPip());
-        JSObject data = new JSObject();
-        data.put("minimized", true);
-        notifyListeners("minimizedChanged", data);
-    }
-
-    private void restoreFromPip() {
-        if (!isMinimized) return;
-        isMinimized = false;
-        container.setOnClickListener(null);
-        if (topBar != null) topBar.setVisibility(View.VISIBLE);
-        if (bottomBar != null) bottomBar.setVisibility(View.VISIBLE);
-        JSObject data = new JSObject();
-        data.put("minimized", false);
-        notifyListeners("minimizedChanged", data);
-        // The web side repositions us back to the hero box's full rect
-        // right after this fires — see the 'minimizedChanged' listener.
     }
 
     private ExoPlayer player;
