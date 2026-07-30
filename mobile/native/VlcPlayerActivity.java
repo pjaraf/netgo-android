@@ -1854,6 +1854,7 @@ public class VlcPlayerActivity extends Activity {
         super.onDestroy();
         if (hideBannerRunnable != null) handler.removeCallbacks(hideBannerRunnable);
         if (hideCcButtonRunnable != null) handler.removeCallbacks(hideCcButtonRunnable);
+        if (hideProgressBarRunnable != null) handler.removeCallbacks(hideProgressBarRunnable);
         cancelStallTimer();
         cancelLiveRetry();
         cancelStatusCheck();
