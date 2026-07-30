@@ -1017,10 +1017,11 @@
   .settings-actions .qr-close-btn{ width:100%; box-sizing:border-box; }
 
   body.tv-mode .settings-page-inner{
-    max-width:820px; padding:26px 40px 30px;
+    max-width:1100px; padding:26px 40px 30px;
+    display:flex; flex-direction:row; flex-wrap:wrap; gap:16px; align-items:flex-start;
   }
-  body.tv-mode .settings-page-title{ font-size:22px; margin-bottom:14px; }
-  body.tv-mode .settings-section{ padding:14px 18px; margin-bottom:12px; }
+  body.tv-mode .settings-page-title{ font-size:22px; margin-bottom:0; flex-basis:100%; }
+  body.tv-mode .settings-section{ padding:14px 18px; margin-bottom:0; flex:1; min-width:0; }
   body.tv-mode .settings-section h2{ font-size:14px; margin-bottom:9px; }
   body.tv-mode .account-rows{ gap:8px; margin-bottom:0; }
   body.tv-mode .account-row{ padding-bottom:7px; }
