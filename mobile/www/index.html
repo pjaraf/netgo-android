@@ -99,6 +99,19 @@
   .hero.inner-hidden:not(.playing){
     margin:0; border:none; box-shadow:none; aspect-ratio:auto; height:0;
   }
+  /* While something plays, the hero box takes over the entire screen
+     instead of sitting embedded in the page — the rest of the app
+     (header, search bar, catalog rows) hides underneath it. */
+  .hero.playing{
+    position:fixed; inset:0; z-index:500; margin:0; border-radius:0;
+    border:none; aspect-ratio:auto; width:100vw; height:100vh;
+  }
+  body.playing-fullscreen header,
+  body.playing-fullscreen .searchbar-wrap,
+  body.playing-fullscreen #rowsContainer,
+  body.playing-fullscreen .cat{
+    display:none !important;
+  }
   .hero::before{
     content:'';
     position:absolute; left:50%; top:-10%; width:220%; height:160%;
@@ -2453,6 +2466,7 @@
     currentInlineQueue = queue;
     currentInlineIsLive = kind === 'channel';
     heroBox.classList.add('playing');
+    document.body.classList.add('playing-fullscreen');
     hpProgress.style.display = currentInlineIsLive ? 'none' : 'flex';
     hpLiveBadge.style.display = 'none'; // replaced by the full OSD banner for live content
     document.querySelector('.hp-controls').style.display = currentInlineIsLive ? 'none' : 'flex';
@@ -2550,6 +2564,7 @@
       try{ await window.Capacitor.Plugins.InlineVlcPlayer.unmount(); }catch(e){}
     }
     heroBox.classList.remove('playing');
+    document.body.classList.remove('playing-fullscreen');
     if(!isTV() && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceId){
       window.Capacitor.Plugins.DeviceId.setOrientation({ orientation:'unspecified' }).catch(()=>{});
     }
